@@ -29,6 +29,119 @@ To solve this, we introduced **"Project Context"**:
 
 ---
 
+## ✅ New Feature: Stage 2 Comprehensive Enhancement (Implemented)
+## ✅ 신규 기능: Stage 2 종합 강화 (구현 완료)
+
+### 💡 Thought Process (기획 의도)
+Initially, Stage 2 validation only had 8 basic rules checking simple IF-THEN logic. However, Korean construction safety is governed by detailed regulations (산업안전보건법), and inspectors need actionable guidance, not just error messages. We also noticed that critical items marked "N/A" were being ignored, and there was no way to detect incomplete checklists.
+초기의 Stage 2 검증은 단순한 IF-THEN 논리만 확인하는 8개의 기본 규칙만 있었습니다. 하지만 한국의 건설 안전은 세밀한 법규(산업안전보건법)로 규제되며, 점검자들은 단순한 오류 메시지가 아닌 실행 가능한 지침이 필요합니다. 또한 중요 항목이 "N/A"로 표시되는 것을 간과하고 있었고, 불완전한 체크리스트를 감지할 방법이 없었습니다.
+
+To address this, we expanded Stage 2 into a **comprehensive 22-rule validation framework** with 4 categories:
+이를 해결하기 위해 Stage 2를 4개 카테고리를 가진 **포괄적인 22개 규칙 검증 프레임워크**로 확장했습니다:
+
+### 🛠️ How it Works (작동 원리)
+1. **Rule Expansion**: Expanded from 8 to 22 rules (+175%)
+   - 9 Safety Violations (안전규정 위반): Direct violations of Korean safety laws
+   - 5 Logical Contradictions (논리적 불일치): Inconsistent checklist values
+   - 6 Suspicious Patterns (의심스러운 패턴): N/A detection and unusual patterns
+   - 2 Completeness Checks (완전성 검사): Missing required items
+
+2. **Korean Safety Law References**: Every safety violation now cites specific regulations
+   - Example: "산업안전보건기준에 관한 규칙 제42조 - 2m 이상 고소작업 시 안전대 착용 의무"
+   - Provides legal context for compliance
+
+3. **Actionable Guidance**: Each issue includes recommendations marked with →
+   - Example: "→ 산소농도 18% 이상 확인 필수 (KOSHA GUIDE)"
+
+4. **Category-Based Reporting**: Issues grouped by type for easier scanning
+   - Title: "안전규정 위반" vs "논리적 불일치" vs "의심스러운 패턴"
+
+1. **규칙 확장**: 8개에서 22개 규칙으로 확장 (+175%)
+   - 9개 안전규정 위반: 한국 안전법 직접 위반 사항
+   - 5개 논리적 불일치: 일관성 없는 체크리스트 값
+   - 6개 의심스러운 패턴: N/A 감지 및 비정상 패턴
+   - 2개 완전성 검사: 필수 항목 누락
+
+2. **한국 안전법 참조**: 모든 안전규정 위반에 구체적인 법규 인용
+   - 예시: "산업안전보건기준에 관한 규칙 제42조 - 2m 이상 고소작업 시 안전대 착용 의무"
+   - 준수를 위한 법적 근거 제공
+
+3. **실행 가능한 지침**: 각 문제에 → 표시와 함께 권장사항 포함
+   - 예시: "→ 산소농도 18% 이상 확인 필수 (KOSHA GUIDE)"
+
+4. **카테고리별 보고**: 문제를 유형별로 그룹화하여 쉽게 스캔
+   - 제목: "안전규정 위반" vs "논리적 불일치" vs "의심스러운 패턴"
+
+---
+
+## ✅ New Feature: Stage 4 Behavioral Pattern Analysis Enhancement (Implemented)
+## ✅ 신규 기능: Stage 4 행동 패턴 분석 강화 (구현 완료)
+
+### 💡 Thought Process (기획 의도)
+Stage 4 pattern analysis was detecting suspicious behaviors, but had limitations: inspector names with spacing variations ("김철수" vs "김 철수") were treated as different people, old patterns and recent patterns had equal weight, and there was no way to prioritize which inspectors needed immediate attention.
+Stage 4 패턴 분석은 의심스러운 행동을 감지하고 있었지만, 한계가 있었습니다: 공백 변형이 있는 점검자 이름("김철수" vs "김 철수")을 다른 사람으로 취급했고, 오래된 패턴과 최근 패턴에 동일한 가중치를 부여했으며, 어떤 점검자에게 즉각적인 주의가 필요한지 우선순위를 정할 방법이 없었습니다.
+
+To solve this, we introduced **intelligent pattern analysis** with 5 key enhancements:
+이를 해결하기 위해 5가지 핵심 개선사항을 포함한 **지능형 패턴 분석**을 도입했습니다:
+
+### 🛠️ How it Works (작동 원리)
+1. **Name Normalization (이름 정규화)**: Automatically handles variations
+   - "김철수" = "김 철수" = "김철수." are now recognized as the same person
+   - Removes spaces, punctuation, and normalizes case
+
+2. **Time-Weighted Analysis (시간 가중치 분석)**: Recent behavior matters more
+   - Reports from today: 1.0x weight (100%)
+   - Reports from 15 days ago: 0.75x weight (75%)
+   - Reports from 30+ days ago: 0.5x weight (50%)
+   - Detects if inspector improved or worsened over time
+
+3. **Pattern Severity Scoring (패턴 심각도 점수)**: Cumulative risk assessment
+   - always_check: 50 points (highest risk)
+   - copy_paste: 30 points (medium risk)
+   - rapid_completion: 20 points (low risk)
+   - Risk levels: Critical (80+), High (50-79), Medium (30-49), Low (<30)
+
+4. **Confidence Scoring (신뢰도 점수)**: Each pattern includes 0-100 confidence score
+   - Based on sample size, time span, and consistency
+   - Helps judge reliability of the pattern detection
+
+5. **Configurable Thresholds (설정 가능한 임계값)**: Three presets for different scenarios
+   - STRICT (엄격): For demo/testing - catches everything (90% threshold)
+   - DEFAULT (기본): For production - balanced detection (95% threshold)
+   - LENIENT (관대): For high-volume sites - fewer false alarms (98% threshold)
+
+1. **이름 정규화**: 자동으로 변형 처리
+   - "김철수" = "김 철수" = "김철수."를 동일 인물로 인식
+   - 공백, 문장부호 제거 및 대소문자 정규화
+
+2. **시간 가중치 분석**: 최근 행동이 더 중요
+   - 오늘 보고서: 1.0x 가중치 (100%)
+   - 15일 전 보고서: 0.75x 가중치 (75%)
+   - 30일 이상 전 보고서: 0.5x 가중치 (50%)
+   - 점검자의 개선 또는 악화 추세 감지
+
+3. **패턴 심각도 점수**: 누적 위험 평가
+   - always_check: 50점 (최고 위험)
+   - copy_paste: 30점 (중간 위험)
+   - rapid_completion: 20점 (낮은 위험)
+   - 위험 수준: 심각 (80+), 높음 (50-79), 중간 (30-49), 낮음 (<30)
+
+4. **신뢰도 점수**: 각 패턴에 0-100 신뢰도 점수 포함
+   - 샘플 크기, 시간 범위, 일관성 기반
+   - 패턴 감지의 신뢰성 판단 지원
+
+5. **설정 가능한 임계값**: 다양한 시나리오를 위한 3가지 프리셋
+   - STRICT (엄격): 데모/테스트용 - 모든 것을 감지 (90% 임계값)
+   - DEFAULT (기본): 프로덕션용 - 균형잡힌 감지 (95% 임계값)
+   - LENIENT (관대): 대량 현장용 - 오탐 감소 (98% 임계값)
+
+**Tech Details (기술 세부사항)**:
+- New module: `src/lib/validationConfig.ts` (293 lines)
+- Enhanced module: `src/lib/patternAnalysis.ts` (+150 lines)
+- Backward compatible: existing code continues to work
+
+---
+
 ## 🔮 Future Expansion Ideas (With Current Foundation)
 ## 🔮 향후 확장 아이디어 (현재 기반 활용)
 
