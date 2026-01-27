@@ -113,19 +113,17 @@ export default function Page() {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
-  const [showWelcome, setShowWelcome] = useState(true);
+  // Initialize welcome state from localStorage on client only to avoid hydration mismatch
+  const [showWelcome, setShowWelcome] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("welcome_dismissed") !== "true";
+    }
+    return false; // Default to false on server to avoid hydration issues
+  });
 
   useEffect(() => {
     fetchProjects();
   }, [projectSelectorKey]);
-
-  // Load welcome screen preference
-  useEffect(() => {
-    const dismissed = localStorage.getItem("welcome_dismissed");
-    if (dismissed === "true") {
-      setShowWelcome(false);
-    }
-  }, []);
 
   async function fetchProjects() {
     try {
