@@ -51,6 +51,7 @@ function buildSystemPrompt() {
 - "issues" 필드는 생성하지 마라. (검증은 별도 로직으로 수행함)
 - 서명란이 비어있으면 "missing"으로 표시하라.
 - 내용을 찾을 수 없으면 null 또는 "unknown"을 사용하라.
+- 사용자가 "프로젝트 규칙" 또는 "마스터 플랜"을 제공한 경우(아래 Context), 그 규칙에 위배되는 사항이 있다면 특이사항(chat)에 언급하라.
 `;
 }
 
@@ -69,8 +70,14 @@ function safeJsonParse(text: string) {
   }
 }
 
-async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null }) {
-  const content: any[] = [{ type: "input_text", text: buildSystemPrompt() }];
+async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null; contextText?: string }) {
+  let sysPrompt = buildSystemPrompt();
+
+  if (opts.contextText) {
+    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 이 내용을 참고하여 위반 사항이나 불일치 점이 있으면 지적하라:\n${opts.contextText}`;
+  }
+
+  const content: any[] = [{ type: "input_text", text: sysPrompt }];
 
   if (opts.pdfText && opts.pdfText.trim().length >= 50) {
     content.push({ type: "input_text", text: `추출 텍스트:\n${opts.pdfText}` });
@@ -89,11 +96,15 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
   return safeJsonParse(r.output_text ?? "");
 }
 
-async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null }) {
+async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null; contextText?: string }) {
   const content: any[] = [];
 
   // 시스템 프롬프트는 첫 텍스트 블록에 함께 넣는 방식으로 간단히 처리
-  content.push({ type: "text", text: buildSystemPrompt() });
+  let sysPrompt = buildSystemPrompt();
+  if (opts.contextText) {
+    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 이 내용을 참고하여 위반 사항이나 불일치 점이 있으면 지적하라:\n${opts.contextText}`;
+  }
+  content.push({ type: "text", text: sysPrompt });
 
   if (opts.pdfText && opts.pdfText.trim().length >= 50) {
     content.push({ type: "text", text: `추출 텍스트:\n${opts.pdfText}` });
@@ -128,30 +139,41 @@ async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null
 
 export async function POST(req: Request) {
   try {
-    const { provider, fileName, pdfText, pageImages } = await req.json();
+    const { provider, fileName, pdfText, pageImages, projectId } = await req.json();
 
     const p: Provider = (provider ?? "auto") as Provider;
+
+    // Fetch Project Context if projectId is present
+    let contextText = "";
+    if (projectId) {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId }
+      });
+      if (project?.contextText) {
+        contextText = project.contextText;
+      }
+    }
 
     // auto: 스캔(텍스트 거의 없음)이면 비전 강한 쪽(둘 중 아무거나)로
     // 여기선: 이미지 있으면 OpenAI 먼저, 없으면 Claude 먼저 같은 식으로도 가능
     let result: any;
-    if (p === "openai") result = await callOpenAI({ pdfText, pageImages });
-    else if (p === "claude") result = await callClaude({ pdfText, pageImages });
+    if (p === "openai") result = await callOpenAI({ pdfText, pageImages, contextText });
+    else if (p === "claude") result = await callClaude({ pdfText, pageImages, contextText });
     else {
       // auto
       if (pageImages?.length) {
         // 스캔이면 OpenAI 시도 -> 실패하면 Claude
         try {
-          result = await callOpenAI({ pdfText, pageImages });
+          result = await callOpenAI({ pdfText, pageImages, contextText });
         } catch {
-          result = await callClaude({ pdfText, pageImages });
+          result = await callClaude({ pdfText, pageImages, contextText });
         }
       } else {
         // 텍스트면 Claude 시도 -> 실패하면 OpenAI
         try {
-          result = await callClaude({ pdfText, pageImages: null });
+          result = await callClaude({ pdfText, pageImages: null, contextText });
         } catch {
-          result = await callOpenAI({ pdfText, pageImages: null });
+          result = await callOpenAI({ pdfText, pageImages: null, contextText });
         }
       }
     }
@@ -176,6 +198,7 @@ export async function POST(req: Request) {
         fileName: fileName ?? "Untitled",
         docDataJson: JSON.stringify(extracted),
         issuesJson: JSON.stringify(validationIssues),
+        projectId: projectId ?? null
         // chatJson: ... (if we had chat history here, but current logic is stateless)
       }
     });
