@@ -1,0 +1,30 @@
+# Node / build outputs
+node_modules/
+dist/
+build/
+out/
+public/build/
+
+# Coverage and test caches
+coverage/
+.nyc_output/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Caches and temp
+.cache/
+.tmp/
+.parcel-cache/
+.yalc/
+
+# Logs
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Framework / bundler folders
+.next/
+.nuxt/
