@@ -2,6 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ConfirmModal } from "./ConfirmModal";
+
 // Assuming types from validator or db, but for client usage we define what we need
 interface HistoryItem {
     id: string;
@@ -19,6 +21,8 @@ interface HistorySidebarProps {
 export default function HistorySidebar({ isOpen, onClose, onSelectReport }: HistorySidebarProps) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ id: string | null; fileName?: string } | null>(null);
+    const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -41,9 +45,18 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                     <span className="material-symbols-outlined">history</span>
                     최근 검증 기록
                 </h2>
-                <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full">
-                    <span className="material-symbols-outlined">close</span>
-                </button>
+                <div className="flex gap-1">
+                    <button
+                        onClick={() => setDeleteAllConfirm(true)}
+                        className="p-1 text-slate-400 hover:text-red-500 rounded-full"
+                        title="기록 지우기"
+                    >
+                        <span className="material-symbols-outlined text-lg">delete</span>
+                    </button>
+                    <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full">
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
             </div>
 
             <div className="overflow-y-auto h-full p-4 space-y-3 pb-20">
@@ -54,18 +67,69 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                 )}
 
                 {history.map((item) => (
-                    <button
+                    <div
                         key={item.id}
+                        className="group relative flex items-center p-3 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
                         onClick={() => onSelectReport(item.id)}
-                        className="w-full text-left p-4 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all group"
                     >
-                        <div className="font-bold text-slate-800 dark:text-white truncate mb-1">{item.fileName}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {new Date(item.createdAt).toLocaleString()}
+                        <div className="flex-1 min-w-0">
+                            <div className="font-bold text-slate-800 dark:text-white truncate mb-1">{item.fileName}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                                {new Date(item.createdAt).toLocaleString()}
+                            </div>
                         </div>
-                    </button>
+
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm({ id: item.id, fileName: item.fileName });
+                            }}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                            title="삭제"
+                        >
+                            <span className="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                    </div>
                 ))}
             </div>
+
+            {/* Delete Single Item Confirmation */}
+            <ConfirmModal
+                isOpen={deleteConfirm !== null}
+                title="기록 삭제"
+                message={`정말로 "${deleteConfirm?.fileName}" 기록을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`}
+                confirmText="삭제"
+                cancelText="취소"
+                variant="danger"
+                onConfirm={() => {
+                    if (deleteConfirm?.id) {
+                        fetch(`/api/history?id=${deleteConfirm.id}`, { method: "DELETE" })
+                            .then(() => {
+                                setHistory(prev => prev.filter(h => h.id !== deleteConfirm.id));
+                                setDeleteConfirm(null);
+                            });
+                    }
+                }}
+                onCancel={() => setDeleteConfirm(null)}
+            />
+
+            {/* Delete All Confirmation */}
+            <ConfirmModal
+                isOpen={deleteAllConfirm}
+                title="모든 기록 삭제"
+                message={`정말로 모든 검증 기록을 삭제하시겠습니까?\n\n총 ${history.length}개의 기록이 영구적으로 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`}
+                confirmText="모두 삭제"
+                cancelText="취소"
+                variant="danger"
+                onConfirm={() => {
+                    fetch("/api/history", { method: "DELETE" })
+                        .then(() => {
+                            setHistory([]);
+                            setDeleteAllConfirm(false);
+                        });
+                }}
+                onCancel={() => setDeleteAllConfirm(false)}
+            />
         </div>
     );
 }
