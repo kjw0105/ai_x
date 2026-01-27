@@ -1,10 +1,26 @@
 
 "use client";
 
-function severityBorder(sev: string) {
+function severityBorder(sev: string, ruleId?: string) {
+    // Stage 5: Risk signals get distinct purple styling
+    if (ruleId?.startsWith("pattern_")) return "border-l-purple-500";
     if (sev === "error") return "border-l-red-500";
     if (sev === "warn") return "border-l-orange-500";
     return "border-l-slate-400";
+}
+
+function severityColor(sev: string, ruleId?: string) {
+    if (ruleId?.startsWith("pattern_")) return "text-purple-600";
+    if (sev === "error") return "text-red-600";
+    if (sev === "warn") return "text-orange-600";
+    return "text-slate-600";
+}
+
+function severityIcon(sev: string, ruleId?: string) {
+    if (ruleId?.startsWith("pattern_")) return "query_stats"; // Pattern analysis icon
+    if (sev === "error") return "edit_off";
+    if (sev === "warn") return "warning";
+    return "info";
 }
 
 interface Issue {
@@ -12,6 +28,7 @@ interface Issue {
     severity: "error" | "warn" | "info";
     title: string;
     message: string;
+    ruleId?: string; // Stage 2-5: Link to specific rule
 }
 
 interface AnalysisPanelProps {
@@ -20,10 +37,16 @@ interface AnalysisPanelProps {
     chatMessages: { role: "ai" | "user"; text: string }[];
     onReupload: () => void;
     onModify: () => void;
+    currentProjectName?: string;
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName }: AnalysisPanelProps) {
     const reportExists = issues.length > 0 || chatMessages.length > 0;
+
+    // Separate regular issues from pattern warnings (Stage 5)
+    const regularIssues = issues.filter(i => !i.ruleId?.startsWith("pattern_"));
+    const patternWarnings = issues.filter(i => i.ruleId?.startsWith("pattern_"));
+
     // Default welcome message if no chat
     const messages = chatMessages.length > 0 ? chatMessages : [
         { role: "ai", text: "안녕하세요! 👋\n서류를 올려주시면 빠진 항목/불일치/수정사항을 찾아드릴게요." }
@@ -48,6 +71,12 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20" suppressHydrationWarning>
                                 {loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중"}
                             </span>
+                            {currentProjectName && (
+                                <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                    <span className="material-symbols-outlined text-[10px] mr-1">business</span>
+                                    {currentProjectName}
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -80,30 +109,27 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         className="chat-message flex gap-3"
                         style={{ animationDelay: `${0.2 + idx * 0.2}s` }}
                     >
-                        <div className="size-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-sm mt-1">
-                            <span className="material-symbols-outlined text-blue-600 text-xl">smart_toy</span>
+                        <div className={`size-10 rounded-full flex items-center justify-center shrink-0 shadow-sm mt-1 ${issue.ruleId?.startsWith("pattern_") ? "bg-purple-100" : "bg-blue-100"
+                            }`}>
+                            <span className={`material-symbols-outlined text-xl ${issue.ruleId?.startsWith("pattern_") ? "text-purple-600" : "text-blue-600"
+                                }`}>
+                                {issue.ruleId?.startsWith("pattern_") ? "query_stats" : "smart_toy"}
+                            </span>
                         </div>
 
                         <div className="flex flex-col gap-1 max-w-[85%]">
                             <div
                                 className={`bg-white dark:bg-surface-dark p-4 rounded-2xl rounded-tl-none shadow-sm border-l-4 ${severityBorder(
-                                    issue.severity
+                                    issue.severity, issue.ruleId
                                 )} text-slate-800 dark:text-white`}
                             >
                                 <h4
-                                    className={`font-black text-lg mb-2 flex items-center gap-2 ${issue.severity === "error"
-                                        ? "text-red-600"
-                                        : issue.severity === "warn"
-                                            ? "text-orange-600"
-                                            : "text-slate-600"
-                                        }`}
+                                    className={`font-black text-lg mb-2 flex items-center gap-2 ${severityColor(
+                                        issue.severity, issue.ruleId
+                                    )}`}
                                 >
                                     <span className="material-symbols-outlined">
-                                        {issue.severity === "error"
-                                            ? "edit_off"
-                                            : issue.severity === "warn"
-                                                ? "warning"
-                                                : "info"}
+                                        {severityIcon(issue.severity, issue.ruleId)}
                                     </span>
                                     {issue.title}
                                 </h4>
@@ -157,6 +183,6 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

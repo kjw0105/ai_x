@@ -1,6 +1,4 @@
-"use client";
-
-import { Dispatch, SetStateAction } from "react";
+import { ProjectSelector } from "./ProjectSelector";
 
 interface HeaderProps {
     loading: boolean;
@@ -8,9 +6,25 @@ interface HeaderProps {
     onUpload: () => void;
     onShowHistory: () => void;
     toggleDark: () => void;
+
+    // Project Props
+    projects: any[]; // Avoid circular dependency with type import if possible, or import Project type
+    currentProjectId: string | null;
+    onProjectChange: (id: string | null) => void;
+    onOpenNewProject: () => void;
 }
 
-export default function Header({ loading, reportExists, onUpload, onShowHistory, toggleDark }: HeaderProps) {
+export default function Header({
+    loading,
+    reportExists,
+    onUpload,
+    onShowHistory,
+    toggleDark,
+    projects,
+    currentProjectId,
+    onProjectChange,
+    onOpenNewProject
+}: HeaderProps) {
     return (
         <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark px-6 py-4 shrink-0 z-20 shadow-sm">
             <div className="flex items-center gap-6">
@@ -28,6 +42,13 @@ export default function Header({ loading, reportExists, onUpload, onShowHistory,
             </div>
 
             <div className="flex items-center gap-4">
+                <ProjectSelector
+                    projects={projects}
+                    currentProjectId={currentProjectId}
+                    onProjectChange={onProjectChange}
+                    onOpenNewProject={onOpenNewProject}
+                />
+
                 <div className="hidden md:flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-full px-4 py-2">
                     <span
                         className={`size-2 rounded-full ${loading ? "bg-yellow-400 animate-pulse" : reportExists ? "bg-green-500" : "bg-slate-400"

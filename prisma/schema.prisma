@@ -21,4 +21,24 @@ model Report {
   chatJson    String?  // Optional chat history
   
   score       Int?
+  
+  // Stage 4: Pattern Analysis fields
+  inspectorName String?  // Inspector name for pattern tracking
+  checklistJson String?  // Extracted checklist items as JSON
+  
+  // Relation to Project context
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id])
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  
+  // The "Master Context" extracted from uploaded plans
+  contextText String   @default("") 
+  
+  reports     Report[]
 }
