@@ -6,6 +6,8 @@
 ![Next.js](https://img.shields.io/badge/Next.js-14-black)
 ![Prisma](https://img.shields.io/badge/Prisma-5-blue)
 
+[🇰🇷 Korean Version (한국어)](README.ko.md)
+
 ## ✨ Key Features
 
 -   **📄 Multi-Page Analysis**: Automatically processes all pages of a PDF.
