@@ -28,3 +28,12 @@ yarn-error.log*
 # Framework / bundler folders
 .next/
 .nuxt/
+/generated/prisma
+
+# Env
+.env
+.env.local
+
+# Database
+*.db
+*.db-journal

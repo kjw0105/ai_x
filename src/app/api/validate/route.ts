@@ -4,46 +4,53 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { validateDocument, type DocData } from "@/lib/validator";
+import { prisma } from "@/lib/db";
 
 type Provider = "openai" | "claude" | "auto";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Helper to safely get OpenAI client
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+  return new OpenAI({ apiKey });
+}
+
+// Helper to safely get Anthropic client
+function getAnthropic() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
+  return new Anthropic({ apiKey });
+}
 
 function buildSystemPrompt() {
   return `
-너는 산업안전 서류 검증 AI다.
-문서는 다음 3종 중 하나일 수 있다:
-- 산업안전 점검표
-- 위험성 평가 보고서
-- 작업 전 안전점검표
+너는 산업안전 서류 검증 AI다. 정해진 스키마에 맞춰 정보를 "있는 그대로" 추출하라.
+판단하지 말고, 문서에 적힌 텍스트와 내용을 기반으로 값을 채워라.
 
 출력은 반드시 "JSON만" 출력한다(설명/마크다운 금지).
 스키마:
 {
   "docType": "산업안전 점검표" | "위험성 평가 보고서" | "작업 전 안전점검표" | "unknown",
   "fields": {
-    "점검일자": string|null,
+    "점검일자": string|null,   // 예: 2024-05-20, 식별 불가시 null
     "현장명": string|null,
     "작업내용": string|null,
-    "작업인원": string|null
+    "작업인원": string|null    // 예: "3명", "홍길동 외 2명" 등
   },
   "signature": {
-    "담당": "present"|"missing"|"unknown",
-    "소장": "present"|"missing"|"unknown"
+    "담당": "present"|"missing"|"unknown", // 담당자/작업반장 등 실무자 서명
+    "소장": "present"|"missing"|"unknown"  // 관리책임자/소장 서명
   },
-  "issues": [
-    {"severity":"error"|"warn","title":string,"message":string}
-  ],
   "chat": [
-    {"role":"ai"|"user","text":string}
+     {"role":"ai", "text": "문서 요약 및 특이사항 한줄 코멘트"}
   ]
 }
 
-규칙:
-- 필수 필드(점검일자/현장명/작업내용/작업인원) 누락 => error
-- 결재/서명란이 비어있다고 판단되면 => error (unknown이면 warn)
-- 불일치(예: 다른 문서와 인원 수 다름)는 근거가 있을 때만 warn로 제시
+주의:
+- "issues" 필드는 생성하지 마라. (검증은 별도 로직으로 수행함)
+- 서명란이 비어있으면 "missing"으로 표시하라.
+- 내용을 찾을 수 없으면 null 또는 "unknown"을 사용하라.
 `;
 }
 
@@ -62,17 +69,19 @@ function safeJsonParse(text: string) {
   }
 }
 
-async function callOpenAI(opts: { pdfText?: string; pageImageDataUrl?: string | null }) {
+async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null }) {
   const content: any[] = [{ type: "input_text", text: buildSystemPrompt() }];
 
   if (opts.pdfText && opts.pdfText.trim().length >= 50) {
     content.push({ type: "input_text", text: `추출 텍스트:\n${opts.pdfText}` });
   }
-  if (opts.pageImageDataUrl) {
-    content.push({ type: "input_image", image_url: opts.pageImageDataUrl });
+  if (opts.pageImages?.length) {
+    for (const img of opts.pageImages) {
+      content.push({ type: "input_image", image_url: img });
+    }
   }
 
-  const r = await openai.responses.create({
+  const r = await getOpenAI().responses.create({
     model: "gpt-4o", // 너 계정에서 쓰는 비전 모델로 바꿔도 됨
     input: [{ role: "user", content }],
   });
@@ -80,7 +89,7 @@ async function callOpenAI(opts: { pdfText?: string; pageImageDataUrl?: string | 
   return safeJsonParse(r.output_text ?? "");
 }
 
-async function callClaude(opts: { pdfText?: string; pageImageDataUrl?: string | null }) {
+async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null }) {
   const content: any[] = [];
 
   // 시스템 프롬프트는 첫 텍스트 블록에 함께 넣는 방식으로 간단히 처리
@@ -90,16 +99,18 @@ async function callClaude(opts: { pdfText?: string; pageImageDataUrl?: string | 
     content.push({ type: "text", text: `추출 텍스트:\n${opts.pdfText}` });
   }
 
-  if (opts.pageImageDataUrl) {
-    // data:image/jpeg;base64,... 에서 base64만 분리
-    const base64 = opts.pageImageDataUrl.split(",")[1] ?? "";
-    content.push({
-      type: "image",
-      source: { type: "base64", media_type: "image/jpeg", data: base64 },
-    });
+  if (opts.pageImages?.length) {
+    for (const img of opts.pageImages) {
+      // data:image/jpeg;base64,... 에서 base64만 분리
+      const base64 = img.split(",")[1] ?? "";
+      content.push({
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg", data: base64 },
+      });
+    }
   }
 
-  const msg = await anthropic.messages.create({
+  const msg = await getAnthropic().messages.create({
     model: "claude-sonnet-4-5-20250929", // 너 계정에서 가능한 모델로 바꿔도 됨
     max_tokens: 1500,
     messages: [{ role: "user", content }],
@@ -117,37 +128,79 @@ async function callClaude(opts: { pdfText?: string; pageImageDataUrl?: string | 
 
 export async function POST(req: Request) {
   try {
-    const { provider, fileName, pdfText, pageImageDataUrl } = await req.json();
+    const { provider, fileName, pdfText, pageImages } = await req.json();
 
     const p: Provider = (provider ?? "auto") as Provider;
 
     // auto: 스캔(텍스트 거의 없음)이면 비전 강한 쪽(둘 중 아무거나)로
     // 여기선: 이미지 있으면 OpenAI 먼저, 없으면 Claude 먼저 같은 식으로도 가능
     let result: any;
-    if (p === "openai") result = await callOpenAI({ pdfText, pageImageDataUrl });
-    else if (p === "claude") result = await callClaude({ pdfText, pageImageDataUrl });
+    if (p === "openai") result = await callOpenAI({ pdfText, pageImages });
+    else if (p === "claude") result = await callClaude({ pdfText, pageImages });
     else {
       // auto
-      if (pageImageDataUrl) {
+      if (pageImages?.length) {
         // 스캔이면 OpenAI 시도 -> 실패하면 Claude
         try {
-          result = await callOpenAI({ pdfText, pageImageDataUrl });
+          result = await callOpenAI({ pdfText, pageImages });
         } catch {
-          result = await callClaude({ pdfText, pageImageDataUrl });
+          result = await callClaude({ pdfText, pageImages });
         }
       } else {
         // 텍스트면 Claude 시도 -> 실패하면 OpenAI
         try {
-          result = await callClaude({ pdfText, pageImageDataUrl: null });
+          result = await callClaude({ pdfText, pageImages: null });
         } catch {
-          result = await callOpenAI({ pdfText, pageImageDataUrl: null });
+          result = await callOpenAI({ pdfText, pageImages: null });
         }
       }
     }
 
-    return NextResponse.json({ fileName, ...result });
+    // 3. Validation Logic (Code-based)
+    // LLM 결과(extraction)에 대해 규칙 검사를 수행한다.
+    const extracted = result as DocData;
+    const validationIssues = validateDocument(extracted);
+
+    // merge logic:
+    // issues 필드를 우리가 만든 validationIssues로 덮어쓰거나 합친다.
+    // 여기선 덮어쓰기
+    const finalResult = {
+      ...extracted,
+      issues: validationIssues,
+    };
+
+    // --- DB SAVE ---
+    // Save the result to the database for history
+    const savedReport = await prisma.report.create({
+      data: {
+        fileName: fileName ?? "Untitled",
+        docDataJson: JSON.stringify(extracted),
+        issuesJson: JSON.stringify(validationIssues),
+        // chatJson: ... (if we had chat history here, but current logic is stateless)
+      }
+    });
+
+    return NextResponse.json({
+      fileName,
+      ...finalResult,
+      reportId: savedReport.id
+    });
   } catch (e: any) {
-    console.error(e);
-    return NextResponse.json({ error: e?.message ?? "validate failed" }, { status: 500 });
+    console.error("Validation Error:", e);
+    const msg = e?.message ?? "validate failed";
+
+    // API Key missing errors
+    if (msg.includes("API_KEY is not set")) {
+      return NextResponse.json(
+        {
+          error: "API Key 설정이 필요합니다.",
+          details: msg,
+          solution: ".env.local 파일에 API Key를 추가해주세요."
+        },
+        { status: 500 } // Server misconfiguration -> 500 implies admin action needed
+      );
+    }
+
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
