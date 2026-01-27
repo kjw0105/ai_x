@@ -10,6 +10,7 @@ import { analyzeInspectorPatterns, patternWarningsToIssues } from "@/lib/pattern
 import { validateAgainstStructuredPlan } from "@/lib/structuredValidation";
 import type { MasterSafetyPlan, StructuredValidationIssue } from "@/lib/masterPlanSchema";
 import { calculateRiskLevel, riskCalculationToIssues } from "@/lib/riskMatrix";
+import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } from "@/lib/crossDocumentAnalysis";
 
 type Provider = "openai" | "claude" | "auto";
 
@@ -271,8 +272,20 @@ export async function POST(req: Request) {
       }
     }
 
-    // Merge all issues: validation + structured + risk + pattern analysis
-    const allIssues = [...validationIssues, ...structuredIssues, ...riskIssues, ...patternIssues];
+    // Stage 3: Cross-Document Analysis
+    let crossDocIssues: typeof validationIssues = [];
+    if (projectId) {
+      try {
+        const crossIssues = await analyzeCrossDocumentIssues(projectId, savedReport.id);
+        crossDocIssues = crossDocumentIssuesToValidationIssues(crossIssues);
+      } catch (e) {
+        console.warn("Cross-document analysis failed:", e);
+        // Non-critical, continue without cross-document analysis
+      }
+    }
+
+    // Merge all issues: validation + structured + risk + pattern + cross-document analysis
+    const allIssues = [...validationIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues];
 
     // Stage 5: Risk Signals - Format output with non-judgmental language
     const riskSignals = allIssues
