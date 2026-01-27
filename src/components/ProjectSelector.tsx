@@ -1,0 +1,100 @@
+
+import React, { useEffect, useState } from "react";
+
+type Project = {
+    id: string;
+    name: string;
+    description: string;
+};
+
+interface ProjectSelectorProps {
+    currentProjectId: string | null;
+    onProjectChange: (projectId: string | null) => void;
+    onOpenNewProject: () => void;
+}
+
+export function ProjectSelector({ currentProjectId, onProjectChange, onOpenNewProject }: ProjectSelectorProps) {
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        fetchProjects();
+    }, []);
+
+    async function fetchProjects() {
+        try {
+            setLoading(true);
+            const res = await fetch("/api/projects");
+            if (res.ok) {
+                setProjects(await res.json());
+            }
+        } catch (e) {
+            console.error("Failed to fetch projects");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    // Find current project name
+    const currentProject = projects.find(p => p.id === currentProjectId);
+
+    return (
+        <div className="flex items-center gap-2">
+            <div className="relative group">
+                <button
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 rounded-md border border-white/10 transition-colors"
+                >
+                    <span className="text-gray-400">Project:</span>
+                    <span className="text-white max-w-[150px] truncate">
+                        {currentProject ? currentProject.name : "None (Generic)"}
+                    </span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+
+                {/* Dropdown Menu */}
+                <div className="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50 hidden group-hover:block hover:block">
+                    <div className="max-h-[300px] overflow-y-auto">
+                        <button
+                            onClick={() => onProjectChange(null)}
+                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 ${!currentProjectId ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'}`}
+                        >
+                            None (Generic Validation)
+                        </button>
+
+                        {projects.map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => onProjectChange(p.id)}
+                                className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 group flex justify-between items-center ${currentProjectId === p.id ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'}`}
+                            >
+                                <div className="truncate">
+                                    <div className="font-medium">{p.name}</div>
+                                    {p.description && <div className="text-xs text-gray-500 truncate">{p.description}</div>}
+                                </div>
+                                {currentProjectId === p.id && (
+                                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="border-t border-gray-700 p-2">
+                        <button
+                            onClick={onOpenNewProject}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-semibold text-blue-400 bg-blue-400/10 hover:bg-blue-400/20 rounded border border-blue-400/20 transition-colors"
+                        >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            New Project
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
