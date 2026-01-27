@@ -104,6 +104,8 @@ export interface ValidationIssue {
   title: string;
   message: string;
   ruleId?: string; // Stage 2: Link to specific rule that triggered this issue
+  confidence?: number; // Stage 4: Confidence score (0-100)
+  score?: number; // Stage 4: Severity score
 }
 
 export type Issue = ValidationIssue & { id?: string };

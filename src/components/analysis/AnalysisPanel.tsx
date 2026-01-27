@@ -73,6 +73,8 @@ interface Issue {
     title: string;
     message: string;
     ruleId?: string; // Stage 2-5: Link to specific rule
+    confidence?: number; // Stage 4
+    score?: number; // Stage 4
 }
 
 interface RiskFactor {
@@ -121,16 +123,24 @@ function IssueCard({ issue, idx }: { issue: Issue; idx: number }) {
                         issue.severity, issue.ruleId
                     )} text-slate-800 dark:text-white`}
                 >
-                    <h4
-                        className={`font-black text-lg mb-2 flex items-center gap-2 ${severityColor(
-                            issue.severity, issue.ruleId
-                        )}`}
-                    >
-                        <span className="material-symbols-outlined">
-                            {severityIcon(issue.severity, issue.ruleId)}
-                        </span>
-                        {issue.title}
-                    </h4>
+                    <div className="flex items-center justify-between mb-2">
+                        <h4
+                            className={`font-black text-lg flex items-center gap-2 ${severityColor(
+                                issue.severity, issue.ruleId
+                            )}`}
+                        >
+                            <span className="material-symbols-outlined">
+                                {severityIcon(issue.severity, issue.ruleId)}
+                            </span>
+                            {issue.title}
+                        </h4>
+
+                        {issue.confidence !== undefined && (
+                            <span className="text-xs font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full text-slate-500">
+                                신뢰도 {issue.confidence}%
+                            </span>
+                        )}
+                    </div>
 
                     <p className="text-[16px] leading-relaxed mb-4 whitespace-pre-line">{issue.message}</p>
 
@@ -200,8 +210,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                 {loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중"}
                             </span>
                             {currentProjectName && (
-                                <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                                    <span className="material-symbols-outlined text-[10px] mr-1">business</span>
+                                <span className="inline-flex items-center rounded-md bg-blue-100 dark:bg-blue-900/30 px-3 py-1 text-sm font-bold text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-700/10 border border-blue-200 dark:border-blue-800">
+                                    <span className="material-symbols-outlined text-[16px] mr-1">business</span>
                                     {currentProjectName}
                                 </span>
                             )}
@@ -284,8 +294,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                         {riskCalculation.factors.map((factor, idx) => (
                                             <div key={idx} className="flex items-start gap-2 p-2 bg-slate-50 rounded-lg">
                                                 <div className={`mt-1 size-2 rounded-full ${factor.severity === "critical" ? "bg-red-500" :
-                                                        factor.severity === "high" ? "bg-orange-500" :
-                                                            factor.severity === "medium" ? "bg-yellow-500" : "bg-green-500"
+                                                    factor.severity === "high" ? "bg-orange-500" :
+                                                        factor.severity === "medium" ? "bg-yellow-500" : "bg-green-500"
                                                     }`} />
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center justify-between">
