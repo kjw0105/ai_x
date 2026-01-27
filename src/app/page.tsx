@@ -7,6 +7,7 @@ import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
 import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
 import HistorySidebar from "@/components/HistorySidebar";
+import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
 import { get, set, del } from "idb-keyval";
 
@@ -112,10 +113,19 @@ export default function Page() {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
+  const [showWelcome, setShowWelcome] = useState(true);
 
   useEffect(() => {
     fetchProjects();
   }, [projectSelectorKey]);
+
+  // Load welcome screen preference
+  useEffect(() => {
+    const dismissed = localStorage.getItem("welcome_dismissed");
+    if (dismissed === "true") {
+      setShowWelcome(false);
+    }
+  }, []);
 
   async function fetchProjects() {
     try {
@@ -270,6 +280,7 @@ export default function Page() {
   }
 
   async function onPickFile(f: File) {
+    dismissWelcome(); // Dismiss welcome screen when file is uploaded
     setFile(f);
     setReport(null);
     await runValidation(f);
@@ -400,6 +411,26 @@ export default function Page() {
     del("current_page");
   }
 
+  function dismissWelcome() {
+    setShowWelcome(false);
+    localStorage.setItem("welcome_dismissed", "true");
+  }
+
+  function handleWelcomeCreateProject() {
+    dismissWelcome();
+    setIsProjectModalOpen(true);
+  }
+
+  function handleWelcomeSelectProject(projectId: string) {
+    dismissWelcome();
+    setCurrentProjectId(projectId);
+  }
+
+  function handleWelcomeProceedWithoutProject() {
+    dismissWelcome();
+    setCurrentProjectId(null);
+  }
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-gray-900 overflow-hidden relative">
       <NewProjectModal
@@ -438,7 +469,15 @@ export default function Page() {
         onSelectReport={loadReportFromHistory}
       />
 
-      <ResizableSplitLayout
+      {showWelcome && !file ? (
+        <WelcomeScreen
+          projects={projects}
+          onCreateProject={handleWelcomeCreateProject}
+          onSelectProject={handleWelcomeSelectProject}
+          onProceedWithoutProject={handleWelcomeProceedWithoutProject}
+        />
+      ) : (
+        <ResizableSplitLayout
         left={
           <DocumentViewer
             file={file}
@@ -462,6 +501,7 @@ export default function Page() {
           />
         }
       />
+      )}
     </div>
   );
 }
