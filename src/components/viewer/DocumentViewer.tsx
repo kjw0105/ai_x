@@ -2,6 +2,7 @@
 
 import { Issue } from "@/lib/validator";
 import { RefObject } from "react";
+import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
 
 interface DocumentViewerProps {
     file: File | null;
@@ -12,6 +13,7 @@ interface DocumentViewerProps {
     onPickFile: () => void;
     onClearFile?: () => void;
     historicalFileName?: string; // When viewing history without file
+    documentType?: string | null; // Document type for badge
 }
 export default function DocumentViewer({
     file,
@@ -21,7 +23,8 @@ export default function DocumentViewer({
     onPageChange,
     onPickFile,
     onClearFile,
-    historicalFileName
+    historicalFileName,
+    documentType
 }: DocumentViewerProps) {
     const issueCount = reportIssues.length;
     // Local state removed, using props
@@ -43,6 +46,7 @@ export default function DocumentViewer({
                     <span className="text-lg font-bold text-slate-800 dark:text-white truncate max-w-[200px] xl:max-w-[400px]">
                         {file?.name ?? historicalFileName ?? "파일을 업로드하세요"}
                     </span>
+                    {documentType && <DocumentTypeBadge type={documentType} size="sm" />}
                     {historicalFileName && !file && (
                         <span className="px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold shrink-0">
                             과거 기록

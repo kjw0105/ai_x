@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { ConfirmModal } from "./ConfirmModal";
 import { useToast } from "@/contexts/ToastContext";
+import { DocumentTypeBadge } from "./DocumentTypeBadge";
 
 // Assuming types from validator or db, but for client usage we define what we need
 interface HistoryItem {
@@ -11,6 +12,7 @@ interface HistoryItem {
     fileName: string;
     createdAt: string;
     score?: number | null;
+    documentType?: string | null;
 }
 
 interface HistorySidebarProps {
@@ -75,7 +77,10 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                         onClick={() => onSelectReport(item.id)}
                     >
                         <div className="flex-1 min-w-0">
-                            <div className="font-bold text-slate-800 dark:text-white truncate mb-1">{item.fileName}</div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <div className="font-bold text-slate-800 dark:text-white truncate flex-1">{item.fileName}</div>
+                                {item.documentType && <DocumentTypeBadge type={item.documentType} size="sm" showIcon={false} />}
+                            </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">
                                 {new Date(item.createdAt).toLocaleString()}
                             </div>

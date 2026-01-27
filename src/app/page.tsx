@@ -8,9 +8,11 @@ import AnalysisPanel from "@/components/analysis/AnalysisPanel";
 import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
 import HistorySidebar from "@/components/HistorySidebar";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
+import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
+import { DocumentType } from "@/lib/documentTypes";
 
 // Type Definitions (Re-using some from validator or defining locally for now if implicit)
 // In validator.ts we have type Severity? Checking previous read..
@@ -20,6 +22,7 @@ type Report = {
   fileName: string;
   issues: any[]; // ValidationIssue[]
   chat: { role: "ai" | "user"; text: string }[];
+  documentType?: string | null;
 };
 
 // Simple Modal Component
@@ -105,6 +108,9 @@ export default function Page() {
   const [showHistory, setShowHistory] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [historicalFileName, setHistoricalFileName] = useState<string | undefined>(undefined);
+  const [showDocTypeSelector, setShowDocTypeSelector] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
 
   // Reset page when file changes
   useEffect(() => {
@@ -231,7 +237,7 @@ export default function Page() {
     return full;
   }
 
-  async function runValidation(f: File) {
+  async function runValidation(f: File, documentType: DocumentType | null = null) {
     setLoading(true);
     try {
       let text = "";
@@ -266,7 +272,8 @@ export default function Page() {
           fileName: f.name,
           pdfText: text,
           pageImages: imagesToSend,
-          projectId: currentProjectId // Pass context
+          projectId: currentProjectId, // Pass context
+          documentType: documentType // Pass document type
         })
       });
 
@@ -279,7 +286,11 @@ export default function Page() {
       // Ensure IDs exist (client-side patch for legacy/migration)
       data.issues = data.issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
 
-      setReport(data);
+      // Include documentType in report
+      setReport({
+        ...data,
+        documentType: documentType
+      });
     } catch (e: any) {
       console.error(e);
       setReport({
@@ -304,7 +315,27 @@ export default function Page() {
     setFile(f);
     setReport(null);
     setHistoricalFileName(undefined); // Clear historical flag
-    await runValidation(f);
+
+    // Show document type selector before validation
+    setPendingFile(f);
+    setShowDocTypeSelector(true);
+  }
+
+  async function handleDocTypeSelect(type: DocumentType) {
+    setSelectedDocType(type);
+    setShowDocTypeSelector(false);
+    if (pendingFile) {
+      await runValidation(pendingFile, type);
+      setPendingFile(null);
+    }
+  }
+
+  function handleDocTypeSkip() {
+    setShowDocTypeSelector(false);
+    if (pendingFile) {
+      runValidation(pendingFile, null);
+      setPendingFile(null);
+    }
   }
 
   // History Load Logic
@@ -333,7 +364,8 @@ export default function Page() {
       setReport({
         fileName: data.fileName,
         issues: issues,
-        chat: [{ role: "ai", text: chatText }]
+        chat: [{ role: "ai", text: chatText }],
+        documentType: data.documentType ?? null
       });
 
       // We don't have the file, so clear it and set historical flag
@@ -486,6 +518,12 @@ export default function Page() {
         onClose={() => setIsProjectModalOpen(false)}
         onCreate={handleCreateProject}
       />
+      <DocumentTypeSelector
+        isOpen={showDocTypeSelector}
+        fileName={pendingFile?.name ?? ""}
+        onSelect={handleDocTypeSelect}
+        onSkip={handleDocTypeSkip}
+      />
       <input
         ref={fileInputRef}
         type="file"
@@ -537,6 +575,7 @@ export default function Page() {
             onPickFile={pickFileDialog}
             onClearFile={handleClearFile}
             historicalFileName={historicalFileName}
+            documentType={report?.documentType}
           />
         }
         right={
