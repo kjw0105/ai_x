@@ -84,7 +84,7 @@ export default function ResizableSplitLayout({ left, right, initialLeftWidthPerc
                         className={`flex-1 py-4 flex flex-col items-center gap-1 ${activeTab === "left" ? "text-primary" : "text-slate-400"}`}
                     >
                         <span className="material-symbols-outlined">description</span>
-                        <span className="text-xs font-bold">서류 보기</span>
+                        <span className="text-xs font-bold">현재 파일</span>
                     </button>
                     <div className="w-px bg-slate-100 dark:bg-slate-700 my-2"></div>
                     <button

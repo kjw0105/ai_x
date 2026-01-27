@@ -10,6 +10,7 @@ import HistorySidebar from "@/components/HistorySidebar";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
 import { get, set, del } from "idb-keyval";
+import { useToast } from "@/contexts/ToastContext";
 
 // Type Definitions (Re-using some from validator or defining locally for now if implicit)
 // In validator.ts we have type Severity? Checking previous read..
@@ -37,7 +38,7 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
       await onCreate({ name, description, file });
       onClose();
     } catch (err) {
-      alert("Failed to create project");
+      console.error("Failed to create project:", err);
     } finally {
       setLoading(false);
     }
@@ -95,6 +96,7 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
 
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const toast = useToast();
 
   const [file, setFile] = useState<File | null>(null);
   const [pageImages, setPageImages] = useState<string[]>([]);
@@ -338,50 +340,63 @@ export default function Page() {
       setFile(null);
       setPageImages([]);
       setHistoricalFileName(data.fileName);
+      toast.success("검증 기록을 불러왔습니다");
     } catch (e) {
-      alert("기록을 불러오는 데 실패했습니다.");
+      toast.error("기록을 불러오는 데 실패했습니다");
     } finally {
       setLoading(false);
     }
   }
 
   async function handleCreateProject({ name, description, file }: { name: string; description: string; file: File | null }) {
-    let contextText = "";
-    if (file) {
-      // Extract text from Master Plan
-      contextText = await extractPdfText(file);
+    try {
+      let contextText = "";
+      if (file) {
+        // Extract text from Master Plan
+        contextText = await extractPdfText(file);
+      }
+
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description, contextText })
+      });
+
+      if (!res.ok) throw new Error("Failed");
+
+      const newProject = await res.json();
+      setCurrentProjectId(newProject.id);
+      setProjectSelectorKey(prev => prev + 1); // Refresh selector
+      toast.success(`프로젝트 "${name}"이(가) 생성되었습니다`);
+    } catch (error) {
+      toast.error("프로젝트 생성에 실패했습니다");
+      throw error;
     }
-
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, contextText })
-    });
-
-    if (!res.ok) throw new Error("Failed");
-
-    const newProject = await res.json();
-    setCurrentProjectId(newProject.id);
-    setProjectSelectorKey(prev => prev + 1); // Refresh selector
   }
 
   async function handleDeleteProject(projectId: string) {
-    const res = await fetch(`/api/projects/${projectId}`, {
-      method: "DELETE"
-    });
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "DELETE"
+      });
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || "Failed to delete project");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to delete project");
+      }
+
+      // If we deleted the current project, reset to null
+      if (currentProjectId === projectId) {
+        setCurrentProjectId(null);
+      }
+
+      // Refresh the project list
+      setProjectSelectorKey(prev => prev + 1);
+      toast.success("프로젝트가 삭제되었습니다");
+    } catch (error) {
+      toast.error("프로젝트 삭제에 실패했습니다");
+      throw error;
     }
-
-    // If we deleted the current project, reset to null
-    if (currentProjectId === projectId) {
-      setCurrentProjectId(null);
-    }
-
-    // Refresh the project list
-    setProjectSelectorKey(prev => prev + 1);
   }
 
   // --- Persistence Logic ---
@@ -530,7 +545,7 @@ export default function Page() {
             issues={report?.issues ?? []}
             chatMessages={report?.chat ?? []}
             onReupload={pickFileDialog}
-            onModify={() => alert("Coming soon!")}
+            onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
             currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
             currentFile={file}
           />

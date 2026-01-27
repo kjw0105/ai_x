@@ -285,7 +285,10 @@ export async function POST(req: Request) {
     }
 
     // Merge all issues: validation + structured + risk + pattern + cross-document analysis
-    const allIssues = [...validationIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues];
+    const allIssues = [...validationIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues].map(issue => ({
+      ...issue,
+      id: crypto.randomUUID()
+    }));
 
     // Stage 5: Risk Signals - Format output with non-judgmental language
     const riskSignals = allIssues

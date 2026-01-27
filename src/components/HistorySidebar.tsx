@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { ConfirmModal } from "./ConfirmModal";
+import { useToast } from "@/contexts/ToastContext";
 
 // Assuming types from validator or db, but for client usage we define what we need
 interface HistoryItem {
@@ -23,6 +24,7 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
     const [loading, setLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string | null; fileName?: string } | null>(null);
     const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
+    const toast = useToast();
 
     useEffect(() => {
         if (isOpen) {
@@ -107,7 +109,9 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                             .then(() => {
                                 setHistory(prev => prev.filter(h => h.id !== deleteConfirm.id));
                                 setDeleteConfirm(null);
-                            });
+                                toast.success("기록이 삭제되었습니다");
+                            })
+                            .catch(() => toast.error("기록 삭제에 실패했습니다"));
                     }
                 }}
                 onCancel={() => setDeleteConfirm(null)}
@@ -126,7 +130,9 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                         .then(() => {
                             setHistory([]);
                             setDeleteAllConfirm(false);
-                        });
+                            toast.success("모든 기록이 삭제되었습니다");
+                        })
+                        .catch(() => toast.error("기록 삭제에 실패했습니다"));
                 }}
                 onCancel={() => setDeleteAllConfirm(false)}
             />
