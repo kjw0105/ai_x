@@ -107,14 +107,34 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const [showRiskDetails, setShowRiskDetails] = useState(false);
+    const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
 
     // Suggestion Modal State
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
 
     const reportExists = issues.length > 0 || chatMessages.length > 0;
 
-    // Filter hidden issues
-    const visibleIssues = issues.filter(i => !hiddenIssueIds.has(i.id));
+    // Filter hidden issues and by severity
+    const visibleIssues = issues.filter(i =>
+        !hiddenIssueIds.has(i.id) && severityFilters.has(i.severity)
+    );
+
+    const toggleSeverityFilter = (severity: string) => {
+        setSeverityFilters(prev => {
+            const next = new Set(prev);
+            if (next.has(severity)) {
+                next.delete(severity);
+            } else {
+                next.add(severity);
+            }
+            return next;
+        });
+    };
+
+    // Count issues by severity
+    const errorCount = issues.filter(i => i.severity === "error").length;
+    const warnCount = issues.filter(i => i.severity === "warn").length;
+    const infoCount = issues.filter(i => i.severity === "info").length;
 
     const handleConfirm = (id: string) => {
         setHiddenIssueIds(prev => {
@@ -225,6 +245,49 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         </div>
                     </div>
                 </div>
+
+                {/* Severity Filter - Only show when there are issues */}
+                {reportExists && issues.length > 0 && (
+                    <div className="mt-4 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-200 dark:border-slate-700">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">필터:</span>
+                        <button
+                            onClick={() => toggleSeverityFilter("error")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("error")
+                                    ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">error</span>
+                            <span>심각 ({errorCount})</span>
+                        </button>
+                        <button
+                            onClick={() => toggleSeverityFilter("warn")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("warn")
+                                    ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">warning</span>
+                            <span>경고 ({warnCount})</span>
+                        </button>
+                        <button
+                            onClick={() => toggleSeverityFilter("info")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("info")
+                                    ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">info</span>
+                            <span>정보 ({infoCount})</span>
+                        </button>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">
+                            {visibleIssues.length} / {issues.length} 표시중
+                        </span>
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-slate-50 dark:bg-[#1a2233]">
