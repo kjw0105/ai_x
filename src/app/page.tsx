@@ -8,6 +8,7 @@ import AnalysisPanel from "@/components/analysis/AnalysisPanel";
 import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
 import HistorySidebar from "@/components/HistorySidebar";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
+import { get, set, del } from "idb-keyval";
 
 // Type Definitions (Re-using some from validator or defining locally for now if implicit)
 // In validator.ts we have type Severity? Checking previous read..
@@ -99,6 +100,12 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+
+  // Reset page when file changes
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [file, pageImages]);
 
   // Project State
   const [projects, setProjects] = useState<any[]>([]); // Should use Project type
@@ -238,6 +245,10 @@ export default function Page() {
         // Handle error response structure from API
         throw new Error((data as any).error || "Unknown server error");
       }
+
+      // Ensure IDs exist (client-side patch for legacy/migration)
+      data.issues = data.issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
+
       setReport(data);
     } catch (e: any) {
       console.error(e);
@@ -245,7 +256,7 @@ export default function Page() {
         fileName: f.name,
         issues: [
           {
-            id: "err",
+            id: crypto.randomUUID(), // Ensure ID for fallback error too
             severity: "error",
             title: "검증 실패",
             message: e?.message || "오류가 발생했습니다."
@@ -275,8 +286,11 @@ export default function Page() {
 
       // Transform DB schema to UI schema
       // docDataJson and issuesJson are strings, need parsing
-      const issues = JSON.parse(data.issuesJson);
+      let issues = JSON.parse(data.issuesJson);
       const extracted = JSON.parse(data.docDataJson);
+
+      // Ensure IDs exist for history items
+      issues = issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
 
       setReport({
         fileName: data.fileName,
@@ -314,6 +328,78 @@ export default function Page() {
     setProjectSelectorKey(prev => prev + 1); // Refresh selector
   }
 
+  async function handleDeleteProject(projectId: string) {
+    const res = await fetch(`/api/projects/${projectId}`, {
+      method: "DELETE"
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || "Failed to delete project");
+    }
+
+    // If we deleted the current project, reset to null
+    if (currentProjectId === projectId) {
+      setCurrentProjectId(null);
+    }
+
+    // Refresh the project list
+    setProjectSelectorKey(prev => prev + 1);
+  }
+
+  // --- Persistence Logic ---
+  useEffect(() => {
+    // Load state from DB on mount
+    async function loadState() {
+      try {
+        const savedFile = await get("current_file");
+        const savedImages = await get("current_images");
+        const savedReport = await get("current_report");
+        const savedPage = await get("current_page");
+
+        if (savedFile) setFile(savedFile);
+        if (savedImages) setPageImages(savedImages);
+        if (savedReport) setReport(savedReport);
+        if (savedPage) setCurrentPage(savedPage);
+      } catch (e) {
+        console.error("Failed to load state", e);
+      }
+    }
+    loadState();
+  }, []); // Run once on mount
+
+  // Auto-save effects
+  useEffect(() => {
+    if (file) set("current_file", file);
+  }, [file]);
+
+  useEffect(() => {
+    if (pageImages.length > 0) set("current_images", pageImages);
+  }, [pageImages]);
+
+  useEffect(() => {
+    if (report) set("current_report", report);
+  }, [report]);
+
+  // Debounce page save slightly if needed, or just save (it's small)
+  useEffect(() => {
+    set("current_page", currentPage);
+  }, [currentPage]);
+
+
+  function handleClearFile() {
+    setFile(null);
+    setPageImages([]);
+    setReport(null);
+    setCurrentPage(0);
+
+    // Clear DB
+    del("current_file");
+    del("current_images");
+    del("current_report");
+    del("current_page");
+  }
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-gray-900 overflow-hidden relative">
       <NewProjectModal
@@ -343,6 +429,7 @@ export default function Page() {
         currentProjectId={currentProjectId}
         onProjectChange={setCurrentProjectId}
         onOpenNewProject={() => setIsProjectModalOpen(true)}
+        onDeleteProject={handleDeleteProject}
       />
 
       <HistorySidebar
@@ -357,7 +444,10 @@ export default function Page() {
             file={file}
             pageImages={pageImages}
             reportIssues={report?.issues ?? []}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
             onPickFile={pickFileDialog}
+            onClearFile={handleClearFile}
           />
         }
         right={
@@ -368,6 +458,7 @@ export default function Page() {
             onReupload={pickFileDialog}
             onModify={() => alert("Coming soon!")}
             currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+            currentFile={file}
           />
         }
       />

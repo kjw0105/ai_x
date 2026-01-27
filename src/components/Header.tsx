@@ -12,6 +12,7 @@ interface HeaderProps {
     currentProjectId: string | null;
     onProjectChange: (id: string | null) => void;
     onOpenNewProject: () => void;
+    onDeleteProject: (projectId: string) => void;
 }
 
 export default function Header({
@@ -23,7 +24,8 @@ export default function Header({
     projects,
     currentProjectId,
     onProjectChange,
-    onOpenNewProject
+    onOpenNewProject,
+    onDeleteProject
 }: HeaderProps) {
     return (
         <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark px-6 py-4 shrink-0 z-20 shadow-sm">
@@ -47,6 +49,7 @@ export default function Header({
                     currentProjectId={currentProjectId}
                     onProjectChange={onProjectChange}
                     onOpenNewProject={onOpenNewProject}
+                    onDeleteProject={onDeleteProject}
                 />
 
                 <div className="hidden md:flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-full px-4 py-2">
