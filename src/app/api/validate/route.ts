@@ -4,9 +4,11 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
-import { validateDocument, type DocData } from "@/lib/validator";
+import { validateDocument, type DocData, type ValidationIssue } from "@/lib/validator";
 import { prisma } from "@/lib/db";
 import { analyzeInspectorPatterns, patternWarningsToIssues } from "@/lib/patternAnalysis";
+import { validateAgainstStructuredPlan } from "@/lib/structuredValidation";
+import type { MasterSafetyPlan, StructuredValidationIssue } from "@/lib/masterPlanSchema";
 
 type Provider = "openai" | "claude" | "auto";
 
@@ -165,12 +167,27 @@ export async function POST(req: Request) {
 
     // Fetch Project Context if projectId is present
     let contextText = "";
+    let masterPlan: MasterSafetyPlan | null = null;
+    let projectIsStructured = false;
+
     if (projectId) {
       const project = await prisma.project.findUnique({
         where: { id: projectId }
       });
-      if (project?.contextText) {
-        contextText = project.contextText;
+      if (project) {
+        // Legacy free-text context
+        if (project.contextText) {
+          contextText = project.contextText;
+        }
+        // New structured master plan
+        if (project.isStructured && project.masterPlanJson) {
+          try {
+            masterPlan = JSON.parse(project.masterPlanJson) as MasterSafetyPlan;
+            projectIsStructured = true;
+          } catch (e) {
+            console.error("Failed to parse master plan JSON:", e);
+          }
+        }
       }
     }
 
@@ -203,6 +220,17 @@ export async function POST(req: Request) {
     const extracted = result as DocData;
     const validationIssues = validateDocument(extracted);
 
+    // Stage 3: Structured Master Plan Validation
+    let structuredIssues: StructuredValidationIssue[] = [];
+    if (masterPlan && projectIsStructured) {
+      try {
+        structuredIssues = validateAgainstStructuredPlan(extracted, masterPlan);
+      } catch (e) {
+        console.warn("Structured validation failed:", e);
+        // Non-critical, continue without structured validation
+      }
+    }
+
     // --- DB SAVE ---
     // Save the result to the database for history (including Stage 4 fields)
     const savedReport = await prisma.report.create({
@@ -232,8 +260,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // Merge all issues: validation + pattern analysis
-    const allIssues = [...validationIssues, ...patternIssues];
+    // Merge all issues: validation + structured + pattern analysis
+    const allIssues = [...validationIssues, ...structuredIssues, ...patternIssues];
 
     // Stage 5: Risk Signals - Format output with non-judgmental language
     const riskSignals = allIssues
