@@ -6,6 +6,7 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { validateDocument, type DocData } from "@/lib/validator";
 import { prisma } from "@/lib/db";
+import { analyzeInspectorPatterns, patternWarningsToIssues } from "@/lib/patternAnalysis";
 
 type Provider = "openai" | "claude" | "auto";
 
@@ -31,7 +32,7 @@ function buildSystemPrompt() {
 출력은 반드시 "JSON만" 출력한다(설명/마크다운 금지).
 스키마:
 {
-  "docType": "산업안전 점검표" | "위험성 평가 보고서" | "작업 전 안전점검표" | "unknown",
+  "docType": "산업안전 점검표" | "위험성 평가 보고서" | "작업 전 안전점검표" | "TBM" | "unknown",
   "fields": {
     "점검일자": string|null,   // 예: 2024-05-20, 식별 불가시 null
     "현장명": string|null,
@@ -42,16 +43,35 @@ function buildSystemPrompt() {
     "담당": "present"|"missing"|"unknown", // 담당자/작업반장 등 실무자 서명
     "소장": "present"|"missing"|"unknown"  // 관리책임자/소장 서명
   },
+  "inspectorName": string|null,  // 점검자/담당자 이름 (예: "김철수", "박안전")
+  "riskLevel": "high"|"medium"|"low"|null,  // 문서에 표시된 위험도 수준
+  "checklist": [  // 체크리스트 항목들 (있는 경우만)
+    {
+      "id": string,     // 항목 ID (fall_01, ppe_03 등)
+      "category": string,  // 분류 (추락예방, 보호구, 전기안전 등)
+      "nameKo": string,    // 한국어 항목명
+      "value": "✔"|"✖"|"N/A"|null  // 체크 상태
+    }
+  ],
   "chat": [
      {"role":"ai", "text": "문서 요약 및 특이사항 한줄 코멘트"}
   ]
 }
+
+체크리스트 ID 규칙:
+- fall_01: 고소작업, fall_02: 추락방호장치, fall_03: 안전난간
+- ppe_01: 안전모착용, ppe_03: 안전대착용
+- fire_01: 화기작업, fire_02: 소화기비치
+- conf_01: 밀폐공간작업, conf_02: 산소농도측정, conf_03: 환기조치
+- exc_01: 굴착작업, exc_02: 흙막이설치, exc_03: 탈출사다리
+- elec_02: 전기작업, elec_03: 잠금장치
 
 주의:
 - "issues" 필드는 생성하지 마라. (검증은 별도 로직으로 수행함)
 - 서명란이 비어있으면 "missing"으로 표시하라.
 - 내용을 찾을 수 없으면 null 또는 "unknown"을 사용하라.
 - 사용자가 "프로젝트 규칙" 또는 "마스터 플랜"을 제공한 경우(아래 Context), 그 규칙에 위배되는 사항이 있다면 특이사항(chat)에 언급하라.
+- chat 메시지는 비판단적(non-judgmental) 어조를 사용하라: "불일치가 존재함", "기록 누락됨" 등으로 표현하고, "위험함", "잘못됨" 같은 판단 표현은 피하라.
 `;
 }
 
@@ -183,25 +203,51 @@ export async function POST(req: Request) {
     const extracted = result as DocData;
     const validationIssues = validateDocument(extracted);
 
-    // merge logic:
-    // issues 필드를 우리가 만든 validationIssues로 덮어쓰거나 합친다.
-    // 여기선 덮어쓰기
-    const finalResult = {
-      ...extracted,
-      issues: validationIssues,
-    };
-
     // --- DB SAVE ---
-    // Save the result to the database for history
+    // Save the result to the database for history (including Stage 4 fields)
     const savedReport = await prisma.report.create({
       data: {
         fileName: fileName ?? "Untitled",
         docDataJson: JSON.stringify(extracted),
         issuesJson: JSON.stringify(validationIssues),
-        projectId: projectId ?? null
-        // chatJson: ... (if we had chat history here, but current logic is stateless)
+        projectId: projectId ?? null,
+        // Stage 4: Save inspector name and checklist for pattern analysis
+        inspectorName: extracted.inspectorName ?? null,
+        checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
       }
     });
+
+    // Stage 4: Pattern Analysis - Check for suspicious patterns
+    let patternIssues: typeof validationIssues = [];
+    if (extracted.inspectorName) {
+      try {
+        const patternWarnings = await analyzeInspectorPatterns(
+          extracted.inspectorName,
+          projectId ?? undefined
+        );
+        patternIssues = patternWarningsToIssues(patternWarnings);
+      } catch (e) {
+        console.warn("Pattern analysis failed:", e);
+        // Non-critical, continue without pattern warnings
+      }
+    }
+
+    // Merge all issues: validation + pattern analysis
+    const allIssues = [...validationIssues, ...patternIssues];
+
+    // Stage 5: Risk Signals - Format output with non-judgmental language
+    const riskSignals = allIssues
+      .filter(issue => issue.ruleId?.startsWith("pattern_"))
+      .map(issue => ({
+        type: issue.ruleId,
+        message: issue.message,
+      }));
+
+    const finalResult = {
+      ...extracted,
+      issues: allIssues,
+      riskSignals,
+    };
 
     return NextResponse.json({
       fileName,

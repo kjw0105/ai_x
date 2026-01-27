@@ -215,6 +215,9 @@ export default function Page() {
         onUpload={pickFileDialog}
         onShowHistory={() => setShowHistory(true)}
         toggleDark={toggleDark}
+        currentProjectId={null}
+        onProjectChange={() => { }}
+        onOpenNewProject={() => { }}
       />
 
       <HistorySidebar
