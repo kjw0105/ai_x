@@ -12,13 +12,24 @@ interface DocumentTypeSelectorProps {
 
 export function DocumentTypeSelector({ isOpen, fileName, onSelect, onSkip }: DocumentTypeSelectorProps) {
     const [selected, setSelected] = useState<DocumentType | null>(null);
+    const [dontAskAgain, setDontAskAgain] = useState(false);
 
     if (!isOpen) return null;
 
     const handleConfirm = () => {
         if (selected) {
+            if (dontAskAgain) {
+                localStorage.setItem("skip_document_type_selector", "true");
+            }
             onSelect(selected);
         }
+    };
+
+    const handleSkip = () => {
+        if (dontAskAgain) {
+            localStorage.setItem("skip_document_type_selector", "true");
+        }
+        onSkip();
     };
 
     return (
@@ -79,20 +90,34 @@ export function DocumentTypeSelector({ isOpen, fileName, onSelect, onSkip }: Doc
                     })}
                 </div>
 
-                <div className="flex justify-end gap-3">
-                    <button
-                        onClick={onSkip}
-                        className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                    >
-                        건너뛰기
-                    </button>
-                    <button
-                        onClick={handleConfirm}
-                        disabled={!selected}
-                        className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                        확인
-                    </button>
+                <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={dontAskAgain}
+                            onChange={(e) => setDontAskAgain(e.target.checked)}
+                            className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                            다음부터 묻지 않기
+                        </span>
+                    </label>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleSkip}
+                            className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                            건너뛰기
+                        </button>
+                        <button
+                            onClick={handleConfirm}
+                            disabled={!selected}
+                            className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            확인
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

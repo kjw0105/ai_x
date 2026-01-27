@@ -32,7 +32,14 @@ export default function Header({
     return (
         <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark px-6 py-4 shrink-0 z-20 shadow-sm">
             <div className="flex items-center gap-6">
-                <div className="flex items-center gap-3 text-slate-800 dark:text-white">
+                <button
+                    type="button"
+                    onClick={onShowWelcome}
+                    disabled={!onShowWelcome}
+                    className="flex items-center gap-3 text-slate-800 dark:text-white cursor-pointer rounded-xl px-2 py-1 -mx-2 -my-1 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:shadow-none"
+                    aria-label="Go to welcome screen"
+                    title="Go to welcome screen"
+                >
                     <div className="size-12 flex items-center justify-center bg-primary rounded-xl text-white shadow-lg shadow-primary/30">
                         <span className="material-symbols-outlined text-3xl">safety_check</span>
                     </div>
@@ -42,7 +49,7 @@ export default function Header({
                         </h2>
                         <p className="text-xs text-slate-500 font-bold">경상남도 중소기업 지원 시스템</p>
                     </div>
-                </div>
+                </button>
             </div>
 
             <div className="flex items-center gap-4">

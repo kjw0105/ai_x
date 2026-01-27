@@ -316,9 +316,17 @@ export default function Page() {
     setReport(null);
     setHistoricalFileName(undefined); // Clear historical flag
 
-    // Show document type selector before validation
-    setPendingFile(f);
-    setShowDocTypeSelector(true);
+    // Check if user wants to skip document type selector
+    const skipSelector = typeof window !== "undefined" && localStorage.getItem("skip_document_type_selector") === "true";
+
+    if (skipSelector) {
+      // Skip selector and validate immediately
+      await runValidation(f, null);
+    } else {
+      // Show document type selector before validation
+      setPendingFile(f);
+      setShowDocTypeSelector(true);
+    }
   }
 
   async function handleDocTypeSelect(type: DocumentType) {
