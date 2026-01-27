@@ -5,7 +5,9 @@ interface HeaderProps {
     reportExists: boolean;
     onUpload: () => void;
     onShowHistory: () => void;
+    onShowDashboard?: () => void;
     toggleDark: () => void;
+    showWelcome?: boolean; // Hide upload button when welcome screen is visible
 
     // Project Props
     projects: any[]; // Avoid circular dependency with type import if possible, or import Project type
@@ -13,6 +15,7 @@ interface HeaderProps {
     onProjectChange: (id: string | null) => void;
     onOpenNewProject: () => void;
     onDeleteProject: (projectId: string) => void;
+    onEditProject?: (project: { id: string; name: string; description: string }) => void;
     onShowWelcome?: () => void;
 }
 
@@ -21,12 +24,15 @@ export default function Header({
     reportExists,
     onUpload,
     onShowHistory,
+    onShowDashboard,
     toggleDark,
+    showWelcome = false,
     projects,
     currentProjectId,
     onProjectChange,
     onOpenNewProject,
     onDeleteProject,
+    onEditProject,
     onShowWelcome
 }: HeaderProps) {
     return (
@@ -59,6 +65,7 @@ export default function Header({
                     onProjectChange={onProjectChange}
                     onOpenNewProject={onOpenNewProject}
                     onDeleteProject={onDeleteProject}
+                    onEditProject={onEditProject}
                     onShowWelcome={onShowWelcome}
                 />
 
@@ -71,6 +78,16 @@ export default function Header({
                         {loading ? "AI 분석 중" : reportExists ? "AI 분석 완료" : "대기 중"}
                     </span>
                 </div>
+
+                {onShowDashboard && currentProjectId && (
+                    <button
+                        onClick={onShowDashboard}
+                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold"
+                        title="프로젝트 대시보드"
+                    >
+                        <span className="material-symbols-outlined">dashboard</span>
+                    </button>
+                )}
 
                 <button
                     onClick={onShowHistory}
@@ -88,13 +105,16 @@ export default function Header({
                     <span className="material-symbols-outlined">dark_mode</span>
                 </button>
 
-                <button
-                    onClick={onUpload}
-                    className="px-4 py-2 rounded-xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
-                >
-                    <span className="material-symbols-outlined">upload</span>
-                    파일 업로드
-                </button>
+                {/* Hide upload button when welcome screen is visible */}
+                {!showWelcome && (
+                    <button
+                        onClick={onUpload}
+                        className="px-4 py-2 rounded-xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined">upload</span>
+                        파일 업로드
+                    </button>
+                )}
             </div>
         </header>
     );

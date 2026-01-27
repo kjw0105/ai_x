@@ -61,3 +61,38 @@ export async function GET(
         return NextResponse.json({ error: e.message }, { status: 500 });
     }
 }
+
+// PATCH: Update a project
+export async function PATCH(
+    req: Request,
+    { params }: { params: { id: string } }
+) {
+    try {
+        const projectId = params.id;
+        const { name, description, contextText } = await req.json();
+
+        // Check if project exists
+        const existing = await prisma.project.findUnique({
+            where: { id: projectId }
+        });
+
+        if (!existing) {
+            return NextResponse.json({ error: "Project not found" }, { status: 404 });
+        }
+
+        // Update project
+        const updated = await prisma.project.update({
+            where: { id: projectId },
+            data: {
+                ...(name !== undefined && { name }),
+                ...(description !== undefined && { description }),
+                ...(contextText !== undefined && { contextText }),
+            }
+        });
+
+        return NextResponse.json(updated);
+    } catch (e: any) {
+        console.error("Error updating project:", e);
+        return NextResponse.json({ error: e.message }, { status: 500 });
+    }
+}

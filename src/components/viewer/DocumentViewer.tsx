@@ -53,11 +53,12 @@ export default function DocumentViewer({
                         </span>
                     )}
 
-                    {file && onClearFile && (
+                    {onClearFile && (
                         <button
                             onClick={onClearFile}
-                            className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors flex-shrink-0"
-                            title="현재 파일 삭제"
+                            disabled={!file}
+                            className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+                            title={file ? "현재 파일 삭제" : "삭제할 파일 없음"}
                         >
                             <span className="material-symbols-outlined text-xl">delete</span>
                         </button>

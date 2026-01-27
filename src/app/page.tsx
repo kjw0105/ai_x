@@ -9,6 +9,8 @@ import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
 import HistorySidebar from "@/components/HistorySidebar";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
+import { EditProjectModal } from "@/components/EditProjectModal";
+import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
@@ -70,16 +72,28 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Master Safety Plan (PDF)</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              마스터 안전 계획서 (선택사항)
+            </label>
             <div className="flex items-center gap-2">
               <input
                 type="file"
                 accept="application/pdf"
-                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
                 onChange={e => setFile(e.target.files?.[0] || null)}
               />
             </div>
-            <p className="text-xs text-slate-500 mt-1">Upload the safety manual to valid against context.</p>
+            <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">
+                💡 이 문서는 무엇인가요?
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-400">
+                프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
+                ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
+              </p>
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
@@ -106,6 +120,7 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [historicalFileName, setHistoricalFileName] = useState<string | undefined>(undefined);
   const [showDocTypeSelector, setShowDocTypeSelector] = useState(false);
@@ -126,14 +141,20 @@ export default function Page() {
     return null;
   });
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<{ id: string; name: string; description: string } | null>(null);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
   // Initialize welcome state from localStorage on client only to avoid hydration mismatch
   const [showWelcome, setShowWelcome] = useState(() => {
     if (typeof window !== "undefined") {
-      const dismissed = localStorage.getItem("welcome_dismissed");
+      const showWelcomeState = localStorage.getItem("show_welcome");
+      // If explicitly set, use that value
+      if (showWelcomeState !== null) {
+        return showWelcomeState === "true";
+      }
+      // Otherwise, show welcome if no project exists
       const hasProject = localStorage.getItem("current_project_id");
-      // Show welcome if not dismissed AND no saved project
-      return dismissed !== "true" && !hasProject;
+      return !hasProject;
     }
     return false; // Default to false on server to avoid hydration issues
   });
@@ -405,9 +426,17 @@ export default function Page() {
       if (!res.ok) throw new Error("Failed");
 
       const newProject = await res.json();
+
+      // Immediately add the new project to the projects list
+      setProjects(prev => [...prev, newProject]);
+
+      // Set as current project
       setCurrentProjectId(newProject.id);
-      setProjectSelectorKey(prev => prev + 1); // Refresh selector
-      toast.success(`프로젝트 "${name}"이(가) 생성되었습니다`);
+
+      // Ensure welcome screen is dismissed
+      dismissWelcome();
+
+      toast.success(`프로젝트 "${name}"이(가) 생성되었습니다. 이제 검증할 문서를 업로드하세요.`);
     } catch (error) {
       toast.error("프로젝트 생성에 실패했습니다");
       throw error;
@@ -430,13 +459,49 @@ export default function Page() {
         setCurrentProjectId(null);
       }
 
-      // Refresh the project list
-      setProjectSelectorKey(prev => prev + 1);
+      // Immediately remove the project from the list
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+
       toast.success("프로젝트가 삭제되었습니다");
     } catch (error) {
       toast.error("프로젝트 삭제에 실패했습니다");
       throw error;
     }
+  }
+
+  async function handleUpdateProject(projectId: string, data: { name: string; description: string; file: File | null }) {
+    try {
+      let contextText = undefined;
+      if (data.file) {
+        contextText = await extractPdfText(data.file);
+      }
+
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          description: data.description,
+          ...(contextText !== undefined && { contextText }),
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update");
+
+      const updatedProject = await res.json();
+
+      // Immediately update the project in the list
+      setProjects(prev => prev.map(p => p.id === projectId ? updatedProject : p));
+
+      // Note: toast notification is handled in the modal
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  function handleOpenEditProject(project: { id: string; name: string; description: string }) {
+    setEditingProject(project);
+    setIsEditProjectModalOpen(true);
   }
 
   // --- Persistence Logic ---
@@ -495,11 +560,12 @@ export default function Page() {
 
   function dismissWelcome() {
     setShowWelcome(false);
-    localStorage.setItem("welcome_dismissed", "true");
+    localStorage.setItem("show_welcome", "false");
   }
 
   function showWelcomeScreen() {
     setShowWelcome(true);
+    localStorage.setItem("show_welcome", "true");
     // Clear current work when going back to welcome
     handleClearFile();
   }
@@ -526,6 +592,21 @@ export default function Page() {
         onClose={() => setIsProjectModalOpen(false)}
         onCreate={handleCreateProject}
       />
+      <EditProjectModal
+        isOpen={isEditProjectModalOpen}
+        project={editingProject}
+        onClose={() => {
+          setIsEditProjectModalOpen(false);
+          setEditingProject(null);
+        }}
+        onUpdate={handleUpdateProject}
+      />
+      <ProjectDashboard
+        isOpen={showDashboard}
+        onClose={() => setShowDashboard(false)}
+        projectId={currentProjectId}
+        projectName={projects.find(p => p.id === currentProjectId)?.name}
+      />
       <DocumentTypeSelector
         isOpen={showDocTypeSelector}
         fileName={pendingFile?.name ?? ""}
@@ -549,12 +630,15 @@ export default function Page() {
         reportExists={!!report}
         onUpload={pickFileDialog}
         onShowHistory={() => setShowHistory(true)}
+        onShowDashboard={() => setShowDashboard(true)}
         toggleDark={toggleDark}
+        showWelcome={showWelcome}
         projects={projects}
         currentProjectId={currentProjectId}
         onProjectChange={setCurrentProjectId}
         onOpenNewProject={() => setIsProjectModalOpen(true)}
         onDeleteProject={handleDeleteProject}
+        onEditProject={handleOpenEditProject}
         onShowWelcome={showWelcomeScreen}
       />
 
