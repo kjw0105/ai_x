@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { analyzeInspectorPatterns, patternWarningsToIssues } from "@/lib/patternAnalysis";
 import { validateAgainstStructuredPlan } from "@/lib/structuredValidation";
 import type { MasterSafetyPlan, StructuredValidationIssue } from "@/lib/masterPlanSchema";
+import { calculateRiskLevel, riskCalculationToIssues } from "@/lib/riskMatrix";
 
 type Provider = "openai" | "claude" | "auto";
 
@@ -231,6 +232,16 @@ export async function POST(req: Request) {
       }
     }
 
+    // Stage 3: Risk Matrix Calculation
+    let riskIssues: typeof validationIssues = [];
+    try {
+      const riskCalculation = calculateRiskLevel(extracted);
+      riskIssues = riskCalculationToIssues(riskCalculation);
+    } catch (e) {
+      console.warn("Risk calculation failed:", e);
+      // Non-critical, continue without risk analysis
+    }
+
     // --- DB SAVE ---
     // Save the result to the database for history (including Stage 4 fields)
     const savedReport = await prisma.report.create({
@@ -260,8 +271,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // Merge all issues: validation + structured + pattern analysis
-    const allIssues = [...validationIssues, ...structuredIssues, ...patternIssues];
+    // Merge all issues: validation + structured + risk + pattern analysis
+    const allIssues = [...validationIssues, ...structuredIssues, ...riskIssues, ...patternIssues];
 
     // Stage 5: Risk Signals - Format output with non-judgmental language
     const riskSignals = allIssues
