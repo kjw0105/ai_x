@@ -36,9 +36,14 @@ model Project {
   name        String
   description String?
   createdAt   DateTime @default(now())
-  
-  // The "Master Context" extracted from uploaded plans
-  contextText String   @default("") 
-  
+
+  // Legacy: Free-text master context (for backward compatibility)
+  contextText String   @default("")
+
+  // New: Structured master safety plan (JSON)
+  masterPlanJson String?  // Stores MasterSafetyPlan as JSON
+  planVersion    String?  // Version of the structured plan
+  isStructured   Boolean @default(false)  // True if using structured plan
+
   reports     Report[]
 }
