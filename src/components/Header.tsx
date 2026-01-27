@@ -8,6 +8,7 @@ interface HeaderProps {
     toggleDark: () => void;
 
     // Project Props
+    projects: any[]; // Avoid circular dependency with type import if possible, or import Project type
     currentProjectId: string | null;
     onProjectChange: (id: string | null) => void;
     onOpenNewProject: () => void;
@@ -19,6 +20,7 @@ export default function Header({
     onUpload,
     onShowHistory,
     toggleDark,
+    projects,
     currentProjectId,
     onProjectChange,
     onOpenNewProject
@@ -41,6 +43,7 @@ export default function Header({
 
             <div className="flex items-center gap-4">
                 <ProjectSelector
+                    projects={projects}
                     currentProjectId={currentProjectId}
                     onProjectChange={onProjectChange}
                     onOpenNewProject={onOpenNewProject}

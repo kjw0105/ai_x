@@ -1,39 +1,20 @@
 
 import React, { useEffect, useState } from "react";
 
-type Project = {
+export type Project = {
     id: string;
     name: string;
     description: string;
 };
 
 interface ProjectSelectorProps {
+    projects: Project[];
     currentProjectId: string | null;
     onProjectChange: (projectId: string | null) => void;
     onOpenNewProject: () => void;
 }
 
-export function ProjectSelector({ currentProjectId, onProjectChange, onOpenNewProject }: ProjectSelectorProps) {
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        fetchProjects();
-    }, []);
-
-    async function fetchProjects() {
-        try {
-            setLoading(true);
-            const res = await fetch("/api/projects");
-            if (res.ok) {
-                setProjects(await res.json());
-            }
-        } catch (e) {
-            console.error("Failed to fetch projects");
-        } finally {
-            setLoading(false);
-        }
-    }
+export function ProjectSelector({ projects, currentProjectId, onProjectChange, onOpenNewProject }: ProjectSelectorProps) {
 
     // Find current project name
     const currentProject = projects.find(p => p.id === currentProjectId);
@@ -69,10 +50,10 @@ export function ProjectSelector({ currentProjectId, onProjectChange, onOpenNewPr
                                 onClick={() => onProjectChange(p.id)}
                                 className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 group flex justify-between items-center ${currentProjectId === p.id ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'}`}
                             >
-                                <div className="truncate">
-                                    <div className="font-medium">{p.name}</div>
-                                    {p.description && <div className="text-xs text-gray-500 truncate">{p.description}</div>}
-                                </div>
+                                <span className="truncate block">
+                                    <span className="font-medium block">{p.name}</span>
+                                    {p.description && <span className="text-xs text-gray-500 truncate block">{p.description}</span>}
+                                </span>
                                 {currentProjectId === p.id && (
                                     <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

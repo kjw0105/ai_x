@@ -19,6 +19,78 @@ type Report = {
   chat: { role: "ai" | "user"; text: string }[];
 };
 
+// Simple Modal Component
+function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClose: () => void; onCreate: (data: any) => Promise<void> }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  if (!isOpen) return null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await onCreate({ name, description, file });
+      onClose();
+    } catch (err) {
+      alert("Failed to create project");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700">
+        <h3 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">New Project</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Project Name</label>
+            <input
+              required
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              value={name} onChange={e => setName(e.target.value)}
+              placeholder="e.g. Gimpo Han River Site A"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+            <input
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="Optional description"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Master Safety Plan (PDF)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                accept="application/pdf"
+                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                onChange={e => setFile(e.target.files?.[0] || null)}
+              />
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Upload the safety manual to valid against context.</p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? "Creating..." : "Create Project"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -27,6 +99,27 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Project State
+  const [projects, setProjects] = useState<any[]>([]); // Should use Project type
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
+
+  useEffect(() => {
+    fetchProjects();
+  }, [projectSelectorKey]);
+
+  async function fetchProjects() {
+    try {
+      const res = await fetch("/api/projects");
+      if (res.ok) {
+        setProjects(await res.json());
+      }
+    } catch (e) {
+      console.error("Failed to fetch projects");
+    }
+  }
 
   // PDF Worker Init (keep this here or move to a hook, keep here for simplicity)
   let pdfjsPromise: Promise<any> | null = null;
@@ -132,7 +225,12 @@ export default function Page() {
       const res = await fetch("/api/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: f.name, pdfText: text, pageImages: imagesToSend })
+        body: JSON.stringify({
+          fileName: f.name,
+          pdfText: text,
+          pageImages: imagesToSend,
+          projectId: currentProjectId // Pass context
+        })
       });
 
       const data = (await res.json()) as Report;
@@ -196,8 +294,33 @@ export default function Page() {
     }
   }
 
+  async function handleCreateProject({ name, description, file }: { name: string; description: string; file: File | null }) {
+    let contextText = "";
+    if (file) {
+      // Extract text from Master Plan
+      contextText = await extractPdfText(file);
+    }
+
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description, contextText })
+    });
+
+    if (!res.ok) throw new Error("Failed");
+
+    const newProject = await res.json();
+    setCurrentProjectId(newProject.id);
+    setProjectSelectorKey(prev => prev + 1); // Refresh selector
+  }
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-gray-900 overflow-hidden relative">
+      <NewProjectModal
+        isOpen={isProjectModalOpen}
+        onClose={() => setIsProjectModalOpen(false)}
+        onCreate={handleCreateProject}
+      />
       <input
         ref={fileInputRef}
         type="file"
@@ -210,14 +333,16 @@ export default function Page() {
       />
 
       <Header
+        key={projectSelectorKey}
         loading={loading}
         reportExists={!!report}
         onUpload={pickFileDialog}
         onShowHistory={() => setShowHistory(true)}
         toggleDark={toggleDark}
-        currentProjectId={null}
-        onProjectChange={() => { }}
-        onOpenNewProject={() => { }}
+        projects={projects}
+        currentProjectId={currentProjectId}
+        onProjectChange={setCurrentProjectId}
+        onOpenNewProject={() => setIsProjectModalOpen(true)}
       />
 
       <HistorySidebar
@@ -242,6 +367,7 @@ export default function Page() {
             chatMessages={report?.chat ?? []}
             onReupload={pickFileDialog}
             onModify={() => alert("Coming soon!")}
+            currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
           />
         }
       />

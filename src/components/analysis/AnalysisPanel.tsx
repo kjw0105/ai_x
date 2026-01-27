@@ -37,9 +37,10 @@ interface AnalysisPanelProps {
     chatMessages: { role: "ai" | "user"; text: string }[];
     onReupload: () => void;
     onModify: () => void;
+    currentProjectName?: string;
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName }: AnalysisPanelProps) {
     const reportExists = issues.length > 0 || chatMessages.length > 0;
 
     // Separate regular issues from pattern warnings (Stage 5)
@@ -70,6 +71,12 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20" suppressHydrationWarning>
                                 {loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중"}
                             </span>
+                            {currentProjectName && (
+                                <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                    <span className="material-symbols-outlined text-[10px] mr-1">business</span>
+                                    {currentProjectName}
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
