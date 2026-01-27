@@ -1,3 +1,4 @@
+"use client";
 
 import React, { useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
@@ -82,7 +83,7 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-white">Create New Project</h3>
+                    <h3 className="text-lg font-semibold text-white">새 프로젝트 생성</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-white">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -98,30 +99,30 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                     )}
 
                     <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Project Name *</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">프로젝트명 *</label>
                         <input
                             type="text"
                             required
                             value={name}
                             onChange={e => setName(e.target.value)}
                             className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                            placeholder="e.g., Gimpo Site A"
+                            placeholder="예: 김포 한강 공구 A"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Description</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">설명</label>
                         <textarea
                             value={desc}
                             onChange={e => setDesc(e.target.value)}
                             className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500 h-20 resize-none"
-                            placeholder="Optional description"
+                            placeholder="설명을 입력하세요 (선택사항)"
                         />
                     </div>
 
                     <div>
                         <label className="block text-xs font-medium text-gray-400 mb-1">
-                            Master Safety Plans / Context (PDF)
+                            마스터 안전 계획 / 컨텍스트 (PDF)
                         </label>
                         <div className="border-2 border-dashed border-gray-700 rounded-lg p-4 text-center hover:border-gray-600 transition-colors">
                             <input
@@ -136,10 +137,10 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                                 <span className="text-sm text-gray-400">
-                                    {file ? file.name : "Click to upload Master Plan"}
+                                    {file ? file.name : "마스터 플랜 업로드 (클릭)"}
                                 </span>
                                 <span className="text-xs text-gray-600">
-                                    AI will use this to validate daily reports
+                                    AI가 이 문서를 기준으 일일 보고서를 검증합니다
                                 </span>
                             </label>
                         </div>
@@ -151,7 +152,7 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                             onClick={onClose}
                             className="px-4 py-2 text-sm text-gray-400 hover:text-white"
                         >
-                            Cancel
+                            취소
                         </button>
                         <button
                             type="submit"
@@ -159,7 +160,7 @@ export function NewProjectModal({ isOpen, onClose, onCreated }: NewProjectModalP
                             className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50 flex items-center gap-2"
                         >
                             {loading && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                            Create Project
+                            프로젝트 생성
                         </button>
                     </div>
                 </form>

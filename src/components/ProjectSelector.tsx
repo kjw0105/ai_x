@@ -1,3 +1,4 @@
+"use client";
 
 import React, { useEffect, useState } from "react";
 
@@ -23,13 +24,13 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
         <div className="flex items-center gap-2">
             <div className="relative group">
                 <button
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 rounded-md border border-white/10 transition-colors"
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 rounded-md border border-slate-200 dark:border-white/10 transition-colors"
                 >
-                    <span className="text-gray-400">Project:</span>
-                    <span className="text-white max-w-[150px] truncate">
-                        {currentProject ? currentProject.name : "None (Generic)"}
+                    <span className="text-slate-500 dark:text-gray-400">프로젝트:</span>
+                    <span className="text-slate-900 dark:text-white max-w-[150px] truncate">
+                        {currentProject ? currentProject.name : "일반 검증 (프로젝트 없음)"}
                     </span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4 text-slate-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
@@ -41,7 +42,7 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
                             onClick={() => onProjectChange(null)}
                             className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 ${!currentProjectId ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'}`}
                         >
-                            None (Generic Validation)
+                            일반 검증 (프로젝트 없음)
                         </button>
 
                         {projects.map(p => (
@@ -71,7 +72,7 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                             </svg>
-                            New Project
+                            새 프로젝트 생성
                         </button>
                     </div>
                 </div>

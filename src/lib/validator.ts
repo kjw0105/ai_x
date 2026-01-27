@@ -80,6 +80,10 @@ export interface DocData {
     현장명: string | null;
     작업내용: string | null;
     작업인원: string | null;
+    // Weather data (optional)
+    풍속?: string;
+    기온?: string;
+    강우량?: string;
   };
   signature: {
     담당: "present" | "missing" | "unknown";
@@ -100,6 +104,8 @@ export interface ValidationIssue {
   title: string;
   message: string;
   ruleId?: string; // Stage 2: Link to specific rule that triggered this issue
+  confidence?: number; // Stage 4: Confidence score (0-100)
+  score?: number; // Stage 4: Severity score
 }
 
 export type Issue = ValidationIssue & { id?: string };

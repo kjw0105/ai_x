@@ -472,11 +472,10 @@ function detectRapidCompletionPattern(
                 severity === "warn"
                     ? "패턴 경고: 매우 빠른 연속 제출"
                     : "패턴 정보: 빠른 연속 제출",
-            message: `${Math.round(maxBurstMinutes)}분 내에 ${maxBurst}건의 보고서가 제출되었습니다. 일괄 처리된 서류이거나 소급 작성된 문서일 수 있습니다.${
-                maxBurst >= 10
+            message: `${Math.round(maxBurstMinutes)}분 내에 ${maxBurst}건의 보고서가 제출되었습니다. 일괄 처리된 서류이거나 소급 작성된 문서일 수 있습니다.${maxBurst >= 10
                     ? "\n→ 제출 속도가 비정상적으로 빠름 - 확인 필요"
                     : ""
-            }`,
+                }`,
             inspectorName: "",
             documentCount: maxBurst,
             confidence: Math.round(confidence),
@@ -496,5 +495,7 @@ export function patternWarningsToIssues(warnings: PatternWarning[]): ValidationI
         title: w.title,
         message: w.message,
         ruleId: `pattern_${w.type}`,
+        confidence: w.confidence,
+        score: w.score,
     }));
 }
