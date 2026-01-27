@@ -102,6 +102,7 @@ export default function Page() {
   const [report, setReport] = useState<Report | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+  const [historicalFileName, setHistoricalFileName] = useState<string | undefined>(undefined);
 
   // Reset page when file changes
   useEffect(() => {
@@ -110,13 +111,21 @@ export default function Page() {
 
   // Project State
   const [projects, setProjects] = useState<any[]>([]); // Should use Project type
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("current_project_id");
+    }
+    return null;
+  });
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
   // Initialize welcome state from localStorage on client only to avoid hydration mismatch
   const [showWelcome, setShowWelcome] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("welcome_dismissed") !== "true";
+      const dismissed = localStorage.getItem("welcome_dismissed");
+      const hasProject = localStorage.getItem("current_project_id");
+      // Show welcome if not dismissed AND no saved project
+      return dismissed !== "true" && !hasProject;
     }
     return false; // Default to false on server to avoid hydration issues
   });
@@ -124,6 +133,17 @@ export default function Page() {
   useEffect(() => {
     fetchProjects();
   }, [projectSelectorKey]);
+
+  // Persist currentProjectId
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (currentProjectId) {
+        localStorage.setItem("current_project_id", currentProjectId);
+      } else {
+        localStorage.removeItem("current_project_id");
+      }
+    }
+  }, [currentProjectId]);
 
   async function fetchProjects() {
     try {
@@ -281,6 +301,7 @@ export default function Page() {
     dismissWelcome(); // Dismiss welcome screen when file is uploaded
     setFile(f);
     setReport(null);
+    setHistoricalFileName(undefined); // Clear historical flag
     await runValidation(f);
   }
 
@@ -288,6 +309,7 @@ export default function Page() {
   async function loadReportFromHistory(id: string) {
     setLoading(true);
     setShowHistory(false); // Close sidebar
+    dismissWelcome(); // Dismiss welcome when loading history
     try {
       const res = await fetch(`/api/history?id=${id}`);
       if (!res.ok) throw new Error("Failed to load report");
@@ -301,17 +323,23 @@ export default function Page() {
       // Ensure IDs exist for history items
       issues = issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
 
+      // Create a more informative chat message
+      const issueCount = issues.length;
+      const criticalIssues = issues.filter((i: any) => i.severity === "error").length;
+      const chatText = `검증 기록 불러오기 완료\n\n파일명: ${data.fileName}\n발견된 문제: ${issueCount}개\n심각한 문제: ${criticalIssues}개\n\n참고: 과거 기록은 원본 이미지가 보존되지 않습니다.`;
+
       setReport({
         fileName: data.fileName,
         issues: issues,
-        chat: [{ role: "ai", text: `Archive Loaded: ${data.fileName}\n(Note: Original images are not preserved in history)` }]
+        chat: [{ role: "ai", text: chatText }]
       });
 
-      // We don't have the file, so clear it
+      // We don't have the file, so clear it and set historical flag
       setFile(null);
       setPageImages([]);
+      setHistoricalFileName(data.fileName);
     } catch (e) {
-      alert("Failed to load history item");
+      alert("기록을 불러오는 데 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -401,6 +429,7 @@ export default function Page() {
     setPageImages([]);
     setReport(null);
     setCurrentPage(0);
+    setHistoricalFileName(undefined);
 
     // Clear DB
     del("current_file");
@@ -412,6 +441,12 @@ export default function Page() {
   function dismissWelcome() {
     setShowWelcome(false);
     localStorage.setItem("welcome_dismissed", "true");
+  }
+
+  function showWelcomeScreen() {
+    setShowWelcome(true);
+    // Clear current work when going back to welcome
+    handleClearFile();
   }
 
   function handleWelcomeCreateProject() {
@@ -459,6 +494,7 @@ export default function Page() {
         onProjectChange={setCurrentProjectId}
         onOpenNewProject={() => setIsProjectModalOpen(true)}
         onDeleteProject={handleDeleteProject}
+        onShowWelcome={showWelcomeScreen}
       />
 
       <HistorySidebar
@@ -485,6 +521,7 @@ export default function Page() {
             onPageChange={setCurrentPage}
             onPickFile={pickFileDialog}
             onClearFile={handleClearFile}
+            historicalFileName={historicalFileName}
           />
         }
         right={

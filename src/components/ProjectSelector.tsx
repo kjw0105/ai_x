@@ -14,9 +14,10 @@ interface ProjectSelectorProps {
     onProjectChange: (projectId: string | null) => void;
     onOpenNewProject: () => void;
     onDeleteProject: (projectId: string) => void;
+    onShowWelcome?: () => void;
 }
 
-export function ProjectSelector({ projects, currentProjectId, onProjectChange, onOpenNewProject, onDeleteProject }: ProjectSelectorProps) {
+export function ProjectSelector({ projects, currentProjectId, onProjectChange, onOpenNewProject, onDeleteProject, onShowWelcome }: ProjectSelectorProps) {
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     // Find current project name
@@ -100,7 +101,18 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
                         ))}
                     </div>
 
-                    <div className="border-t border-gray-700 p-2">
+                    <div className="border-t border-gray-700 p-2 space-y-2">
+                        {onShowWelcome && (
+                            <button
+                                onClick={onShowWelcome}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-400/10 hover:bg-slate-400/20 rounded border border-slate-400/20 transition-colors"
+                            >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                </svg>
+                                홈으로 돌아가기
+                            </button>
+                        )}
                         <button
                             onClick={onOpenNewProject}
                             className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-semibold text-blue-400 bg-blue-400/10 hover:bg-blue-400/20 rounded border border-blue-400/20 transition-colors"

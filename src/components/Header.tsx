@@ -13,6 +13,7 @@ interface HeaderProps {
     onProjectChange: (id: string | null) => void;
     onOpenNewProject: () => void;
     onDeleteProject: (projectId: string) => void;
+    onShowWelcome?: () => void;
 }
 
 export default function Header({
@@ -25,7 +26,8 @@ export default function Header({
     currentProjectId,
     onProjectChange,
     onOpenNewProject,
-    onDeleteProject
+    onDeleteProject,
+    onShowWelcome
 }: HeaderProps) {
     return (
         <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark px-6 py-4 shrink-0 z-20 shadow-sm">
@@ -50,6 +52,7 @@ export default function Header({
                     onProjectChange={onProjectChange}
                     onOpenNewProject={onOpenNewProject}
                     onDeleteProject={onDeleteProject}
+                    onShowWelcome={onShowWelcome}
                 />
 
                 <div className="hidden md:flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-full px-4 py-2">
