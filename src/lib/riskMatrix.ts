@@ -296,7 +296,11 @@ function generateRecommendation(
     recommendation += ` 주요 위험 요인: ${criticalFactors.map((f) => f.description).join(", ")}.`;
   }
 
-  if (calculated > documented) {
+  const levels: RiskLevel[] = ["low", "medium", "high", "critical"];
+  const calcIndex = levels.indexOf(calculated);
+  const docIndex = levels.indexOf(documented);
+
+  if (calcIndex > docIndex) {
     recommendation += " 실제 위험도가 기록보다 높을 수 있으므로 재평가가 필요합니다.";
   } else {
     recommendation += " 기록된 위험도가 과대평가되었을 가능성이 있습니다.";
@@ -314,10 +318,9 @@ export function riskCalculationToIssues(riskCalc: RiskCalculation): ValidationIs
   if (riskCalc.inconsistency && riskCalc.recommendation) {
     issues.push({
       ruleId: "risk_matrix_inconsistency",
-      severity: "warning",
+      severity: "warn",
+      title: "위험도 평가 불일치",
       message: riskCalc.recommendation,
-      fieldKo: "위험도 평가",
-      fieldEn: "Risk Assessment",
     });
   }
 
@@ -327,9 +330,8 @@ export function riskCalculationToIssues(riskCalc: RiskCalculation): ValidationIs
     issues.push({
       ruleId: "risk_matrix_critical_factors",
       severity: "info",
+      title: "위험 요인 식별",
       message: `주요 위험 요인 ${criticalFactors.length}건 식별됨: ${criticalFactors.map((f) => f.description).join(", ")}`,
-      fieldKo: "위험 요인",
-      fieldEn: "Risk Factors",
     });
   }
 

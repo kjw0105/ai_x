@@ -80,6 +80,10 @@ export interface DocData {
     현장명: string | null;
     작업내용: string | null;
     작업인원: string | null;
+    // Weather data (optional)
+    풍속?: string;
+    기온?: string;
+    강우량?: string;
   };
   signature: {
     담당: "present" | "missing" | "unknown";

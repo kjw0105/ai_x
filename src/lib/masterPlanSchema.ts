@@ -573,7 +573,7 @@ export function calculateRiskLevel(
     }
   }
 
-  return getLevel FromScore(riskScore);
+  return getLevelFromScore(riskScore);
 }
 
 function getRiskScore(level: RiskLevel): number {

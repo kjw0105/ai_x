@@ -309,13 +309,30 @@ function analyzeRepetition(
 export function crossDocumentIssuesToValidationIssues(
   crossIssues: CrossDocumentIssue[]
 ): ValidationIssue[] {
-  return crossIssues.map((issue) => ({
-    ruleId: `cross_doc_${issue.type}`,
-    severity: issue.severity === "error" ? "error" : issue.severity === "warning" ? "warning" : "info",
-    message: issue.messageKo,
-    fieldKo: "문서 간 분석",
-    fieldEn: "Cross-Document Analysis",
-  }));
+  return crossIssues.map((issue) => {
+    let title = "문서 간 분석";
+    switch (issue.type) {
+      case "timeline_gap":
+        title = "타임라인 공백";
+        break;
+      case "contradiction":
+        title = "문서 간 모순";
+        break;
+      case "repetition":
+        title = "반복 패턴 감지";
+        break;
+      case "equipment_tracking":
+        title = "장비 추적 이슈";
+        break;
+    }
+
+    return {
+      ruleId: `cross_doc_${issue.type}`,
+      severity: issue.severity === "error" ? "error" : issue.severity === "warning" ? "warn" : "info",
+      title,
+      message: issue.messageKo,
+    };
+  });
 }
 
 /**
