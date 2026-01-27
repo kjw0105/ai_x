@@ -142,6 +142,158 @@ To solve this, we introduced **intelligent pattern analysis** with 5 key enhance
 
 ---
 
+## ✅ New Feature: Stage 3 Comprehensive Validation System (Implemented)
+## ✅ 신규 기능: Stage 3 종합 검증 시스템 (구현 완료)
+
+### 💡 Thought Process (기획 의도)
+Stage 3 initially focused on cross-document consistency using free-text AI reasoning. However, this approach had limitations: subjective AI interpretation, slow processing, and inability to apply objective rules. We needed three critical capabilities: (1) Structured safety plans that could be validated deterministically, (2) Objective risk assessment based on Korean safety standards, and (3) Cross-project pattern detection for fraud prevention.
+Stage 3는 초기에 자유 텍스트 AI 추론을 사용한 문서 간 일관성에 초점을 맞췄습니다. 하지만 이 접근 방식은 한계가 있었습니다: 주관적인 AI 해석, 느린 처리, 객관적인 규칙 적용 불가. 우리는 세 가지 핵심 기능이 필요했습니다: (1) 결정론적으로 검증할 수 있는 구조화된 안전 계획, (2) 한국 안전 기준에 기반한 객관적 위험 평가, (3) 사기 방지를 위한 프로젝트 간 패턴 감지.
+
+To solve this, we implemented **three parallel validation systems** working together:
+이를 해결하기 위해 함께 작동하는 **3개의 병렬 검증 시스템**을 구현했습니다:
+
+### 🛠️ How it Works (작동 원리)
+
+#### **System 1: Structured Master Safety Plan (구조화된 마스터 안전 계획)**
+Instead of free-text plans, projects can now use validated JSON schemas:
+자유 텍스트 계획 대신 검증된 JSON 스키마를 사용할 수 있습니다:
+
+1. **Comprehensive Schema (포괄적인 스키마)**: Covers all critical safety aspects
+   - Site information (현장 정보): Name, location, type, risk level
+   - Weather limits (기상 제한): Wind speed, temperature, rainfall thresholds
+   - Work requirements (작업 요구사항): Height work, confined space, hot work, excavation, electrical
+   - Personnel requirements (인원 요구사항): Required qualifications and certifications
+   - Inspection schedule (점검 일정): Frequency and required checks
+   - Emergency procedures (비상 절차): Contact numbers and evacuation plans
+
+2. **Deterministic Validation (결정론적 검증)**: No AI needed - pure rule-based checks
+   - Example: "High-risk work (고소작업) detected BUT inspector not certified → Error"
+   - Example: "Document shows 12m/s wind BUT plan limit is 10m/s → Violation"
+   - Fast processing (~10ms vs 2-5s for AI)
+
+3. **Bilingual Messages (이중 언어 메시지)**: Korean + English for all issues
+   - Korean: "필수 자격증 누락: 고소작업 관리 감독자 자격"
+   - English: "Missing required certification: Height Work Supervisor"
+
+**Tech Details (기술 세부사항)**:
+- New module: `src/lib/masterPlanSchema.ts` (450+ lines) - Complete TypeScript schema
+- New module: `src/lib/structuredValidation.ts` (550+ lines) - 8 validation functions
+- Database: Added `masterPlanJson`, `planVersion`, `isStructured` fields to Project model
+
+---
+
+#### **System 2: Risk Matrix Calculation (위험도 행렬 계산)**
+Objective risk scoring based on KOSHA GUIDE and 산업안전보건법:
+KOSHA GUIDE 및 산업안전보건법 기반 객관적 위험도 점수:
+
+1. **Four-Factor Risk Assessment (4가지 요인 위험 평가)**:
+   - **High-risk work types (고위험 작업 유형)**:
+     * Confined space (밀폐공간): 30 points (highest)
+     * Height work (고소작업): 25 points
+     * Electrical work (전기작업): 25 points
+     * Hot work (화기작업): 20 points
+     * Excavation (굴착작업): 15 points
+
+   - **Safety measure violations (안전조치 위반)**:
+     * Missing O2 measurement (산소측정 없음): +25 points (critical)
+     * No harness (안전대 없음): +20 points
+     * No shoring (흙막이 없음): +20 points
+     * Missing fire extinguisher (소화기 없음): +10 points
+
+   - **Signature completeness (서명 완성도)**:
+     * Missing inspector signature: +10 points
+     * Missing supervisor signature: +10 points
+
+   - **Checklist quality (체크리스트 품질)**:
+     * No checklist: +15 points
+     * 60%+ N/A responses: +10 points
+     * Incomplete items: +3 points per item
+
+2. **Risk Level Classification (위험도 등급 분류)**:
+   - Low (낮음): 0-20 points
+   - Medium (보통): 21-40 points
+   - High (높음): 41-60 points
+   - Critical (매우 높음): 61+ points
+
+3. **Inconsistency Detection (불일치 감지)**:
+   - Compares calculated risk vs. documented risk
+   - Flags if 2+ levels apart (e.g., calculated=high, documented=low)
+   - Generates Korean recommendations with specific risk factors
+
+**Tech Details (기술 세부사항)**:
+- New module: `src/lib/riskMatrix.ts` (350 lines)
+- Algorithm: Frequency × Severity matrix per KOSHA standards
+- Processing: <5ms per document
+
+---
+
+#### **System 3: Cross-Document Analysis (문서 간 분석)**
+Analyzes multiple reports within a project to detect fraud and inconsistencies:
+프로젝트 내 여러 보고서를 분석하여 사기 및 불일치를 감지합니다:
+
+1. **Timeline Gap Detection (타임라인 공백 감지)**:
+   - Analyzes inspection dates across all reports
+   - Flags gaps of 5+ days as info, 10+ days as warning
+   - Example: "점검 기록 공백 발견: 2026-01-10 ~ 2026-01-20 (10일)"
+
+2. **Contradiction Detection (모순 감지)**:
+   - Groups reports by site name or date
+   - Detects conflicting risk assessments for same site
+   - Example: "같은 현장에서 상충되는 위험도 평가: high, low"
+   - Flags multiple work descriptions on same date (possible duplicate entries)
+
+3. **Repetition Pattern Detection (반복 패턴 감지)**:
+   - Analyzes work descriptions across reports
+   - Flags 4+ identical descriptions as potential copy-paste
+   - Example: "동일한 작업내용이 6회 반복됨" (warning)
+   - Detects identical checklist patterns (5+ occurrences)
+   - Example: "동일한 체크리스트 패턴이 8회 반복됨 (복사 가능성)"
+
+4. **Project Scope (프로젝트 범위)**:
+   - Analyzes last 30 days of reports
+   - Maximum 100 reports per analysis
+   - Generates timeline summary with inspection frequency
+
+**Tech Details (기술 세부사항)**:
+- New module: `src/lib/crossDocumentAnalysis.ts` (405 lines)
+- Database queries: Optimized with date filtering and pagination
+- Processing: ~50-200ms depending on report count
+
+---
+
+### 🎯 Integration & Results (통합 및 결과)
+
+All three systems work in parallel during validation:
+모든 3개 시스템이 검증 중에 병렬로 작동합니다:
+
+```
+Document Upload → AI Extraction → Stage 1 (Format) → Stage 2 (Logic)
+                                 ↓
+                    ┌────────────┴────────────┬─────────────────┐
+                    ↓                         ↓                 ↓
+            Stage 3 System 1         Stage 3 System 2   Stage 3 System 3
+         (Structured Plan)            (Risk Matrix)    (Cross-Document)
+                    ↓                         ↓                 ↓
+                    └────────────┬────────────┴─────────────────┘
+                                 ↓
+                    Stage 4 (Patterns) → Stage 5 (Risk Signals)
+                                 ↓
+                            Final Report
+```
+
+**Performance Impact (성능 영향)**:
+- Structured validation: +10ms
+- Risk calculation: +5ms
+- Cross-document analysis: +50-200ms (async, non-blocking)
+- Total overhead: <250ms for comprehensive analysis
+
+**Backward Compatibility (하위 호환성)**:
+- Projects with free-text contextText still work (legacy mode)
+- New projects can choose structured or free-text plans
+- Graceful fallback if any system fails
+
+---
+
 ## 🔮 Future Expansion Ideas (With Current Foundation)
 ## 🔮 향후 확장 아이디어 (현재 기반 활용)
 
