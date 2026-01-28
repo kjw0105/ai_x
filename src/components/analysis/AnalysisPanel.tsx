@@ -1,7 +1,9 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { useToast } from "@/contexts/ToastContext";
 import { ChatModal } from "../ChatModal";
 
 // Stage detection helper
@@ -191,6 +193,96 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             alert("AI 수정 제안 시스템 오류");
         } finally {
             setProcessingIssueId(null);
+        }
+    };
+
+    const handleExportPDF = async () => {
+        if (!currentFile) {
+            toast.warning("먼저 문서를 업로드하세요");
+            return;
+        }
+
+        // DIAGNOSTIC: Log state before export
+        console.log('[AnalysisPanel] Export PDF clicked');
+        console.log('[AnalysisPanel] Current file:', currentFile.name);
+        console.log('[AnalysisPanel] Issues count:', issues.length);
+        console.log('[AnalysisPanel] Project name:', currentProjectName);
+
+        try {
+            const criticalCount = issues.filter(i => i.severity === "error").length;
+            const warningCount = issues.filter(i => i.severity === "warn").length;
+            const infoCount = issues.filter(i => i.severity === "info").length;
+
+            console.log('[AnalysisPanel] Severity breakdown:', {
+                critical: criticalCount,
+                warning: warningCount,
+                info: infoCount,
+                total: issues.length
+            });
+
+            const exportData = {
+                fileName: currentFile.name,
+                projectName: currentProjectName,
+                documentType: null, // Can be enhanced to track document type
+                createdAt: new Date().toISOString(), // Convert to ISO string for JSON
+                issues: issues.map(i => ({
+                    severity: i.severity,
+                    title: i.title,
+                    message: i.message,
+                    ruleId: i.ruleId,
+                })),
+                summary: {
+                    totalIssues: issues.length,
+                    criticalCount,
+                    warningCount,
+                    infoCount,
+                },
+            };
+
+            console.log('[AnalysisPanel] Prepared export data:', exportData);
+            console.log('[AnalysisPanel] Calling backend API...');
+
+            // Call backend API for PDF generation
+            const response = await fetch('/api/export-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(exportData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
+
+            console.log('[AnalysisPanel] PDF generated, downloading...');
+
+            // Get filename from Content-Disposition header
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = 'report.pdf';
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename[^;=\n]*=["']?([^"';\n]*)["']?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = decodeURIComponent(filenameMatch[1]);
+                }
+            }
+
+            // Download the PDF
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            console.log('[AnalysisPanel] PDF export completed successfully');
+            toast.success("PDF 리포트가 다운로드되었습니다");
+        } catch (error: any) {
+            console.error('[AnalysisPanel] PDF export failed:', error);
+            console.error('[AnalysisPanel] Error message:', error.message);
+            toast.error(`PDF 생성에 실패했습니다: ${error.message || '알 수 없는 오류'}`);
         }
     };
 
