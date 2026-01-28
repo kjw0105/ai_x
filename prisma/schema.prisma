@@ -3,6 +3,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x"]
 }
 
 datasource db {
@@ -14,14 +15,22 @@ model Report {
   id        String   @id @default(uuid())
   fileName  String
   createdAt DateTime @default(now())
-  
+
   // Storing structured data as strings (JSON) to allow flexibility
   docDataJson String
   issuesJson  String
   chatJson    String?  // Optional chat history
-  
+
   score       Int?
-  
+
+  // Stage 4: Pattern Analysis fields
+  inspectorName String?  // Inspector name for pattern tracking
+  checklistJson String?  // Extracted checklist items as JSON
+
+  // Document categorization
+  documentType String?  // TBM, SAFETY_CHECKLIST, RISK_ASSESSMENT, PRE_WORK_CHECKLIST
+  tags         String?  // Comma-separated tags for additional categorization
+
   // Relation to Project context
   projectId   String?
   project     Project? @relation(fields: [projectId], references: [id])
@@ -32,9 +41,14 @@ model Project {
   name        String
   description String?
   createdAt   DateTime @default(now())
-  
-  // The "Master Context" extracted from uploaded plans
-  contextText String   @default("") 
-  
+
+  // Legacy: Free-text master context (for backward compatibility)
+  contextText String   @default("")
+
+  // New: Structured master safety plan (JSON)
+  masterPlanJson String?  // Stores MasterSafetyPlan as JSON
+  planVersion    String?  // Version of the structured plan
+  isStructured   Boolean @default(false)  // True if using structured plan
+
   reports     Report[]
 }

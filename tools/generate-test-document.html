@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>안전점검표 생성기 - Test Document Generator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      gap: 20px;
+    }
+    .controls {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      height: fit-content;
+      position: sticky;
+      top: 20px;
+    }
+    .controls h2 {
+      margin-top: 0;
+      color: #2563eb;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-group label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .form-group button {
+      width: 100%;
+      padding: 12px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .form-group button:hover {
+      background: #1d4ed8;
+    }
+    .form-group button.secondary {
+      background: #10b981;
+    }
+    .form-group button.secondary:hover {
+      background: #059669;
+    }
+    .preset-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .preset-btn {
+      padding: 8px;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .preset-btn:hover {
+      background: #e5e7eb;
+      border-color: #2563eb;
+    }
+
+    /* Document Styles */
+    .document {
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      min-height: 800px;
+    }
+    .document h1 {
+      color: #2563eb;
+      border-bottom: 3px solid #2563eb;
+      padding-bottom: 10px;
+      margin-bottom: 30px;
+    }
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+    }
+    .info-table th, .info-table td {
+      border: 1px solid #333;
+      padding: 10px;
+      text-align: left;
+    }
+    .info-table th {
+      background: #f0f0f0;
+      font-weight: bold;
+      width: 20%;
+    }
+    .checklist-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+    }
+    .checklist-table th, .checklist-table td {
+      border: 1px solid #333;
+      padding: 12px 8px;
+      text-align: center;
+    }
+    .checklist-table th {
+      background: #f0f0f0;
+      font-weight: bold;
+    }
+    .checklist-table td:first-child {
+      text-align: left;
+      padding-left: 12px;
+    }
+    .checklist-table .check-col {
+      width: 80px;
+    }
+    .signature-section {
+      margin-top: 50px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+    }
+    .signature-box {
+      border: 1px solid #ddd;
+      padding: 20px;
+      border-radius: 4px;
+    }
+    .signature-box h3 {
+      margin-top: 0;
+      color: #1f2937;
+      font-size: 16px;
+    }
+    .signature-line {
+      border-top: 1px solid #333;
+      margin-top: 40px;
+      padding-top: 10px;
+      text-align: center;
+      color: #666;
+    }
+    @media print {
+      body { background: white; }
+      .container { grid-template-columns: 1fr; }
+      .controls { display: none; }
+      .document { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Controls Panel -->
+    <div class="controls">
+      <h2>📋 문서 생성기</h2>
+
+      <div class="preset-buttons">
+        <button class="preset-btn" onclick="loadPreset('valid')">✅ Valid</button>
+        <button class="preset-btn" onclick="loadPreset('violation')">❌ Violation</button>
+        <button class="preset-btn" onclick="loadPreset('contradiction')">⚠️ Contradiction</button>
+        <button class="preset-btn" onclick="loadPreset('na_pattern')">❓ N/A Pattern</button>
+      </div>
+
+      <div class="form-group">
+        <label>점검일자</label>
+        <input type="date" id="date" value="2026-01-27">
+      </div>
+
+      <div class="form-group">
+        <label>현장명</label>
+        <input type="text" id="siteName" value="김포 한강신도시 A공구" placeholder="예: 김포 한강신도시 A공구">
+      </div>
+
+      <div class="form-group">
+        <label>작업내용</label>
+        <input type="text" id="workContent" value="철골 구조물 설치 작업" placeholder="예: 철골 구조물 설치 작업">
+      </div>
+
+      <div class="form-group">
+        <label>작업인원</label>
+        <input type="text" id="workers" value="5명" placeholder="예: 5명">
+      </div>
+
+      <div class="form-group">
+        <label>점검자</label>
+        <input type="text" id="inspector" value="김안전" placeholder="예: 김안전">
+      </div>
+
+      <div class="form-group">
+        <label>담당자 서명</label>
+        <select id="sig1">
+          <option value="present">있음</option>
+          <option value="missing">없음</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>현장소장 서명</label>
+        <select id="sig2">
+          <option value="present">있음</option>
+          <option value="missing">없음</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <button onclick="updateDocument()">📝 문서 업데이트</button>
+        <button class="secondary" onclick="window.print()">🖨️ PDF로 저장</button>
+      </div>
+
+      <p style="font-size: 12px; color: #666; margin-top: 20px;">
+        <strong>사용법:</strong><br>
+        1. 원하는 값 입력<br>
+        2. "문서 업데이트" 클릭<br>
+        3. "PDF로 저장" 클릭하여 PDF 생성<br>
+        4. 또는 스크린샷 찍어서 사용
+      </p>
+    </div>
+
+    <!-- Document Preview -->
+    <div class="document" id="document">
+      <h1>산업안전 점검표</h1>
+      <p style="text-align: right; color: #666;">문서번호: DOC-2026-001</p>
+
+      <table class="info-table">
+        <tr>
+          <th>점검일자</th>
+          <td id="doc-date">2026-01-27</td>
+          <th>현장명</th>
+          <td id="doc-site">김포 한강신도시 A공구</td>
+        </tr>
+        <tr>
+          <th>작업내용</th>
+          <td colspan="3" id="doc-work">철골 구조물 설치 작업</td>
+        </tr>
+        <tr>
+          <th>작업인원</th>
+          <td id="doc-workers">5명</td>
+          <th>점검자</th>
+          <td id="doc-inspector">김안전</td>
+        </tr>
+      </table>
+
+      <h2 style="margin-top: 40px; color: #1f2937;">안전 점검 항목</h2>
+      <table class="checklist-table" id="checklist">
+        <!-- Will be populated by JavaScript -->
+      </table>
+
+      <div class="signature-section">
+        <div class="signature-box">
+          <h3>담당자 (Inspector)</h3>
+          <div class="signature-line" id="sig1-display">[서명] 김안전</div>
+        </div>
+        <div class="signature-box">
+          <h3>현장소장 (Site Manager)</h3>
+          <div class="signature-line" id="sig2-display">[서명] 박현장</div>
+        </div>
+      </div>
+
+      <p style="margin-top: 50px; font-size: 12px; color: #999; text-align: center;">
+        본 문서는 산업안전보건법 제36조에 따른 안전점검 기록표입니다.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // Checklist items with IDs matching validator.ts
+    const checklistItems = [
+      { id: "ppe_01", text: "안전모 착용", value: "checked" },
+      { id: "fall_01", text: "고소작업 실시 (2m 이상)", value: "checked" },
+      { id: "ppe_03", text: "안전대 착용", value: "unchecked" },
+      { id: "fall_02", text: "추락방호장치 설치", value: "unchecked" },
+      { id: "fire_01", text: "화기작업 실시", value: "checked" },
+      { id: "fire_02", text: "소화기 비치", value: "unchecked" },
+      { id: "fire_03", text: "불티비산 방지조치", value: "unchecked" },
+      { id: "conf_01", text: "밀폐공간 작업", value: "na" },
+      { id: "conf_02", text: "산소농도 측정", value: "na" },
+      { id: "exc_01", text: "굴착작업 실시", value: "na" },
+      { id: "elec_02", text: "전기작업 실시", value: "na" },
+    ];
+
+    function renderChecklist() {
+      const table = document.getElementById('checklist');
+      let html = `
+        <tr>
+          <th style="width: 50%">점검 항목</th>
+          <th class="check-col">적합<br>(✔)</th>
+          <th class="check-col">부적합<br>(✖)</th>
+          <th class="check-col">해당없음<br>(N/A)</th>
+        </tr>
+      `;
+
+      checklistItems.forEach((item, idx) => {
+        const checked = item.value === 'checked' ? '✔' : '';
+        const unchecked = item.value === 'unchecked' ? '✖' : '';
+        const na = item.value === 'na' ? 'N/A' : '';
+
+        html += `
+          <tr>
+            <td>${idx + 1}. ${item.text}</td>
+            <td onclick="setCheckbox(${idx}, 'checked')" style="cursor: pointer; font-size: 20px;">${checked}</td>
+            <td onclick="setCheckbox(${idx}, 'unchecked')" style="cursor: pointer; font-size: 20px;">${unchecked}</td>
+            <td onclick="setCheckbox(${idx}, 'na')" style="cursor: pointer;">${na}</td>
+          </tr>
+        `;
+      });
+
+      table.innerHTML = html;
+    }
+
+    function setCheckbox(idx, value) {
+      checklistItems[idx].value = value;
+      renderChecklist();
+    }
+
+    function updateDocument() {
+      document.getElementById('doc-date').textContent = document.getElementById('date').value;
+      document.getElementById('doc-site').textContent = document.getElementById('siteName').value;
+      document.getElementById('doc-work').textContent = document.getElementById('workContent').value;
+      document.getElementById('doc-workers').textContent = document.getElementById('workers').value;
+      document.getElementById('doc-inspector').textContent = document.getElementById('inspector').value;
+
+      const sig1 = document.getElementById('sig1').value;
+      const sig2 = document.getElementById('sig2').value;
+      const inspector = document.getElementById('inspector').value;
+
+      document.getElementById('sig1-display').textContent = sig1 === 'present' ? `[서명] ${inspector}` : '[ 미서명 ]';
+      document.getElementById('sig2-display').textContent = sig2 === 'present' ? '[서명] 박현장' : '[ 미서명 ]';
+    }
+
+    function loadPreset(type) {
+      switch(type) {
+        case 'valid':
+          // All checks passed, no violations
+          checklistItems[0].value = 'checked'; // helmet
+          checklistItems[1].value = 'unchecked'; // no height work
+          checklistItems[2].value = 'na'; // harness N/A
+          checklistItems[3].value = 'na'; // fall protection N/A
+          checklistItems[4].value = 'unchecked'; // no fire work
+          checklistItems[5].value = 'na'; // extinguisher N/A
+          checklistItems[6].value = 'na';
+          checklistItems[7].value = 'na';
+          checklistItems[8].value = 'na';
+          checklistItems[9].value = 'na';
+          checklistItems[10].value = 'na';
+          document.getElementById('workContent').value = '일상 안전 점검';
+          document.getElementById('sig1').value = 'present';
+          document.getElementById('sig2').value = 'present';
+          break;
+
+        case 'violation':
+          // Height work but no harness - triggers rule_height_harness
+          // Fire work but no extinguisher - triggers rule_fire_extinguisher
+          checklistItems[0].value = 'checked';
+          checklistItems[1].value = 'checked'; // height work YES
+          checklistItems[2].value = 'unchecked'; // harness NO - VIOLATION!
+          checklistItems[3].value = 'unchecked'; // protection NO - VIOLATION!
+          checklistItems[4].value = 'checked'; // fire work YES
+          checklistItems[5].value = 'unchecked'; // extinguisher NO - VIOLATION!
+          checklistItems[6].value = 'unchecked';
+          checklistItems[7].value = 'na';
+          checklistItems[8].value = 'na';
+          checklistItems[9].value = 'na';
+          checklistItems[10].value = 'na';
+          document.getElementById('workContent').value = '철골 구조물 설치 작업 (10층 높이)';
+          document.getElementById('sig1').value = 'present';
+          document.getElementById('sig2').value = 'present';
+          break;
+
+        case 'contradiction':
+          // No height work but fall protection installed - contradiction!
+          checklistItems[0].value = 'checked';
+          checklistItems[1].value = 'unchecked'; // height work NO
+          checklistItems[2].value = 'checked'; // but harness YES - CONTRADICTION!
+          checklistItems[3].value = 'checked'; // and protection YES - CONTRADICTION!
+          checklistItems[4].value = 'unchecked'; // fire work NO
+          checklistItems[5].value = 'checked'; // but extinguisher YES - CONTRADICTION!
+          checklistItems[6].value = 'checked';
+          checklistItems[7].value = 'na';
+          checklistItems[8].value = 'na';
+          checklistItems[9].value = 'na';
+          checklistItems[10].value = 'na';
+          document.getElementById('workContent').value = '지상 작업 (고소작업 없음)';
+          document.getElementById('sig1').value = 'present';
+          document.getElementById('sig2').value = 'present';
+          break;
+
+        case 'na_pattern':
+          // Excessive N/A usage - suspicious pattern
+          checklistItems.forEach(item => item.value = 'na');
+          document.getElementById('workContent').value = '일상 점검';
+          document.getElementById('inspector').value = '김만점';
+          document.getElementById('sig1').value = 'present';
+          document.getElementById('sig2').value = 'missing'; // Also missing signature
+          break;
+      }
+      renderChecklist();
+      updateDocument();
+    }
+
+    // Initialize
+    renderChecklist();
+    updateDocument();
+  </script>
+</body>
+</html>

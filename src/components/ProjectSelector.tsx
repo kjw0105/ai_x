@@ -1,99 +1,182 @@
+"use client";
 
 import React, { useEffect, useState } from "react";
 
-type Project = {
+export type Project = {
     id: string;
     name: string;
     description: string;
 };
 
 interface ProjectSelectorProps {
+    projects: Project[];
     currentProjectId: string | null;
     onProjectChange: (projectId: string | null) => void;
     onOpenNewProject: () => void;
+    onDeleteProject: (projectId: string) => void;
+    onEditProject?: (project: { id: string; name: string; description: string }) => void;
+    onShowWelcome?: () => void;
 }
 
-export function ProjectSelector({ currentProjectId, onProjectChange, onOpenNewProject }: ProjectSelectorProps) {
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        fetchProjects();
-    }, []);
-
-    async function fetchProjects() {
-        try {
-            setLoading(true);
-            const res = await fetch("/api/projects");
-            if (res.ok) {
-                setProjects(await res.json());
-            }
-        } catch (e) {
-            console.error("Failed to fetch projects");
-        } finally {
-            setLoading(false);
-        }
-    }
+export function ProjectSelector({ projects, currentProjectId, onProjectChange, onOpenNewProject, onDeleteProject, onEditProject, onShowWelcome }: ProjectSelectorProps) {
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [isOpen, setIsOpen] = useState(false);
 
     // Find current project name
     const currentProject = projects.find(p => p.id === currentProjectId);
 
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('[data-project-selector]')) {
+                setIsOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    async function handleDelete(projectId: string, projectName: string, e: React.MouseEvent) {
+        e.stopPropagation();
+
+        if (window.confirm(`정말로 "${projectName}" 프로젝트를 삭제하시겠습니까?\n\n연결된 리포트는 보존되지만 프로젝트 컨텍스트와의 연결이 해제됩니다.`)) {
+            setDeletingId(projectId);
+            try {
+                await onDeleteProject(projectId);
+            } finally {
+                setDeletingId(null);
+            }
+        }
+    }
+
     return (
-        <div className="flex items-center gap-2">
-            <div className="relative group">
+        <div className="flex items-center gap-2" data-project-selector>
+            <div className="relative">
                 <button
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 rounded-md border border-white/10 transition-colors"
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 rounded-md border border-slate-200 dark:border-white/10 transition-colors"
                 >
-                    <span className="text-gray-400">Project:</span>
-                    <span className="text-white max-w-[150px] truncate">
-                        {currentProject ? currentProject.name : "None (Generic)"}
+                    <span className="text-slate-500 dark:text-gray-400">프로젝트:</span>
+                    <span className="text-slate-900 dark:text-white max-w-[150px] truncate">
+                        {currentProject ? currentProject.name : "일반 검증 (프로젝트 없음)"}
                     </span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg
+                        className={`w-4 h-4 text-slate-500 dark:text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
 
                 {/* Dropdown Menu */}
-                <div className="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50 hidden group-hover:block hover:block">
+                {isOpen && (
+                <div className="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
                     <div className="max-h-[300px] overflow-y-auto">
                         <button
-                            onClick={() => onProjectChange(null)}
+                            onClick={() => {
+                                onProjectChange(null);
+                                setIsOpen(false);
+                            }}
                             className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 ${!currentProjectId ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'}`}
                         >
-                            None (Generic Validation)
+                            일반 검증 (프로젝트 없음)
                         </button>
 
                         {projects.map(p => (
-                            <button
+                            <div
                                 key={p.id}
-                                onClick={() => onProjectChange(p.id)}
                                 className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 group flex justify-between items-center ${currentProjectId === p.id ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'}`}
                             >
-                                <div className="truncate">
-                                    <div className="font-medium">{p.name}</div>
-                                    {p.description && <div className="text-xs text-gray-500 truncate">{p.description}</div>}
+                                <button
+                                    onClick={() => {
+                                        onProjectChange(p.id);
+                                        setIsOpen(false);
+                                    }}
+                                    className="flex-1 text-left flex items-center gap-2"
+                                >
+                                    <span className="truncate block flex-1">
+                                        <span className="font-medium block">{p.name}</span>
+                                        {p.description && <span className="text-xs text-gray-500 truncate block">{p.description}</span>}
+                                    </span>
+                                    {currentProjectId === p.id && (
+                                        <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    )}
+                                </button>
+                                <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                                    {onEditProject && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onEditProject(p);
+                                            }}
+                                            className="p-1 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                                            title="프로젝트 수정"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={(e) => handleDelete(p.id, p.name, e)}
+                                        disabled={deletingId === p.id}
+                                        className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors disabled:opacity-50"
+                                        title="프로젝트 삭제"
+                                    >
+                                        {deletingId === p.id ? (
+                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                        ) : (
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        )}
+                                    </button>
                                 </div>
-                                {currentProjectId === p.id && (
-                                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                )}
-                            </button>
+                            </div>
                         ))}
                     </div>
 
-                    <div className="border-t border-gray-700 p-2">
+                    <div className="border-t border-gray-700 p-2 space-y-2">
+                        {onShowWelcome && (
+                            <button
+                                onClick={() => {
+                                    onShowWelcome();
+                                    setIsOpen(false);
+                                }}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-400/10 hover:bg-slate-400/20 rounded border border-slate-400/20 transition-colors"
+                            >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                </svg>
+                                홈으로 돌아가기
+                            </button>
+                        )}
                         <button
-                            onClick={onOpenNewProject}
+                            onClick={() => {
+                                onOpenNewProject();
+                                setIsOpen(false);
+                            }}
                             className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-semibold text-blue-400 bg-blue-400/10 hover:bg-blue-400/20 rounded border border-blue-400/20 transition-colors"
                         >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                             </svg>
-                            New Project
+                            새 프로젝트 생성
                         </button>
                     </div>
                 </div>
+                )}
             </div>
         </div>
     );
