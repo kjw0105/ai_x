@@ -272,8 +272,6 @@ export default function Page() {
 
   async function runValidation(f: File, documentType: DocumentType | null = null) {
     setLoading(true);
-    setShowProgress(true);
-    setValidationStep(0);
 
     // Track start time to ensure minimum display time for progress indicator
     const startTime = Date.now();
@@ -283,8 +281,7 @@ export default function Page() {
       let text = "";
       let images: string[] = [];
 
-      // Step 1: Extracting
-      setValidationStep(0);
+      // Step 1: Extracting - Do this BEFORE showing progress
       if (f.type === "application/pdf") {
         images = await renderPdfPages(f);
         text = await extractPdfText(f);
@@ -297,6 +294,21 @@ export default function Page() {
         });
         images = [dataUrl];
       }
+
+      // VALIDATION: Check if extracted content is sufficient
+      const hasText = text && text.trim().length >= 50;
+      const hasImages = images && images.length > 0;
+
+      if (!hasText && !hasImages) {
+        toast.error("문서에 내용이 없거나 읽을 수 없습니다");
+        setFile(null);
+        setReport(null);
+        return; // Exit early without showing progress
+      }
+
+      // Now show progress bar after confirming document has content
+      setShowProgress(true);
+      setValidationStep(0);
 
       // Step 2: Analyzing
       setValidationStep(1);
@@ -376,15 +388,9 @@ export default function Page() {
   async function onPickFile(f: File) {
     dismissWelcome(); // Dismiss welcome screen when file is uploaded
 
-    // Client-side validation: Check if file has content before proceeding
+    // Basic client-side validation: Check for zero-byte files
     if (f.size === 0) {
       toast.error("빈 파일입니다. 내용이 있는 문서를 업로드해주세요");
-      return;
-    }
-
-    // For very small files (less than 100 bytes), likely empty or invalid
-    if (f.size < 100) {
-      toast.warning("파일이 너무 작습니다. 올바른 안전 점검 문서를 업로드해주세요");
       return;
     }
 
