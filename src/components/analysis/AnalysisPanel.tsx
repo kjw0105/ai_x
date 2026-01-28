@@ -1,7 +1,8 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { exportReportToPDF } from "@/lib/pdfExport";
 import { useToast } from "@/contexts/ToastContext";
 
@@ -77,6 +78,7 @@ interface Issue {
     ruleId?: string; // Stage 2-5: Link to specific rule
     confidence?: number; // Stage 4
     score?: number; // Stage 4
+    isAIFixable?: boolean; // Whether AI can suggest a fix (false for signatures, photos, physical inspections)
 }
 
 interface RiskFactor {
@@ -109,11 +111,43 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const [showRiskDetails, setShowRiskDetails] = useState(false);
-    const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
     const toast = useToast();
 
-    // Suggestion Modal State
+    // Determine which severity levels exist in current issues
+    const availableSeverities = useMemo(() => {
+        const severities = new Set<string>();
+        issues.forEach(issue => {
+            severities.add(issue.severity);
+        });
+        return severities;
+    }, [issues]);
+
+    // Initialize severity filters to only include available severities
+    const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
+
+    // Update severity filters when issues change to show only available severities
+    useEffect(() => {
+        if (availableSeverities.size > 0) {
+            setSeverityFilters(new Set(availableSeverities));
+        }
+    }, [availableSeverities]);
+
+    // Suggestion Modal State - separate data and display state to prevent race condition
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
+    const [showModal, setShowModal] = useState(false);
+
+    // Use effect to delay modal mounting to prevent DOM race condition
+    useEffect(() => {
+        if (suggestion) {
+            // Small delay to ensure toast is rendered first and prevent race condition
+            const timer = setTimeout(() => {
+                setShowModal(true);
+            }, 100);
+            return () => clearTimeout(timer);
+        } else {
+            setShowModal(false);
+        }
+    }, [suggestion]);
 
     const reportExists = issues.length > 0 || chatMessages.length > 0;
 
@@ -148,7 +182,17 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     };
 
     const handleFix = async (issue: Issue) => {
+        // Prevent multiple simultaneous fix requests
+        if (processingIssueId) {
+            toast.warning("다른 수정 제안을 생성 중입니다");
+            return;
+        }
+
         setProcessingIssueId(issue.id);
+
+        // Create abort controller for cleanup
+        const abortController = new AbortController();
+
         try {
             let pdfText = "";
             let fileData = null;
@@ -170,22 +214,74 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     issue,
                     fileType: "image/png", // forcing text suggestion for now to avoid massive payload issues
                     pdfText: ""
-                })
+                }),
+                signal: abortController.signal
             });
 
+            // CRITICAL FIX: Check response status before parsing JSON
+            if (!res.ok) {
+                // Try to parse error message from response
+                let errorMessage = "AI 수정 제안 생성에 실패했습니다";
+                let isAdminError = false;
+
+                try {
+                    const errorData = await res.json();
+                    if (errorData.error) {
+                        // Check if it's an admin/system error (API key, config issues)
+                        if (errorData.error.includes("API Key") ||
+                            errorData.error.includes("API_KEY") ||
+                            errorData.error.includes("configuration") ||
+                            errorData.solution) {
+                            isAdminError = true;
+                            console.error("Admin/System error:", errorData.error);
+                            // Show generic message to user, log details for admin
+                            errorMessage = "일시적으로 AI 수정 제안 기능을 사용할 수 없습니다";
+                        } else {
+                            errorMessage = errorData.error;
+                        }
+                    }
+                } catch {
+                    // If JSON parsing fails, check status code
+                    if (res.status === 500 || res.status === 503) {
+                        errorMessage = "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요";
+                    } else {
+                        errorMessage = `서버 오류: ${res.status}`;
+                    }
+                }
+
+                toast.error(errorMessage);
+                if (!isAdminError) {
+                    console.error("Fix API error:", errorMessage);
+                }
+                return;
+            }
+
             const data = await res.json();
+
             if (data.error) {
-                alert(`AI 수정 제안 실패: ${data.error}`);
+                toast.error(`AI 수정 제안 실패: ${data.error}`);
                 return;
             }
 
             if (data.suggestion) {
+                // Show toast first, then set suggestion (modal will mount after delay via useEffect)
+                toast.success("AI 수정 제안이 생성되었습니다");
                 setSuggestion({ title: "AI 추천 수정안", text: data.suggestion });
+            } else {
+                toast.warning("수정 제안을 생성할 수 없습니다");
             }
         } catch (e: any) {
-            console.error(e);
-            alert("AI 수정 제안 시스템 오류");
+            // Don't show error if request was aborted
+            if (e.name === 'AbortError') {
+                console.log("Fix request was aborted");
+                return;
+            }
+
+            console.error("handleFix error:", e);
+            const errorMsg = e.message || "AI 수정 제안 시스템 오류가 발생했습니다";
+            toast.error(errorMsg);
         } finally {
+            // Ensure processing state is always cleared
             setProcessingIssueId(null);
         }
     };
@@ -300,43 +396,56 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     )}
                 </div>
 
-                {/* Severity Filter - Only show when there are issues */}
-                {reportExists && issues.length > 0 && (
+                {/* Severity Filter - Only show when there are issues and only show buttons for available severities */}
+                {reportExists && issues.length > 0 && availableSeverities.size > 0 && (
                     <div className="mt-4 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-200 dark:border-slate-700">
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">필터:</span>
-                        <button
-                            onClick={() => toggleSeverityFilter("error")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("error")
-                                    ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">error</span>
-                            <span>심각 ({errorCount})</span>
-                        </button>
-                        <button
-                            onClick={() => toggleSeverityFilter("warn")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("warn")
-                                    ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">warning</span>
-                            <span>경고 ({warnCount})</span>
-                        </button>
-                        <button
-                            onClick={() => toggleSeverityFilter("info")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("info")
-                                    ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">info</span>
-                            <span>정보 ({infoCount})</span>
-                        </button>
+
+                        {/* Only show error button if there are error issues */}
+                        {availableSeverities.has("error") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("error")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                    severityFilters.has("error")
+                                        ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">error</span>
+                                <span>심각 ({errorCount})</span>
+                            </button>
+                        )}
+
+                        {/* Only show warn button if there are warn issues */}
+                        {availableSeverities.has("warn") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("warn")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                    severityFilters.has("warn")
+                                        ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">warning</span>
+                                <span>경고 ({warnCount})</span>
+                            </button>
+                        )}
+
+                        {/* Only show info button if there are info issues */}
+                        {availableSeverities.has("info") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("info")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                    severityFilters.has("info")
+                                        ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">info</span>
+                                <span>정보 ({infoCount})</span>
+                            </button>
+                        )}
+
                         <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">
                             {visibleIssues.length} / {issues.length} 표시중
                         </span>
@@ -485,30 +594,45 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 </div>
             </div>
 
-            {/* Suggestion Modal */}
-            {suggestion && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg">
+            {/* Suggestion Modal - Using Portal with delayed mounting to prevent race condition */}
+            {showModal && suggestion && typeof window !== 'undefined' && createPortal(
+                <div
+                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                    onClick={() => setSuggestion(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <h3 className="text-xl font-bold mb-4 dark:text-white">{suggestion.title}</h3>
                         <div className="bg-slate-100 dark:bg-slate-900 p-4 rounded-xl font-mono text-sm overflow-auto max-h-[300px] mb-4 text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
                             {suggestion.text}
                         </div>
                         <div className="flex justify-end gap-2">
                             <button
-                                onClick={() => navigator.clipboard.writeText(suggestion.text)}
-                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-800 font-bold"
+                                onClick={async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(suggestion.text);
+                                        toast.success("클립보드에 복사되었습니다");
+                                    } catch (err) {
+                                        console.error("Copy failed:", err);
+                                        toast.error("복사에 실패했습니다");
+                                    }
+                                }}
+                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-slate-800 dark:text-white font-bold transition-colors"
                             >
                                 복사하기
                             </button>
                             <button
                                 onClick={() => setSuggestion(null)}
-                                className="px-4 py-2 bg-primary text-white rounded-lg font-bold"
+                                className="px-4 py-2 bg-primary hover:bg-green-600 text-white rounded-lg font-bold transition-colors"
                             >
                                 닫기
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div >
     );
@@ -517,6 +641,9 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
 // Updated IssueCard to accept handlers
 function IssueCard({ issue, idx, onConfirm, onFix, isProcessing }: { issue: Issue; idx: number; onConfirm: () => void; onFix: () => void; isProcessing: boolean }) {
     const safeId = issue.id || `issue-${idx}`;
+    // Check if this issue requires human intervention (signatures, photos, etc.)
+    const isHumanOnly = issue.isAIFixable === false;
+
     return (
         <div
             key={safeId}
@@ -556,28 +683,50 @@ function IssueCard({ issue, idx, onConfirm, onFix, isProcessing }: { issue: Issu
 
                     <p className="text-[16px] leading-relaxed mb-4 whitespace-pre-line">{issue.message}</p>
 
-                    <div className="grid grid-cols-2 gap-2">
-                        <button
-                            onClick={onConfirm}
-                            className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
-                        >
-                            확인했어
-                        </button>
-                        <button
-                            onClick={onFix}
-                            disabled={isProcessing}
-                            className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {isProcessing ? (
-                                <>
-                                    <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                    생성 중...
-                                </>
-                            ) : (
-                                "수정해줘"
-                            )}
-                        </button>
-                    </div>
+                    {/* Show different actions based on whether AI can fix this */}
+                    {isHumanOnly ? (
+                        // Human-only issue: Show only confirm button with explanation
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-lg">
+                                    person
+                                </span>
+                                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                    이 문제는 담당자가 직접 수정해야 합니다 (서명, 사진 촬영 등)
+                                </p>
+                            </div>
+                            <button
+                                onClick={onConfirm}
+                                className="w-full py-3 bg-white border border-slate-300 hover:bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:bg-slate-600 text-slate-700 dark:text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                            >
+                                확인했어
+                            </button>
+                        </div>
+                    ) : (
+                        // AI-fixable issue: Show both confirm and fix buttons
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={onConfirm}
+                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:bg-slate-600 text-slate-700 dark:text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                            >
+                                확인했어
+                            </button>
+                            <button
+                                onClick={onFix}
+                                disabled={isProcessing}
+                                className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                            >
+                                {isProcessing ? (
+                                    <>
+                                        <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+                                        생성 중...
+                                    </>
+                                ) : (
+                                    "수정해줘"
+                                )}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

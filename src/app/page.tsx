@@ -272,15 +272,16 @@ export default function Page() {
 
   async function runValidation(f: File, documentType: DocumentType | null = null) {
     setLoading(true);
-    setShowProgress(true);
-    setValidationStep(0);
+
+    // Track start time to ensure minimum display time for progress indicator
+    const startTime = Date.now();
+    const minDisplayTime = 800; // Minimum 800ms to make progress visible
 
     try {
       let text = "";
       let images: string[] = [];
 
-      // Step 1: Extracting
-      setValidationStep(0);
+      // Step 1: Extracting - Do this BEFORE showing progress
       if (f.type === "application/pdf") {
         images = await renderPdfPages(f);
         text = await extractPdfText(f);
@@ -293,6 +294,21 @@ export default function Page() {
         });
         images = [dataUrl];
       }
+
+      // VALIDATION: Check if extracted content is sufficient
+      const hasText = text && text.trim().length >= 50;
+      const hasImages = images && images.length > 0;
+
+      if (!hasText && !hasImages) {
+        toast.error("문서에 내용이 없거나 읽을 수 없습니다");
+        setFile(null);
+        setReport(null);
+        return; // Exit early without showing progress
+      }
+
+      // Now show progress bar after confirming document has content
+      setShowProgress(true);
+      setValidationStep(0);
 
       // Step 2: Analyzing
       setValidationStep(1);
@@ -320,14 +336,32 @@ export default function Page() {
       });
 
       const data = (await res.json()) as Report;
+
+      // Handle validation errors (400) differently from server errors (500)
       if (!res.ok) {
-        // Handle error response structure from API
-        throw new Error((data as any).error || "Unknown server error");
+        if (res.status === 400) {
+          // Validation error: empty or non-safety document
+          // Show toast notification instead of rendering as issue
+          const errorMessage = (data as any).error || "문서 검증에 실패했습니다";
+          toast.error(errorMessage);
+
+          // Clear file and report state - don't show invalid document
+          setFile(null);
+          setReport(null);
+          return; // Exit early without showing error in UI
+        } else {
+          // Server error (500, 503, etc.) - still show as system error
+          throw new Error((data as any).error || "서버 오류가 발생했습니다");
+        }
       }
 
       // Step 4: Complete
       setValidationStep(3);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show completion
+
+      // Ensure minimum display time for progress indicator
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
+      await new Promise(resolve => setTimeout(resolve, remainingTime + 500)); // Brief pause to show completion
 
       // Ensure IDs exist (client-side patch for legacy/migration)
       data.issues = data.issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
@@ -339,18 +373,12 @@ export default function Page() {
       });
     } catch (e: any) {
       console.error(e);
-      setReport({
-        fileName: f.name,
-        issues: [
-          {
-            id: crypto.randomUUID(), // Ensure ID for fallback error too
-            severity: "error",
-            title: "검증 실패",
-            message: e?.message || "오류가 발생했습니다."
-          }
-        ],
-        chat: [{ role: "ai", text: `오류가 발생했어요: ${e?.message}` }]
-      });
+      // Only show system errors in the UI (not validation errors)
+      toast.error(e?.message || "문서 검증 중 오류가 발생했습니다");
+
+      // Clear file state for errors as well
+      setFile(null);
+      setReport(null);
     } finally {
       setLoading(false);
       setShowProgress(false);
@@ -359,6 +387,13 @@ export default function Page() {
 
   async function onPickFile(f: File) {
     dismissWelcome(); // Dismiss welcome screen when file is uploaded
+
+    // Basic client-side validation: Check for zero-byte files
+    if (f.size === 0) {
+      toast.error("빈 파일입니다. 내용이 있는 문서를 업로드해주세요");
+      return;
+    }
+
     setFile(f);
     setReport(null);
     setHistoricalFileName(undefined); // Clear historical flag
