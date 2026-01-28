@@ -338,42 +338,65 @@ export async function exportReportToPDF(data: ExportData) {
         </html>
     `;
 
-    // Create a temporary container
+    // Create a temporary container (must be visible for html2canvas to work)
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlContent;
-    tempDiv.style.position = 'absolute';
-    tempDiv.style.left = '-9999px';
+    tempDiv.style.position = 'fixed';
+    tempDiv.style.top = '0';
+    tempDiv.style.left = '0';
+    tempDiv.style.width = '210mm'; // A4 width
+    tempDiv.style.zIndex = '-9999';
+    tempDiv.style.opacity = '0';
+    tempDiv.style.pointerEvents = 'none';
     document.body.appendChild(tempDiv);
+
+    // Format date for filename: YYYY-MM-DD
+    const dateStr = data.createdAt.toISOString().split('T')[0]; // e.g., "2026-01-28"
+
+    // Clean filename: remove extension and sanitize
+    const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+
+    // Final filename format: YYYY-MM-DD_FileName_report.pdf
+    const finalFilename = `${dateStr}_${cleanFileName}_report.pdf`;
 
     // PDF options
     const opt = {
         margin: [10, 10, 10, 10] as [number, number, number, number],
-        filename: `${data.projectName ? data.projectName + "_" : ""}${data.fileName.replace(/\.[^/.]+$/, "")}_report.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
+        filename: finalFilename,
+        image: { type: 'jpeg' as const, quality: 0.95 },
         html2canvas: {
             scale: 2,
             useCORS: true,
-            letterRendering: true
+            letterRendering: true,
+            logging: false
         },
         jsPDF: {
             unit: 'mm' as const,
             format: 'a4' as const,
             orientation: 'portrait' as const
-        }
+        },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] as any }
     };
 
     // Generate PDF
-    html2pdf()
-        .set(opt)
-        .from(tempDiv)
-        .save()
-        .then(() => {
-            // Clean up
+    try {
+        await html2pdf()
+            .set(opt)
+            .from(tempDiv)
+            .save();
+
+        // Clean up after a short delay to ensure PDF is generated
+        setTimeout(() => {
+            if (document.body.contains(tempDiv)) {
+                document.body.removeChild(tempDiv);
+            }
+        }, 100);
+    } catch (error: any) {
+        console.error('PDF generation error:', error);
+        // Clean up on error
+        if (document.body.contains(tempDiv)) {
             document.body.removeChild(tempDiv);
-        })
-        .catch((error: any) => {
-            console.error('PDF generation error:', error);
-            document.body.removeChild(tempDiv);
-            throw error;
-        });
+        }
+        throw error;
+    }
 }
