@@ -189,6 +189,19 @@ export default function Page() {
     }
   }, [currentProjectId]);
 
+  // PERFORMANCE: Preload PDF font on app startup
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Preload Nanum Myeongjo font for PDF exports
+      const link = document.createElement('link');
+      link.href = 'https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap';
+      link.rel = 'stylesheet';
+      link.as = 'style';
+      document.head.appendChild(link);
+      console.log('[App] Preloaded Nanum Myeongjo font for PDF exports');
+    }
+  }, []);
+
   async function fetchProjects() {
     try {
       const res = await fetch("/api/projects");

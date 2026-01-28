@@ -425,10 +425,10 @@ export async function exportReportToPDF(data: ExportData) {
         console.log('[PDF Export] System fonts loaded');
     }
 
-    // Additional wait for Google Fonts and layout painting
-    // Google Fonts need extra time to download and apply
-    await new Promise(resolve => setTimeout(resolve, 2500)); // Increased to 2.5 seconds for Google Fonts
-    console.log('[PDF Export] Google Fonts and layout fully rendered');
+    // Additional wait for layout painting
+    // NOTE: Font is now preloaded on app startup, so we can reduce wait time significantly
+    await new Promise(resolve => setTimeout(resolve, 800)); // Reduced from 2500ms to 800ms (font preloaded!)
+    console.log('[PDF Export] Layout fully rendered (font preloaded)');
 
     // Log actual dimensions being captured
     console.log('[PDF Export] Element dimensions:', {
