@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { exportReportToPDF } from "@/lib/pdfExport";
 import { useToast } from "@/contexts/ToastContext";
@@ -111,8 +111,26 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const [showRiskDetails, setShowRiskDetails] = useState(false);
-    const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
     const toast = useToast();
+
+    // Determine which severity levels exist in current issues
+    const availableSeverities = useMemo(() => {
+        const severities = new Set<string>();
+        issues.forEach(issue => {
+            severities.add(issue.severity);
+        });
+        return severities;
+    }, [issues]);
+
+    // Initialize severity filters to only include available severities
+    const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
+
+    // Update severity filters when issues change to show only available severities
+    useEffect(() => {
+        if (availableSeverities.size > 0) {
+            setSeverityFilters(new Set(availableSeverities));
+        }
+    }, [availableSeverities]);
 
     // Suggestion Modal State - separate data and display state to prevent race condition
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
@@ -378,43 +396,56 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     )}
                 </div>
 
-                {/* Severity Filter - Only show when there are issues */}
-                {reportExists && issues.length > 0 && (
+                {/* Severity Filter - Only show when there are issues and only show buttons for available severities */}
+                {reportExists && issues.length > 0 && availableSeverities.size > 0 && (
                     <div className="mt-4 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-200 dark:border-slate-700">
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">필터:</span>
-                        <button
-                            onClick={() => toggleSeverityFilter("error")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("error")
-                                    ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">error</span>
-                            <span>심각 ({errorCount})</span>
-                        </button>
-                        <button
-                            onClick={() => toggleSeverityFilter("warn")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("warn")
-                                    ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">warning</span>
-                            <span>경고 ({warnCount})</span>
-                        </button>
-                        <button
-                            onClick={() => toggleSeverityFilter("info")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("info")
-                                    ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">info</span>
-                            <span>정보 ({infoCount})</span>
-                        </button>
+
+                        {/* Only show error button if there are error issues */}
+                        {availableSeverities.has("error") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("error")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                    severityFilters.has("error")
+                                        ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">error</span>
+                                <span>심각 ({errorCount})</span>
+                            </button>
+                        )}
+
+                        {/* Only show warn button if there are warn issues */}
+                        {availableSeverities.has("warn") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("warn")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                    severityFilters.has("warn")
+                                        ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">warning</span>
+                                <span>경고 ({warnCount})</span>
+                            </button>
+                        )}
+
+                        {/* Only show info button if there are info issues */}
+                        {availableSeverities.has("info") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("info")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                    severityFilters.has("info")
+                                        ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">info</span>
+                                <span>정보 ({infoCount})</span>
+                            </button>
+                        )}
+
                         <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">
                             {visibleIssues.length} / {issues.length} 표시중
                         </span>
