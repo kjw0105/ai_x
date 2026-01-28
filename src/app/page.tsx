@@ -11,6 +11,7 @@ import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
 import { EditProjectModal } from "@/components/EditProjectModal";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
+import { ProgressBar } from "@/components/ProgressBar";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
@@ -126,6 +127,17 @@ export default function Page() {
   const [showDocTypeSelector, setShowDocTypeSelector] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
+
+  // Progress tracking state
+  const [validationStep, setValidationStep] = useState(0);
+  const [showProgress, setShowProgress] = useState(false);
+
+  const validationSteps = [
+    { id: "extract", label: "텍스트 추출", icon: "description" },
+    { id: "analyze", label: "AI 분석", icon: "psychology" },
+    { id: "validate", label: "규칙 검증", icon: "task_alt" },
+    { id: "complete", label: "완료", icon: "check_circle" },
+  ];
 
   // Reset page when file changes
   useEffect(() => {
@@ -260,10 +272,15 @@ export default function Page() {
 
   async function runValidation(f: File, documentType: DocumentType | null = null) {
     setLoading(true);
+    setShowProgress(true);
+    setValidationStep(0);
+
     try {
       let text = "";
       let images: string[] = [];
 
+      // Step 1: Extracting
+      setValidationStep(0);
       if (f.type === "application/pdf") {
         images = await renderPdfPages(f);
         text = await extractPdfText(f);
@@ -277,6 +294,8 @@ export default function Page() {
         images = [dataUrl];
       }
 
+      // Step 2: Analyzing
+      setValidationStep(1);
       // Token Opt: First + Last
       let imagesToSend: string[] = [];
       if (images.length > 0) {
@@ -286,6 +305,8 @@ export default function Page() {
         }
       }
 
+      // Step 3: Validating
+      setValidationStep(2);
       const res = await fetch("/api/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -303,6 +324,10 @@ export default function Page() {
         // Handle error response structure from API
         throw new Error((data as any).error || "Unknown server error");
       }
+
+      // Step 4: Complete
+      setValidationStep(3);
+      await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show completion
 
       // Ensure IDs exist (client-side patch for legacy/migration)
       data.issues = data.issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
@@ -328,6 +353,7 @@ export default function Page() {
       });
     } finally {
       setLoading(false);
+      setShowProgress(false);
     }
   }
 
@@ -656,7 +682,20 @@ export default function Page() {
         onDeleteProject={handleDeleteProject}
         onEditProject={handleOpenEditProject}
         onShowWelcome={showWelcomeScreen}
+        currentFileName={file?.name}
       />
+
+      {/* Progress Modal */}
+      {showProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-3xl border border-slate-200 dark:border-slate-700">
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-6 text-center">
+              문서 검증 중...
+            </h3>
+            <ProgressBar currentStep={validationStep} steps={validationSteps} />
+          </div>
+        </div>
+      )}
 
       <HistorySidebar
         isOpen={showHistory}
