@@ -2,6 +2,8 @@
 "use client";
 
 import { useState } from "react";
+import { exportReportToPDF } from "@/lib/pdfExport";
+import { useToast } from "@/contexts/ToastContext";
 
 // Stage detection helper
 function getIssueStage(ruleId?: string): string {
@@ -108,6 +110,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const [showRiskDetails, setShowRiskDetails] = useState(false);
     const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
+    const toast = useToast();
 
     // Suggestion Modal State
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
@@ -187,6 +190,43 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         }
     };
 
+    const handleExportPDF = () => {
+        if (!currentFile) {
+            toast.warning("먼저 문서를 업로드하세요");
+            return;
+        }
+
+        try {
+            const criticalCount = issues.filter(i => i.severity === "error").length;
+            const warningCount = issues.filter(i => i.severity === "warn").length;
+            const infoCount = issues.filter(i => i.severity === "info").length;
+
+            exportReportToPDF({
+                fileName: currentFile.name,
+                projectName: currentProjectName,
+                documentType: null, // Can be enhanced to track document type
+                createdAt: new Date(),
+                issues: issues.map(i => ({
+                    severity: i.severity,
+                    title: i.title,
+                    message: i.message,
+                    ruleId: i.ruleId,
+                })),
+                summary: {
+                    totalIssues: issues.length,
+                    criticalCount,
+                    warningCount,
+                    infoCount,
+                },
+            });
+
+            toast.success("PDF 리포트가 다운로드되었습니다");
+        } catch (error) {
+            toast.error("PDF 생성에 실패했습니다");
+            console.error("PDF export error:", error);
+        }
+    };
+
     // Group visible issues by stage
     const stage12Issues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage1-2");
     const stage3StructuredIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-structured");
@@ -220,30 +260,44 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-800 shadow-2xl relative">
             <div className="shrink-0 bg-white dark:bg-surface-dark p-6 border-b border-slate-100 dark:border-slate-700 shadow-sm relative z-10">
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <div className="size-16 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 border-2 border-blue-200">
-                            <span className="material-symbols-outlined text-blue-600 dark:text-blue-300 text-4xl">
-                                smart_toy
-                            </span>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="relative">
+                            <div className="size-16 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 border-2 border-blue-200">
+                                <span className="material-symbols-outlined text-blue-600 dark:text-blue-300 text-4xl">
+                                    smart_toy
+                                </span>
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 bg-green-500 size-5 rounded-full border-2 border-white" />
                         </div>
-                        <div className="absolute -bottom-1 -right-1 bg-green-500 size-5 rounded-full border-2 border-white" />
+
+                        <div>
+                            <h2 className="text-xl font-black text-slate-900 dark:text-white mb-1">AI 안전도우미</h2>
+                            <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20" suppressHydrationWarning>
+                                    {loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중"}
+                                </span>
+                                {currentProjectName && (
+                                    <span className="inline-flex items-center rounded-md bg-blue-100 dark:bg-blue-900/30 px-3 py-1 text-sm font-bold text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-700/10 border border-blue-200 dark:border-blue-800">
+                                        <span className="material-symbols-outlined text-[16px] mr-1">business</span>
+                                        {currentProjectName}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
-                    <div>
-                        <h2 className="text-xl font-black text-slate-900 dark:text-white mb-1">AI 안전도우미</h2>
-                        <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20" suppressHydrationWarning>
-                                {loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중"}
-                            </span>
-                            {currentProjectName && (
-                                <span className="inline-flex items-center rounded-md bg-blue-100 dark:bg-blue-900/30 px-3 py-1 text-sm font-bold text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-700/10 border border-blue-200 dark:border-blue-800">
-                                    <span className="material-symbols-outlined text-[16px] mr-1">business</span>
-                                    {currentProjectName}
-                                </span>
-                            )}
-                        </div>
-                    </div>
+                    {/* PDF Export Button */}
+                    {reportExists && currentFile && (
+                        <button
+                            onClick={handleExportPDF}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-bold rounded-lg transition-colors shadow-lg"
+                            title="PDF로 보고서 내보내기"
+                        >
+                            <span className="material-symbols-outlined text-lg">download</span>
+                            <span className="hidden sm:inline">PDF 내보내기</span>
+                        </button>
+                    )}
                 </div>
 
                 {/* Severity Filter - Only show when there are issues */}
