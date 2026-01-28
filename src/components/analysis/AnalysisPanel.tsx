@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import { useToast } from "@/contexts/ToastContext";
 
 // Stage detection helper
 function getIssueStage(ruleId?: string): string {
@@ -108,6 +109,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const [showRiskDetails, setShowRiskDetails] = useState(false);
     const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
+    const toast = useToast();
 
     // Suggestion Modal State
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
@@ -170,18 +172,42 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 })
             });
 
+            // CRITICAL FIX: Check response status before parsing JSON
+            if (!res.ok) {
+                // Try to parse error message from response
+                let errorMessage = "AI 수정 제안 생성에 실패했습니다";
+                try {
+                    const errorData = await res.json();
+                    if (errorData.error) {
+                        errorMessage = errorData.error;
+                    }
+                } catch {
+                    // If JSON parsing fails, use status text
+                    errorMessage = `서버 오류: ${res.status} ${res.statusText}`;
+                }
+
+                toast.error(errorMessage);
+                console.error("Fix API error:", errorMessage);
+                return;
+            }
+
             const data = await res.json();
+
             if (data.error) {
-                alert(`AI 수정 제안 실패: ${data.error}`);
+                toast.error(`AI 수정 제안 실패: ${data.error}`);
                 return;
             }
 
             if (data.suggestion) {
                 setSuggestion({ title: "AI 추천 수정안", text: data.suggestion });
+                toast.success("AI 수정 제안이 생성되었습니다");
+            } else {
+                toast.warning("수정 제안을 생성할 수 없습니다");
             }
         } catch (e: any) {
-            console.error(e);
-            alert("AI 수정 제안 시스템 오류");
+            console.error("handleFix error:", e);
+            const errorMsg = e.message || "AI 수정 제안 시스템 오류가 발생했습니다";
+            toast.error(errorMsg);
         } finally {
             setProcessingIssueId(null);
         }
@@ -441,14 +467,22 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         </div>
                         <div className="flex justify-end gap-2">
                             <button
-                                onClick={() => navigator.clipboard.writeText(suggestion.text)}
-                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-800 font-bold"
+                                onClick={async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(suggestion.text);
+                                        toast.success("클립보드에 복사되었습니다");
+                                    } catch (err) {
+                                        console.error("Copy failed:", err);
+                                        toast.error("복사에 실패했습니다");
+                                    }
+                                }}
+                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-slate-800 dark:text-white font-bold transition-colors"
                             >
                                 복사하기
                             </button>
                             <button
                                 onClick={() => setSuggestion(null)}
-                                className="px-4 py-2 bg-primary text-white rounded-lg font-bold"
+                                className="px-4 py-2 bg-primary hover:bg-green-600 text-white rounded-lg font-bold transition-colors"
                             >
                                 닫기
                             </button>
