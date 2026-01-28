@@ -15,7 +15,7 @@
 
 **Team**: Luna
 **Demo Date**: February 8, 2026
-**Goal**: Automate safety document validation to reduce fraud and improve compliance in Korean construction sites.
+**Goal**: Automate safety document validation to enhance data integrity and improve compliance in Korean construction sites.
 
 ---
 
@@ -155,7 +155,7 @@ npm run dev
 
 ### What Makes This System Unique?
 
-1. **Fraud Detection** 🕵️
+1. **Integrity Verification** 🕵️
    - Detects copy-paste behavior across reports
    - Identifies "always check" patterns by specific inspectors
    - Flags timeline gaps and suspicious repetition
@@ -349,7 +349,7 @@ git merge upstream/main
 
 ## 🏆 Competition Advantages
 
-1. **Fraud Detection** - Unique capability detecting copy-paste and pattern manipulation
+1. **Integrity Verification** - Unique capability detecting copy-paste and pattern manipulation
 2. **Objective Risk Scoring** - KOSHA-compliant, transparent calculations
 3. **5-Stage Framework** - Comprehensive validation beyond simple field checks
 4. **Production Ready** - 95% complete, fully functional system

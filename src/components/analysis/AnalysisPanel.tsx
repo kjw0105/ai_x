@@ -1,7 +1,8 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useToast } from "@/contexts/ToastContext";
 
 // Stage detection helper
@@ -148,7 +149,17 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     };
 
     const handleFix = async (issue: Issue) => {
+        // Prevent multiple simultaneous fix requests
+        if (processingIssueId) {
+            toast.warning("다른 수정 제안을 생성 중입니다");
+            return;
+        }
+
         setProcessingIssueId(issue.id);
+
+        // Create abort controller for cleanup
+        const abortController = new AbortController();
+
         try {
             let pdfText = "";
             let fileData = null;
@@ -170,7 +181,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     issue,
                     fileType: "image/png", // forcing text suggestion for now to avoid massive payload issues
                     pdfText: ""
-                })
+                }),
+                signal: abortController.signal
             });
 
             // CRITICAL FIX: Check response status before parsing JSON
@@ -225,10 +237,17 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 toast.warning("수정 제안을 생성할 수 없습니다");
             }
         } catch (e: any) {
+            // Don't show error if request was aborted
+            if (e.name === 'AbortError') {
+                console.log("Fix request was aborted");
+                return;
+            }
+
             console.error("handleFix error:", e);
             const errorMsg = e.message || "AI 수정 제안 시스템 오류가 발생했습니다";
             toast.error(errorMsg);
         } finally {
+            // Ensure processing state is always cleared
             setProcessingIssueId(null);
         }
     };
@@ -477,10 +496,16 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 </div>
             </div>
 
-            {/* Suggestion Modal */}
-            {suggestion && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg">
+            {/* Suggestion Modal - Using Portal to avoid DOM hierarchy issues */}
+            {suggestion && typeof window !== 'undefined' && createPortal(
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                    onClick={() => setSuggestion(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <h3 className="text-xl font-bold mb-4 dark:text-white">{suggestion.title}</h3>
                         <div className="bg-slate-100 dark:bg-slate-900 p-4 rounded-xl font-mono text-sm overflow-auto max-h-[300px] mb-4 text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
                             {suggestion.text}
@@ -508,7 +533,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div >
     );
