@@ -45,8 +45,30 @@ function getSeverityBgColor(severity: string): string {
 }
 
 export async function exportReportToPDF(data: ExportData) {
+    // DIAGNOSTIC CHECK 1: Log data being passed
+    console.log('[PDF Export] Starting PDF generation with data:', {
+        fileName: data.fileName,
+        projectName: data.projectName,
+        issuesCount: data.issues.length,
+        totalIssues: data.summary.totalIssues,
+        hasIssues: data.issues.length > 0
+    });
+
+    // DIAGNOSTIC CHECK 2: Validate data
+    if (!data.fileName) {
+        throw new Error('PDF Export Error: fileName is required');
+    }
+    if (!data.issues) {
+        throw new Error('PDF Export Error: issues array is required');
+    }
+    if (!data.summary) {
+        throw new Error('PDF Export Error: summary object is required');
+    }
+
     // Dynamic import to avoid SSR issues
     const html2pdf = (await import('html2pdf.js')).default;
+
+    console.log('[PDF Export] html2pdf library loaded successfully');
 
     // Create HTML template
     const htmlContent = `
@@ -348,7 +370,15 @@ export async function exportReportToPDF(data: ExportData) {
     tempDiv.style.zIndex = '-9999';
     tempDiv.style.opacity = '0';
     tempDiv.style.pointerEvents = 'none';
+
+    console.log('[PDF Export] Created temp container, HTML length:', htmlContent.length);
+    console.log('[PDF Export] Appending to document body...');
+
     document.body.appendChild(tempDiv);
+
+    // DIAGNOSTIC CHECK 3: Wait for DOM to be ready and fonts to load
+    await new Promise(resolve => setTimeout(resolve, 100)); // Give browser time to paint
+    console.log('[PDF Export] DOM element rendered and ready');
 
     // Format date for filename: YYYY-MM-DD
     const dateStr = data.createdAt.toISOString().split('T')[0]; // e.g., "2026-01-28"
@@ -380,23 +410,56 @@ export async function exportReportToPDF(data: ExportData) {
 
     // Generate PDF
     try {
-        await html2pdf()
+        console.log('[PDF Export] Starting html2pdf conversion...');
+        console.log('[PDF Export] Options:', opt);
+
+        // Use outputPdf to get the blob first for better error tracking
+        const pdfBlob = await html2pdf()
             .set(opt)
             .from(tempDiv)
-            .save();
+            .outputPdf('blob');
 
-        // Clean up after a short delay to ensure PDF is generated
+        console.log('[PDF Export] PDF blob generated successfully, size:', pdfBlob.size, 'bytes');
+
+        // DIAGNOSTIC CHECK 4: Verify PDF is not empty
+        if (pdfBlob.size === 0 || pdfBlob.size < 1000) {
+            throw new Error(`PDF Export Error: Generated PDF is too small (${pdfBlob.size} bytes). This usually means the content failed to render.`);
+        }
+
+        // Now trigger the download with the blob
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = finalFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log('[PDF Export] PDF download triggered successfully:', finalFilename);
+
+        // Clean up after ensuring PDF is saved (longer delay for safety)
         setTimeout(() => {
             if (document.body.contains(tempDiv)) {
                 document.body.removeChild(tempDiv);
+                console.log('[PDF Export] Temp container cleaned up');
             }
-        }, 100);
+        }, 500); // Increased from 100ms to 500ms
     } catch (error: any) {
-        console.error('PDF generation error:', error);
+        // DIAGNOSTIC CHECK 5: Enhanced error logging
+        console.error('[PDF Export] CRITICAL ERROR during PDF generation:');
+        console.error('[PDF Export] Error type:', error.constructor.name);
+        console.error('[PDF Export] Error message:', error.message);
+        console.error('[PDF Export] Error stack:', error.stack);
+        console.error('[PDF Export] Full error object:', error);
+
         // Clean up on error
         if (document.body.contains(tempDiv)) {
             document.body.removeChild(tempDiv);
+            console.log('[PDF Export] Temp container cleaned up after error');
         }
-        throw error;
+
+        // Re-throw with more context
+        throw new Error(`PDF generation failed: ${error.message || 'Unknown error'}`);
     }
 }
