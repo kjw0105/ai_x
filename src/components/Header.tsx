@@ -5,6 +5,7 @@ interface HeaderProps {
     loading: boolean;
     reportExists: boolean;
     onUpload: () => void;
+    onStartTBM?: () => void;
     onShowHistory: () => void;
     onShowDashboard?: () => void;
     toggleDark: () => void;
@@ -27,6 +28,7 @@ export default function Header({
     loading,
     reportExists,
     onUpload,
+    onStartTBM,
     onShowHistory,
     onShowDashboard,
     toggleDark,
@@ -119,15 +121,28 @@ export default function Header({
                         <span className="material-symbols-outlined">dark_mode</span>
                     </button>
 
-                    {/* Hide upload button when welcome screen is visible */}
+                    {/* Hide action buttons when welcome screen is visible */}
                     {!showWelcome && (
-                        <button
-                            onClick={onUpload}
-                            className="px-4 py-2 rounded-xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
-                        >
-                            <span className="material-symbols-outlined">upload</span>
-                            파일 업로드
-                        </button>
+                        <>
+                            {onStartTBM && (
+                                <button
+                                    onClick={onStartTBM}
+                                    className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-black border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm inline-flex items-center gap-2"
+                                    title="TBM(작업 전 대화) 녹음"
+                                >
+                                    <span className="material-symbols-outlined">mic</span>
+                                    TBM 시작
+                                </button>
+                            )}
+
+                            <button
+                                onClick={onUpload}
+                                className="px-4 py-2 rounded-xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
+                            >
+                                <span className="material-symbols-outlined">upload</span>
+                                파일 업로드
+                            </button>
+                        </>
                     )}
                 </div>
             </div>

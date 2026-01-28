@@ -43,7 +43,10 @@ export function DocumentTypeSelector({ isOpen, fileName, onSelect, onSkip }: Doc
                 </p>
 
                 <div className="grid grid-cols-2 gap-3 mb-6">
-                    {Object.entries(DOCUMENT_TYPES).map(([key, info]) => {
+                    {Object.entries(DOCUMENT_TYPES)
+                        // TBM은 '업로드된 문서 검증' 흐름에서 제외 (TBM은 앱 내 녹음 기능으로 진행)
+                        .filter(([key]) => key !== "TBM")
+                        .map(([key, info]) => {
                         const isSelected = selected === key;
                         const colorClasses = {
                             blue: "border-blue-500 bg-blue-50 dark:bg-blue-900/20",

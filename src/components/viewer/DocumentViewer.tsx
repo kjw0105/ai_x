@@ -11,6 +11,7 @@ interface DocumentViewerProps {
     currentPage: number;
     onPageChange: (page: number) => void;
     onPickFile: () => void;
+    onStartTBM?: () => void;
     onClearFile?: () => void;
     historicalFileName?: string; // When viewing history without file
     documentType?: string | null; // Document type for badge
@@ -22,6 +23,7 @@ export default function DocumentViewer({
     currentPage,
     onPageChange,
     onPickFile,
+    onStartTBM,
     onClearFile,
     historicalFileName,
     documentType
@@ -101,13 +103,24 @@ export default function DocumentViewer({
                         <p className="text-slate-600 dark:text-slate-300 mb-6">
                             PDF 또는 이미지(JPG/PNG)를 업로드하면 AI가 빠진 항목/불일치/수정사항을 알려줘요.
                         </p>
-                        <button
-                            onClick={onPickFile}
-                            className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
-                        >
-                            <span className="material-symbols-outlined">add_a_photo</span>
-                            파일 업로드
-                        </button>
+                        <div className="flex flex-wrap items-center gap-3">
+                            {onStartTBM && (
+                                <button
+                                    onClick={onStartTBM}
+                                    className="px-6 py-3 rounded-2xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-black border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm inline-flex items-center gap-2"
+                                >
+                                    <span className="material-symbols-outlined">mic</span>
+                                    TBM 시작
+                                </button>
+                            )}
+                            <button
+                                onClick={onPickFile}
+                                className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
+                            >
+                                <span className="material-symbols-outlined">add_a_photo</span>
+                                파일 업로드
+                            </button>
+                        </div>
                     </div>
                 )}
 
