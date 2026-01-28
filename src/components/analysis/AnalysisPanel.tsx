@@ -190,7 +190,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         }
     };
 
-    const handleExportPDF = () => {
+    const handleExportPDF = async () => {
         if (!currentFile) {
             toast.warning("먼저 문서를 업로드하세요");
             return;
@@ -201,7 +201,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             const warningCount = issues.filter(i => i.severity === "warn").length;
             const infoCount = issues.filter(i => i.severity === "info").length;
 
-            exportReportToPDF({
+            await exportReportToPDF({
                 fileName: currentFile.name,
                 projectName: currentProjectName,
                 documentType: null, // Can be enhanced to track document type
