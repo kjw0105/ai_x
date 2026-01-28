@@ -76,6 +76,7 @@ interface Issue {
     ruleId?: string; // Stage 2-5: Link to specific rule
     confidence?: number; // Stage 4
     score?: number; // Stage 4
+    isAIFixable?: boolean; // Whether AI can suggest a fix (false for signatures, photos, physical inspections)
 }
 
 interface RiskFactor {
@@ -176,18 +177,37 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             if (!res.ok) {
                 // Try to parse error message from response
                 let errorMessage = "AI 수정 제안 생성에 실패했습니다";
+                let isAdminError = false;
+
                 try {
                     const errorData = await res.json();
                     if (errorData.error) {
-                        errorMessage = errorData.error;
+                        // Check if it's an admin/system error (API key, config issues)
+                        if (errorData.error.includes("API Key") ||
+                            errorData.error.includes("API_KEY") ||
+                            errorData.error.includes("configuration") ||
+                            errorData.solution) {
+                            isAdminError = true;
+                            console.error("Admin/System error:", errorData.error);
+                            // Show generic message to user, log details for admin
+                            errorMessage = "일시적으로 AI 수정 제안 기능을 사용할 수 없습니다";
+                        } else {
+                            errorMessage = errorData.error;
+                        }
                     }
                 } catch {
-                    // If JSON parsing fails, use status text
-                    errorMessage = `서버 오류: ${res.status} ${res.statusText}`;
+                    // If JSON parsing fails, check status code
+                    if (res.status === 500 || res.status === 503) {
+                        errorMessage = "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요";
+                    } else {
+                        errorMessage = `서버 오류: ${res.status}`;
+                    }
                 }
 
                 toast.error(errorMessage);
-                console.error("Fix API error:", errorMessage);
+                if (!isAdminError) {
+                    console.error("Fix API error:", errorMessage);
+                }
                 return;
             }
 
@@ -497,6 +517,9 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
 // Updated IssueCard to accept handlers
 function IssueCard({ issue, idx, onConfirm, onFix, isProcessing }: { issue: Issue; idx: number; onConfirm: () => void; onFix: () => void; isProcessing: boolean }) {
     const safeId = issue.id || `issue-${idx}`;
+    // Check if this issue requires human intervention (signatures, photos, etc.)
+    const isHumanOnly = issue.isAIFixable === false;
+
     return (
         <div
             key={safeId}
@@ -536,28 +559,50 @@ function IssueCard({ issue, idx, onConfirm, onFix, isProcessing }: { issue: Issu
 
                     <p className="text-[16px] leading-relaxed mb-4 whitespace-pre-line">{issue.message}</p>
 
-                    <div className="grid grid-cols-2 gap-2">
-                        <button
-                            onClick={onConfirm}
-                            className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
-                        >
-                            확인했어
-                        </button>
-                        <button
-                            onClick={onFix}
-                            disabled={isProcessing}
-                            className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {isProcessing ? (
-                                <>
-                                    <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                    생성 중...
-                                </>
-                            ) : (
-                                "수정해줘"
-                            )}
-                        </button>
-                    </div>
+                    {/* Show different actions based on whether AI can fix this */}
+                    {isHumanOnly ? (
+                        // Human-only issue: Show only confirm button with explanation
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-lg">
+                                    person
+                                </span>
+                                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                    이 문제는 담당자가 직접 수정해야 합니다 (서명, 사진 촬영 등)
+                                </p>
+                            </div>
+                            <button
+                                onClick={onConfirm}
+                                className="w-full py-3 bg-white border border-slate-300 hover:bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:bg-slate-600 text-slate-700 dark:text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                            >
+                                확인했어
+                            </button>
+                        </div>
+                    ) : (
+                        // AI-fixable issue: Show both confirm and fix buttons
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={onConfirm}
+                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:bg-slate-600 text-slate-700 dark:text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                            >
+                                확인했어
+                            </button>
+                            <button
+                                onClick={onFix}
+                                disabled={isProcessing}
+                                className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                            >
+                                {isProcessing ? (
+                                    <>
+                                        <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+                                        생성 중...
+                                    </>
+                                ) : (
+                                    "수정해줘"
+                                )}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
