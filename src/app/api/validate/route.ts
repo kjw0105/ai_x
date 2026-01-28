@@ -165,27 +165,6 @@ export async function POST(req: Request) {
   try {
     const { provider, fileName, pdfText, pageImages, projectId, documentType } = await req.json();
 
-    // VALIDATION: Check if document has sufficient content
-    const hasText = pdfText && pdfText.trim().length >= 50;
-    const hasImages = pageImages && pageImages.length > 0;
-
-    if (!hasText && !hasImages) {
-      return NextResponse.json(
-        {
-          error: "문서에 내용이 없거나 읽을 수 없습니다",
-          fileName: fileName ?? "Untitled",
-          issues: [],
-          chat: [
-            {
-              role: "ai",
-              text: "업로드된 문서가 비어있거나 내용을 읽을 수 없습니다. 올바른 안전 점검 문서를 업로드해주세요."
-            }
-          ]
-        },
-        { status: 400 }
-      );
-    }
-
     const p: Provider = (provider ?? "auto") as Provider;
 
     // Fetch Project Context if projectId is present
@@ -241,35 +220,6 @@ export async function POST(req: Request) {
     // 3. Validation Logic (Code-based)
     // LLM 결과(extraction)에 대해 규칙 검사를 수행한다.
     const extracted = result as DocData;
-
-    // VALIDATION: Check if document is safety-related
-    // If docType is "unknown" and no safety-related fields are found, reject the document
-    const isSafetyDocument =
-      extracted.docType !== "unknown" ||
-      extracted.fields?.점검일자 ||
-      extracted.fields?.현장명 ||
-      extracted.fields?.작업내용 ||
-      extracted.signature?.담당 !== "unknown" ||
-      extracted.signature?.소장 !== "unknown" ||
-      (extracted.checklist && extracted.checklist.length > 0);
-
-    if (!isSafetyDocument) {
-      return NextResponse.json(
-        {
-          error: "안전 점검 문서가 아닌 것으로 판단됩니다",
-          fileName: fileName ?? "Untitled",
-          issues: [],
-          chat: [
-            {
-              role: "ai",
-              text: "업로드된 문서는 안전 점검 관련 문서가 아닌 것으로 보입니다. 산업안전 점검표, 위험성 평가 보고서, TBM 결과 등 안전 점검 문서를 업로드해주세요."
-            }
-          ]
-        },
-        { status: 400 }
-      );
-    }
-
     const validationIssues = validateDocument(extracted);
 
     // Stage 3: Structured Master Plan Validation

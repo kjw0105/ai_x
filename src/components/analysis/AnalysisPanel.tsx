@@ -1,10 +1,8 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { createPortal } from "react-dom";
-import { exportReportToPDF } from "@/lib/pdfExport";
-import { useToast } from "@/contexts/ToastContext";
+import { useState } from "react";
+import { ChatModal } from "../ChatModal";
 
 // Stage detection helper
 function getIssueStage(ruleId?: string): string {
@@ -78,7 +76,6 @@ interface Issue {
     ruleId?: string; // Stage 2-5: Link to specific rule
     confidence?: number; // Stage 4
     score?: number; // Stage 4
-    isAIFixable?: boolean; // Whether AI can suggest a fix (false for signatures, photos, physical inspections)
 }
 
 interface RiskFactor {
@@ -111,43 +108,16 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const [showRiskDetails, setShowRiskDetails] = useState(false);
-    const toast = useToast();
-
-    // Determine which severity levels exist in current issues
-    const availableSeverities = useMemo(() => {
-        const severities = new Set<string>();
-        issues.forEach(issue => {
-            severities.add(issue.severity);
-        });
-        return severities;
-    }, [issues]);
-
-    // Initialize severity filters to only include available severities
     const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
 
-    // Update severity filters when issues change to show only available severities
-    useEffect(() => {
-        if (availableSeverities.size > 0) {
-            setSeverityFilters(new Set(availableSeverities));
-        }
-    }, [availableSeverities]);
-
-    // Suggestion Modal State - separate data and display state to prevent race condition
+    // Suggestion Modal State
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
-    const [showModal, setShowModal] = useState(false);
 
-    // Use effect to delay modal mounting to prevent DOM race condition
-    useEffect(() => {
-        if (suggestion) {
-            // Small delay to ensure toast is rendered first and prevent race condition
-            const timer = setTimeout(() => {
-                setShowModal(true);
-            }, 100);
-            return () => clearTimeout(timer);
-        } else {
-            setShowModal(false);
-        }
-    }, [suggestion]);
+    // Chat UI (click-to-open)
+   
+
+    // Chat modal (replaces the disabled bottom input)
+    const [showChatModal, setShowChatModal] = useState(false);
 
     const reportExists = issues.length > 0 || chatMessages.length > 0;
 
@@ -182,17 +152,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     };
 
     const handleFix = async (issue: Issue) => {
-        // Prevent multiple simultaneous fix requests
-        if (processingIssueId) {
-            toast.warning("다른 수정 제안을 생성 중입니다");
-            return;
-        }
-
         setProcessingIssueId(issue.id);
-
-        // Create abort controller for cleanup
-        const abortController = new AbortController();
-
         try {
             let pdfText = "";
             let fileData = null;
@@ -214,112 +174,23 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     issue,
                     fileType: "image/png", // forcing text suggestion for now to avoid massive payload issues
                     pdfText: ""
-                }),
-                signal: abortController.signal
+                })
             });
 
-            // CRITICAL FIX: Check response status before parsing JSON
-            if (!res.ok) {
-                // Try to parse error message from response
-                let errorMessage = "AI 수정 제안 생성에 실패했습니다";
-                let isAdminError = false;
-
-                try {
-                    const errorData = await res.json();
-                    if (errorData.error) {
-                        // Check if it's an admin/system error (API key, config issues)
-                        if (errorData.error.includes("API Key") ||
-                            errorData.error.includes("API_KEY") ||
-                            errorData.error.includes("configuration") ||
-                            errorData.solution) {
-                            isAdminError = true;
-                            console.error("Admin/System error:", errorData.error);
-                            // Show generic message to user, log details for admin
-                            errorMessage = "일시적으로 AI 수정 제안 기능을 사용할 수 없습니다";
-                        } else {
-                            errorMessage = errorData.error;
-                        }
-                    }
-                } catch {
-                    // If JSON parsing fails, check status code
-                    if (res.status === 500 || res.status === 503) {
-                        errorMessage = "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요";
-                    } else {
-                        errorMessage = `서버 오류: ${res.status}`;
-                    }
-                }
-
-                toast.error(errorMessage);
-                if (!isAdminError) {
-                    console.error("Fix API error:", errorMessage);
-                }
-                return;
-            }
-
             const data = await res.json();
-
             if (data.error) {
-                toast.error(`AI 수정 제안 실패: ${data.error}`);
+                alert(`AI 수정 제안 실패: ${data.error}`);
                 return;
             }
 
             if (data.suggestion) {
-                // Show toast first, then set suggestion (modal will mount after delay via useEffect)
-                toast.success("AI 수정 제안이 생성되었습니다");
                 setSuggestion({ title: "AI 추천 수정안", text: data.suggestion });
-            } else {
-                toast.warning("수정 제안을 생성할 수 없습니다");
             }
         } catch (e: any) {
-            // Don't show error if request was aborted
-            if (e.name === 'AbortError') {
-                console.log("Fix request was aborted");
-                return;
-            }
-
-            console.error("handleFix error:", e);
-            const errorMsg = e.message || "AI 수정 제안 시스템 오류가 발생했습니다";
-            toast.error(errorMsg);
+            console.error(e);
+            alert("AI 수정 제안 시스템 오류");
         } finally {
-            // Ensure processing state is always cleared
             setProcessingIssueId(null);
-        }
-    };
-
-    const handleExportPDF = async () => {
-        if (!currentFile) {
-            toast.warning("먼저 문서를 업로드하세요");
-            return;
-        }
-
-        try {
-            const criticalCount = issues.filter(i => i.severity === "error").length;
-            const warningCount = issues.filter(i => i.severity === "warn").length;
-            const infoCount = issues.filter(i => i.severity === "info").length;
-
-            await exportReportToPDF({
-                fileName: currentFile.name,
-                projectName: currentProjectName,
-                documentType: null, // Can be enhanced to track document type
-                createdAt: new Date(),
-                issues: issues.map(i => ({
-                    severity: i.severity,
-                    title: i.title,
-                    message: i.message,
-                    ruleId: i.ruleId,
-                })),
-                summary: {
-                    totalIssues: issues.length,
-                    criticalCount,
-                    warningCount,
-                    infoCount,
-                },
-            });
-
-            toast.success("PDF 리포트가 다운로드되었습니다");
-        } catch (error) {
-            toast.error("PDF 생성에 실패했습니다");
-            console.error("PDF export error:", error);
         }
     };
 
@@ -356,96 +227,69 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-800 shadow-2xl relative">
             <div className="shrink-0 bg-white dark:bg-surface-dark p-6 border-b border-slate-100 dark:border-slate-700 shadow-sm relative z-10">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="relative">
-                            <div className="size-16 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 border-2 border-blue-200">
-                                <span className="material-symbols-outlined text-blue-600 dark:text-blue-300 text-4xl">
-                                    smart_toy
-                                </span>
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 bg-green-500 size-5 rounded-full border-2 border-white" />
+                <div className="flex items-center gap-4">
+                    <div className="relative">
+                        <div className="size-16 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 border-2 border-blue-200">
+                            <span className="material-symbols-outlined text-blue-600 dark:text-blue-300 text-4xl">
+                                smart_toy
+                            </span>
                         </div>
-
-                        <div>
-                            <h2 className="text-xl font-black text-slate-900 dark:text-white mb-1">AI 안전도우미</h2>
-                            <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20" suppressHydrationWarning>
-                                    {loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중"}
-                                </span>
-                                {currentProjectName && (
-                                    <span className="inline-flex items-center rounded-md bg-blue-100 dark:bg-blue-900/30 px-3 py-1 text-sm font-bold text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-700/10 border border-blue-200 dark:border-blue-800">
-                                        <span className="material-symbols-outlined text-[16px] mr-1">business</span>
-                                        {currentProjectName}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
+                        <div className="absolute -bottom-1 -right-1 bg-green-500 size-5 rounded-full border-2 border-white" />
                     </div>
 
-                    {/* PDF Export Button */}
-                    {reportExists && currentFile && (
-                        <button
-                            onClick={handleExportPDF}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-bold rounded-lg transition-colors shadow-lg"
-                            title="PDF로 보고서 내보내기"
-                        >
-                            <span className="material-symbols-outlined text-lg">download</span>
-                            <span className="hidden sm:inline">PDF 내보내기</span>
-                        </button>
-                    )}
+                    <div>
+                        <h2 className="text-xl font-black text-slate-900 dark:text-white mb-1">AI 안전도우미</h2>
+                        <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20" suppressHydrationWarning>
+                                {loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중"}
+                            </span>
+                            {currentProjectName && (
+                                <span className="inline-flex items-center rounded-md bg-blue-100 dark:bg-blue-900/30 px-3 py-1 text-sm font-bold text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-700/10 border border-blue-200 dark:border-blue-800">
+                                    <span className="material-symbols-outlined text-[16px] mr-1">business</span>
+                                    {currentProjectName}
+                                </span>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
-                {/* Severity Filter - Only show when there are issues and only show buttons for available severities */}
-                {reportExists && issues.length > 0 && availableSeverities.size > 0 && (
+                {/* Severity Filter - Only show when there are issues */}
+                {reportExists && issues.length > 0 && (
                     <div className="mt-4 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-200 dark:border-slate-700">
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">필터:</span>
-
-                        {/* Only show error button if there are error issues */}
-                        {availableSeverities.has("error") && (
-                            <button
-                                onClick={() => toggleSeverityFilter("error")}
-                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                    severityFilters.has("error")
-                                        ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
-                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                                }`}
-                            >
-                                <span className="material-symbols-outlined text-sm">error</span>
-                                <span>심각 ({errorCount})</span>
-                            </button>
-                        )}
-
-                        {/* Only show warn button if there are warn issues */}
-                        {availableSeverities.has("warn") && (
-                            <button
-                                onClick={() => toggleSeverityFilter("warn")}
-                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                    severityFilters.has("warn")
-                                        ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
-                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                                }`}
-                            >
-                                <span className="material-symbols-outlined text-sm">warning</span>
-                                <span>경고 ({warnCount})</span>
-                            </button>
-                        )}
-
-                        {/* Only show info button if there are info issues */}
-                        {availableSeverities.has("info") && (
-                            <button
-                                onClick={() => toggleSeverityFilter("info")}
-                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                    severityFilters.has("info")
-                                        ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
-                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                                }`}
-                            >
-                                <span className="material-symbols-outlined text-sm">info</span>
-                                <span>정보 ({infoCount})</span>
-                            </button>
-                        )}
-
+                        <button
+                            onClick={() => toggleSeverityFilter("error")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("error")
+                                    ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">error</span>
+                            <span>심각 ({errorCount})</span>
+                        </button>
+                        <button
+                            onClick={() => toggleSeverityFilter("warn")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("warn")
+                                    ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">warning</span>
+                            <span>경고 ({warnCount})</span>
+                        </button>
+                        <button
+                            onClick={() => toggleSeverityFilter("info")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("info")
+                                    ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">info</span>
+                            <span>정보 ({infoCount})</span>
+                        </button>
                         <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">
                             {visibleIssues.length} / {issues.length} 표시중
                         </span>
@@ -581,59 +425,60 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </button>
                 </div>
 
-                <div className="relative flex items-center gap-2">
-                    <input
-                        className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-full py-3 px-5 text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary"
-                        placeholder="메시지를 입력하세요 (준비중)..."
-                        type="text"
-                        disabled
-                    />
-                    <button className="p-3 bg-yellow-400 text-black rounded-full hover:bg-yellow-500 transition-colors shadow-sm absolute right-1">
-                        <span className="material-symbols-outlined block">arrow_upward</span>
-                    </button>
-                </div>
+                {/* Click-to-open chat bubble (replaces the disabled input) */}
+                <button
+                    type="button"
+                    onClick={() => setShowChatModal(true)}
+                    className="relative w-full text-left bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-3xl p-4 transition shadow-sm"
+                >
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-slate-800 dark:text-white font-black">
+                                <span className="material-symbols-outlined">chat_bubble</span>
+                                채팅 열기
+                            </div>
+                            <div className="text-sm text-slate-500 dark:text-slate-300 mt-1 truncate">
+                                눌러서 AI 안전도우미와 대화하기
+                            </div>
+                        </div>
+                        <div className="shrink-0 size-11 rounded-2xl bg-yellow-400 text-black flex items-center justify-center shadow-sm">
+                            <span className="material-symbols-outlined">arrow_forward</span>
+                        </div>
+                    </div>
+
+                    {/* speech-bubble tail */}
+                    <span className="pointer-events-none absolute -bottom-2 right-10 size-4 rotate-45 bg-slate-100 dark:bg-slate-800" />
+                </button>
             </div>
 
-            {/* Suggestion Modal - Using Portal with delayed mounting to prevent race condition */}
-            {showModal && suggestion && typeof window !== 'undefined' && createPortal(
-                <div
-                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-                    onClick={() => setSuggestion(null)}
-                >
-                    <div
-                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+            {/* Suggestion Modal */}
+            {suggestion && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg">
                         <h3 className="text-xl font-bold mb-4 dark:text-white">{suggestion.title}</h3>
                         <div className="bg-slate-100 dark:bg-slate-900 p-4 rounded-xl font-mono text-sm overflow-auto max-h-[300px] mb-4 text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
                             {suggestion.text}
                         </div>
                         <div className="flex justify-end gap-2">
                             <button
-                                onClick={async () => {
-                                    try {
-                                        await navigator.clipboard.writeText(suggestion.text);
-                                        toast.success("클립보드에 복사되었습니다");
-                                    } catch (err) {
-                                        console.error("Copy failed:", err);
-                                        toast.error("복사에 실패했습니다");
-                                    }
-                                }}
-                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-slate-800 dark:text-white font-bold transition-colors"
+                                onClick={() => navigator.clipboard.writeText(suggestion.text)}
+                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-800 font-bold"
                             >
                                 복사하기
                             </button>
                             <button
                                 onClick={() => setSuggestion(null)}
-                                className="px-4 py-2 bg-primary hover:bg-green-600 text-white rounded-lg font-bold transition-colors"
+                                className="px-4 py-2 bg-primary text-white rounded-lg font-bold"
                             >
                                 닫기
                             </button>
                         </div>
                     </div>
-                </div>,
-                document.body
+                </div>
             )}
+
+            {/* Chat Modal */}
+            <ChatModal open={showChatModal} onClose={() => setShowChatModal(false)} />
         </div >
     );
 }
@@ -641,9 +486,6 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
 // Updated IssueCard to accept handlers
 function IssueCard({ issue, idx, onConfirm, onFix, isProcessing }: { issue: Issue; idx: number; onConfirm: () => void; onFix: () => void; isProcessing: boolean }) {
     const safeId = issue.id || `issue-${idx}`;
-    // Check if this issue requires human intervention (signatures, photos, etc.)
-    const isHumanOnly = issue.isAIFixable === false;
-
     return (
         <div
             key={safeId}
@@ -683,50 +525,28 @@ function IssueCard({ issue, idx, onConfirm, onFix, isProcessing }: { issue: Issu
 
                     <p className="text-[16px] leading-relaxed mb-4 whitespace-pre-line">{issue.message}</p>
 
-                    {/* Show different actions based on whether AI can fix this */}
-                    {isHumanOnly ? (
-                        // Human-only issue: Show only confirm button with explanation
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                                <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-lg">
-                                    person
-                                </span>
-                                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
-                                    이 문제는 담당자가 직접 수정해야 합니다 (서명, 사진 촬영 등)
-                                </p>
-                            </div>
-                            <button
-                                onClick={onConfirm}
-                                className="w-full py-3 bg-white border border-slate-300 hover:bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:bg-slate-600 text-slate-700 dark:text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
-                            >
-                                확인했어
-                            </button>
-                        </div>
-                    ) : (
-                        // AI-fixable issue: Show both confirm and fix buttons
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={onConfirm}
-                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:bg-slate-600 text-slate-700 dark:text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
-                            >
-                                확인했어
-                            </button>
-                            <button
-                                onClick={onFix}
-                                disabled={isProcessing}
-                                className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                            >
-                                {isProcessing ? (
-                                    <>
-                                        <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                        생성 중...
-                                    </>
-                                ) : (
-                                    "수정해줘"
-                                )}
-                            </button>
-                        </div>
-                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                        <button
+                            onClick={onConfirm}
+                            className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
+                        >
+                            확인했어
+                        </button>
+                        <button
+                            onClick={onFix}
+                            disabled={isProcessing}
+                            className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {isProcessing ? (
+                                <>
+                                    <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+                                    생성 중...
+                                </>
+                            ) : (
+                                "수정해줘"
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

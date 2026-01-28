@@ -106,7 +106,6 @@ export interface ValidationIssue {
   ruleId?: string; // Stage 2: Link to specific rule that triggered this issue
   confidence?: number; // Stage 4: Confidence score (0-100)
   score?: number; // Stage 4: Severity score
-  isAIFixable?: boolean; // Whether AI can suggest a fix (false for signatures, photos, physical inspections)
 }
 
 export type Issue = ValidationIssue & { id?: string };
@@ -658,23 +657,21 @@ export function validateDocument(data: DocData): ValidationIssue[] {
   }
 
   // 2. 결재/서명 검증
-  // 담당자 서명은 필수 (AI cannot fix - requires physical signature)
+  // 담당자 서명은 필수
   if (data.signature.담당 !== "present") {
     issues.push({
       severity: "error",
       title: "담당자 서명 누락",
       message: "담당자 결재란이 비어있거나 식별되지 않습니다.",
-      isAIFixable: false, // Human-only: requires physical signature
     });
   }
 
-  // 소장 서명은 경고(상황에 따라 다를 수 있으므로) (AI cannot fix)
+  // 소장 서명은 경고(상황에 따라 다를 수 있으므로)
   if (data.signature.소장 !== "present") {
     issues.push({
       severity: "warn",
       title: "관리책임자 서명 미비",
       message: "현장소장(관리책임자)의 서명이 확인되지 않았습니다.",
-      isAIFixable: false, // Human-only: requires physical signature
     });
   }
 
