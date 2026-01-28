@@ -360,31 +360,61 @@ export async function exportReportToPDF(data: ExportData) {
         </html>
     `;
 
-    // Create a temporary container (MUST be visible for html2canvas to work)
+    // Create overlay container for better UX
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '999999';
+    overlay.style.background = 'rgba(0, 0, 0, 0.8)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.flexDirection = 'column';
+    overlay.style.gap = '20px';
+
+    // Loading message
+    const loadingMsg = document.createElement('div');
+    loadingMsg.style.color = 'white';
+    loadingMsg.style.fontSize = '20px';
+    loadingMsg.style.fontWeight = 'bold';
+    loadingMsg.textContent = 'PDF 생성 중... 잠시만 기다려주세요';
+    overlay.appendChild(loadingMsg);
+
+    // Create the actual PDF content container
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlContent;
 
-    // CRITICAL: Make element visible but off-screen
-    // html2canvas CANNOT capture invisible elements (opacity: 0 fails)
-    tempDiv.style.position = 'fixed';
-    tempDiv.style.top = '0';
-    tempDiv.style.left = '0';
+    // CRITICAL: Element must be visible and properly rendered for html2canvas
+    tempDiv.style.position = 'relative'; // Normal flow
     tempDiv.style.width = '210mm'; // A4 width
+    tempDiv.style.maxWidth = '800px'; // Reasonable screen width
     tempDiv.style.height = 'auto';
-    tempDiv.style.zIndex = '99999'; // Bring to front temporarily for debugging
     tempDiv.style.background = 'white'; // Ensure white background
+    tempDiv.style.padding = '40px'; // Match body padding from HTML
     tempDiv.style.overflow = 'visible';
-    // DO NOT set opacity to 0 - html2canvas needs it visible!
+    tempDiv.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
+    tempDiv.style.maxHeight = '80vh'; // Don't overflow screen
+    tempDiv.style.overflowY = 'auto'; // Scrollable if needed
+
+    overlay.appendChild(tempDiv);
 
     console.log('[PDF Export] Created temp container, HTML length:', htmlContent.length);
-    console.log('[PDF Export] Appending to document body...');
-    alert('PDF EXPORT: Starting generation. Check console for details.');
+    console.log('[PDF Export] Appending overlay to document body...');
 
-    document.body.appendChild(tempDiv);
+    document.body.appendChild(overlay);
 
-    // DIAGNOSTIC CHECK 3: Wait longer for DOM to be ready and fonts to load
-    await new Promise(resolve => setTimeout(resolve, 500)); // Increased to 500ms
-    console.log('[PDF Export] DOM element rendered and ready');
+    // DIAGNOSTIC CHECK 3: Wait for DOM, fonts, and rendering
+    console.log('[PDF Export] Waiting for fonts and rendering...');
+
+    // Wait for fonts to load
+    if (document.fonts && document.fonts.ready) {
+        await document.fonts.ready;
+        console.log('[PDF Export] Fonts loaded');
+    }
+
+    // Additional wait for layout and painting
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Increased to 1.5 seconds
+    console.log('[PDF Export] DOM element fully rendered and ready');
 
     // FIX: Check if fileName already contains a date pattern (YYYY-MM-DD)
     const datePattern = /^\d{4}-\d{2}-\d{2}_/;
@@ -403,23 +433,37 @@ export async function exportReportToPDF(data: ExportData) {
         console.log('[PDF Export] Adding date prefix:', finalFilename);
     }
 
-    // PDF options
+    // PDF options - optimized for content capture
     const opt = {
         margin: [10, 10, 10, 10] as [number, number, number, number],
         filename: finalFilename,
-        image: { type: 'jpeg' as const, quality: 0.95 },
+        image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: {
-            scale: 2,
+            scale: 2, // High quality
             useCORS: true,
             letterRendering: true,
             logging: true, // ENABLE logging for debugging
-            windowWidth: 800, // Set explicit width
-            windowHeight: 1200 // Set explicit height
+            allowTaint: false,
+            backgroundColor: '#ffffff',
+            scrollY: 0,
+            scrollX: 0,
+            width: tempDiv.scrollWidth,
+            height: tempDiv.scrollHeight,
+            onclone: (clonedDoc: Document) => {
+                // Ensure cloned document has same styles
+                console.log('[PDF Export] Document cloned for rendering');
+                const clonedElement = clonedDoc.querySelector('div');
+                if (clonedElement) {
+                    (clonedElement as HTMLElement).style.maxHeight = 'none';
+                    (clonedElement as HTMLElement).style.overflow = 'visible';
+                }
+            }
         },
         jsPDF: {
             unit: 'mm' as const,
             format: 'a4' as const,
-            orientation: 'portrait' as const
+            orientation: 'portrait' as const,
+            compress: true
         },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] as any }
     };
@@ -453,18 +497,21 @@ export async function exportReportToPDF(data: ExportData) {
         URL.revokeObjectURL(url);
 
         console.log('[PDF Export] PDF download triggered successfully:', finalFilename);
-        alert(`PDF EXPORT: Success! File: ${finalFilename}, Size: ${pdfBlob.size} bytes`);
 
-        // Hide the element immediately (but don't remove yet)
-        tempDiv.style.display = 'none';
+        // Update loading message to show success
+        loadingMsg.textContent = `✓ PDF 생성 완료! (${Math.round(pdfBlob.size / 1024)}KB)`;
+        loadingMsg.style.color = '#22c55e';
 
-        // Clean up after ensuring PDF is saved (longer delay for safety)
+        // Show success alert with details
+        alert(`PDF EXPORT SUCCESS!\nFile: ${finalFilename}\nSize: ${pdfBlob.size} bytes (${Math.round(pdfBlob.size / 1024)}KB)`);
+
+        // Remove overlay after short delay
         setTimeout(() => {
-            if (document.body.contains(tempDiv)) {
-                document.body.removeChild(tempDiv);
-                console.log('[PDF Export] Temp container cleaned up');
+            if (document.body.contains(overlay)) {
+                document.body.removeChild(overlay);
+                console.log('[PDF Export] Overlay cleaned up');
             }
-        }, 1000); // Increased to 1000ms for safety
+        }, 1000);
     } catch (error: any) {
         // DIAGNOSTIC CHECK 5: Enhanced error logging
         console.error('[PDF Export] CRITICAL ERROR during PDF generation:');
@@ -473,11 +520,17 @@ export async function exportReportToPDF(data: ExportData) {
         console.error('[PDF Export] Error stack:', error.stack);
         console.error('[PDF Export] Full error object:', error);
 
+        // Update loading message to show error
+        loadingMsg.textContent = '❌ PDF 생성 실패';
+        loadingMsg.style.color = '#ef4444';
+
         // Clean up on error
-        if (document.body.contains(tempDiv)) {
-            document.body.removeChild(tempDiv);
-            console.log('[PDF Export] Temp container cleaned up after error');
-        }
+        setTimeout(() => {
+            if (document.body.contains(overlay)) {
+                document.body.removeChild(overlay);
+                console.log('[PDF Export] Overlay cleaned up after error');
+            }
+        }, 2000);
 
         // Re-throw with more context
         throw new Error(`PDF generation failed: ${error.message || 'Unknown error'}`);
