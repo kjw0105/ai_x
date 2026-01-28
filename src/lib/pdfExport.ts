@@ -360,34 +360,48 @@ export async function exportReportToPDF(data: ExportData) {
         </html>
     `;
 
-    // Create a temporary container (must be visible for html2canvas to work)
+    // Create a temporary container (MUST be visible for html2canvas to work)
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlContent;
+
+    // CRITICAL: Make element visible but off-screen
+    // html2canvas CANNOT capture invisible elements (opacity: 0 fails)
     tempDiv.style.position = 'fixed';
     tempDiv.style.top = '0';
     tempDiv.style.left = '0';
     tempDiv.style.width = '210mm'; // A4 width
-    tempDiv.style.zIndex = '-9999';
-    tempDiv.style.opacity = '0';
-    tempDiv.style.pointerEvents = 'none';
+    tempDiv.style.height = 'auto';
+    tempDiv.style.zIndex = '99999'; // Bring to front temporarily for debugging
+    tempDiv.style.background = 'white'; // Ensure white background
+    tempDiv.style.overflow = 'visible';
+    // DO NOT set opacity to 0 - html2canvas needs it visible!
 
     console.log('[PDF Export] Created temp container, HTML length:', htmlContent.length);
     console.log('[PDF Export] Appending to document body...');
+    alert('PDF EXPORT: Starting generation. Check console for details.');
 
     document.body.appendChild(tempDiv);
 
-    // DIAGNOSTIC CHECK 3: Wait for DOM to be ready and fonts to load
-    await new Promise(resolve => setTimeout(resolve, 100)); // Give browser time to paint
+    // DIAGNOSTIC CHECK 3: Wait longer for DOM to be ready and fonts to load
+    await new Promise(resolve => setTimeout(resolve, 500)); // Increased to 500ms
     console.log('[PDF Export] DOM element rendered and ready');
 
-    // Format date for filename: YYYY-MM-DD
-    const dateStr = data.createdAt.toISOString().split('T')[0]; // e.g., "2026-01-28"
+    // FIX: Check if fileName already contains a date pattern (YYYY-MM-DD)
+    const datePattern = /^\d{4}-\d{2}-\d{2}_/;
+    let finalFilename: string;
 
-    // Clean filename: remove extension and sanitize
-    const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
-
-    // Final filename format: YYYY-MM-DD_FileName_report.pdf
-    const finalFilename = `${dateStr}_${cleanFileName}_report.pdf`;
+    if (datePattern.test(data.fileName)) {
+        // FileName already has date, don't add it again
+        const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+        finalFilename = `${cleanFileName}_report.pdf`;
+        console.log('[PDF Export] Filename already has date, using:', finalFilename);
+    } else {
+        // Add date prefix
+        const dateStr = data.createdAt.toISOString().split('T')[0];
+        const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+        finalFilename = `${dateStr}_${cleanFileName}_report.pdf`;
+        console.log('[PDF Export] Adding date prefix:', finalFilename);
+    }
 
     // PDF options
     const opt = {
@@ -398,7 +412,9 @@ export async function exportReportToPDF(data: ExportData) {
             scale: 2,
             useCORS: true,
             letterRendering: true,
-            logging: false
+            logging: true, // ENABLE logging for debugging
+            windowWidth: 800, // Set explicit width
+            windowHeight: 1200 // Set explicit height
         },
         jsPDF: {
             unit: 'mm' as const,
@@ -437,6 +453,10 @@ export async function exportReportToPDF(data: ExportData) {
         URL.revokeObjectURL(url);
 
         console.log('[PDF Export] PDF download triggered successfully:', finalFilename);
+        alert(`PDF EXPORT: Success! File: ${finalFilename}, Size: ${pdfBlob.size} bytes`);
+
+        // Hide the element immediately (but don't remove yet)
+        tempDiv.style.display = 'none';
 
         // Clean up after ensuring PDF is saved (longer delay for safety)
         setTimeout(() => {
@@ -444,7 +464,7 @@ export async function exportReportToPDF(data: ExportData) {
                 document.body.removeChild(tempDiv);
                 console.log('[PDF Export] Temp container cleaned up');
             }
-        }, 500); // Increased from 100ms to 500ms
+        }, 1000); // Increased to 1000ms for safety
     } catch (error: any) {
         // DIAGNOSTIC CHECK 5: Enhanced error logging
         console.error('[PDF Export] CRITICAL ERROR during PDF generation:');

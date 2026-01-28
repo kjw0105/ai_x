@@ -129,6 +129,17 @@ export default function Page() {
   const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
   const [showTBMModal, setShowTBMModal] = useState(false);
 
+  // Progress tracking state
+  const [validationStep, setValidationStep] = useState(0);
+  const [showProgress, setShowProgress] = useState(false);
+
+  const validationSteps = [
+    { id: "extract", label: "텍스트 추출", icon: "description" },
+    { id: "analyze", label: "AI 분석", icon: "psychology" },
+    { id: "validate", label: "규칙 검증", icon: "task_alt" },
+    { id: "complete", label: "완료", icon: "check_circle" },
+  ];
+
   // Reset page when file changes
   useEffect(() => {
     setCurrentPage(0);
@@ -136,30 +147,32 @@ export default function Page() {
 
   // Project State
   const [projects, setProjects] = useState<any[]>([]); // Should use Project type
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("current_project_id");
-    }
-    return null;
-  });
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description: string } | null>(null);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
-  // Initialize welcome state from localStorage on client only to avoid hydration mismatch
-  const [showWelcome, setShowWelcome] = useState(() => {
-    if (typeof window !== "undefined") {
-      const showWelcomeState = localStorage.getItem("show_welcome");
-      // If explicitly set, use that value
-      if (showWelcomeState !== null) {
-        return showWelcomeState === "true";
-      }
-      // Otherwise, show welcome if no project exists
-      const hasProject = localStorage.getItem("current_project_id");
-      return !hasProject;
+
+  // Initialize welcome state - default to false to match server
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // HYDRATION FIX: Load localStorage state in useEffect
+  useEffect(() => {
+    // 1. Restore Project ID
+    const savedProjectId = localStorage.getItem("current_project_id");
+    if (savedProjectId) setCurrentProjectId(savedProjectId);
+
+    // 2. Restore Welcome Screen State
+    const dismissed = localStorage.getItem("welcome_dismissed");
+    const hasProject = localStorage.getItem("current_project_id"); // Checked again for logic consistency
+
+    // Show welcome if not dismissed AND no saved project
+    // Note: If project exists, we definitely don't show welcome (unless explicit override logic)
+    // If no project and not dismissed, show it.
+    if (dismissed !== "true" && !hasProject) {
+      setShowWelcome(true);
     }
-    return false; // Default to false on server to avoid hydration issues
-  });
+  }, []);
 
   useEffect(() => {
     fetchProjects();
@@ -584,12 +597,12 @@ export default function Page() {
 
   function dismissWelcome() {
     setShowWelcome(false);
-    localStorage.setItem("show_welcome", "false");
+    localStorage.setItem("welcome_dismissed", "true");
   }
 
   function showWelcomeScreen() {
     setShowWelcome(true);
-    localStorage.setItem("show_welcome", "true");
+    localStorage.setItem("welcome_dismissed", "false");
     // Clear current work when going back to welcome
     handleClearFile();
   }
@@ -708,35 +721,35 @@ export default function Page() {
         />
       ) : (
         <ResizableSplitLayout
-        left={
-          <DocumentViewer
-            file={file}
-            pageImages={pageImages}
-            reportIssues={report?.issues ?? []}
-            currentPage={currentPage}
-            onPageChange={setCurrentPage}
-            onPickFile={pickFileDialog}
-            onStartTBM={() => {
-              dismissWelcome();
-              setShowTBMModal(true);
-            }}
-            onClearFile={handleClearFile}
-            historicalFileName={historicalFileName}
-            documentType={report?.documentType}
-          />
-        }
-        right={
-          <AnalysisPanel
-            loading={loading}
-            issues={report?.issues ?? []}
-            chatMessages={report?.chat ?? []}
-            onReupload={pickFileDialog}
-            onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-            currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
-            currentFile={file}
-          />
-        }
-      />
+          left={
+            <DocumentViewer
+              file={file}
+              pageImages={pageImages}
+              reportIssues={report?.issues ?? []}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              onPickFile={pickFileDialog}
+              onStartTBM={() => {
+                dismissWelcome();
+                setShowTBMModal(true);
+              }}
+              onClearFile={handleClearFile}
+              historicalFileName={historicalFileName}
+              documentType={report?.documentType}
+            />
+          }
+          right={
+            <AnalysisPanel
+              loading={loading}
+              issues={report?.issues ?? []}
+              chatMessages={report?.chat ?? []}
+              onReupload={pickFileDialog}
+              onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
+              currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+              currentFile={file}
+            />
+          }
+        />
       )}
     </div>
   );
