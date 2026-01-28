@@ -9,6 +9,7 @@ import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
 import HistorySidebar from "@/components/HistorySidebar";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
+import TBMRecorderModal from "@/components/TBMRecorderModal";
 import { EditProjectModal } from "@/components/EditProjectModal";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
@@ -126,6 +127,8 @@ export default function Page() {
   const [showDocTypeSelector, setShowDocTypeSelector] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
+  const [showTBMModal, setShowTBMModal] = useState(false);
+  
 
   // Reset page when file changes
   useEffect(() => {
@@ -218,6 +221,12 @@ export default function Page() {
 
   function pickFileDialog() {
     fileInputRef.current?.click();
+  }
+
+  function startTBM() {
+    // TBM은 업로드 검증과 별개 흐름
+    dismissWelcome();
+    setShowTBMModal(true);
   }
 
   async function renderPdfPages(pdfFile: File) {
@@ -629,6 +638,29 @@ export default function Page() {
         onSelect={handleDocTypeSelect}
         onSkip={handleDocTypeSkip}
       />
+
+      <TBMRecorderModal
+        isOpen={showTBMModal}
+        projectId={currentProjectId}
+        onClose={() => setShowTBMModal(false)}
+        onComplete={(r) => {
+          // TBM은 파일 업로드가 아니라 별도 흐름이므로
+          // 분석 결과를 오른쪽 패널(채팅/요약)에 표시한다.
+          dismissWelcome();
+          setFile(null);
+          setPageImages([]);
+          setHistoricalFileName(undefined);
+          setReport({
+            fileName: "TBM(작업 전 대화)",
+            issues: [],
+            chat: [
+              { role: "ai", text: r.summary || "(요약 결과가 비어있어요)" },
+              ...(r.transcript ? [{ role: "ai", text: `\n\n[전사본]\n${r.transcript}` }] : []),
+            ],
+            documentType: "TBM",
+          });
+        }}
+      />
       <input
         ref={fileInputRef}
         type="file"
@@ -645,6 +677,10 @@ export default function Page() {
         loading={loading}
         reportExists={!!report}
         onUpload={pickFileDialog}
+        onStartTBM={() => {
+          dismissWelcome();
+          setShowTBMModal(true);
+        }}
         onShowHistory={() => setShowHistory(true)}
         onShowDashboard={() => setShowDashboard(true)}
         toggleDark={toggleDark}
@@ -681,6 +717,10 @@ export default function Page() {
             currentPage={currentPage}
             onPageChange={setCurrentPage}
             onPickFile={pickFileDialog}
+            onStartTBM={() => {
+              dismissWelcome();
+              setShowTBMModal(true);
+            }}
             onClearFile={handleClearFile}
             historicalFileName={historicalFileName}
             documentType={report?.documentType}
