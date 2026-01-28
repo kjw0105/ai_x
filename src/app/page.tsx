@@ -525,22 +525,38 @@ export default function Page() {
     loadState();
   }, []); // Run once on mount
 
-  // Auto-save effects
+  // Auto-save effects - also clear DB when values are cleared
   useEffect(() => {
-    if (file) set("current_file", file);
+    if (file) {
+      set("current_file", file);
+    } else {
+      del("current_file");
+    }
   }, [file]);
 
   useEffect(() => {
-    if (pageImages.length > 0) set("current_images", pageImages);
+    if (pageImages.length > 0) {
+      set("current_images", pageImages);
+    } else {
+      del("current_images");
+    }
   }, [pageImages]);
 
   useEffect(() => {
-    if (report) set("current_report", report);
+    if (report) {
+      set("current_report", report);
+    } else {
+      del("current_report");
+    }
   }, [report]);
 
   // Debounce page save slightly if needed, or just save (it's small)
   useEffect(() => {
-    set("current_page", currentPage);
+    if (currentPage > 0) {
+      set("current_page", currentPage);
+    } else {
+      del("current_page");
+    }
   }, [currentPage]);
 
 
