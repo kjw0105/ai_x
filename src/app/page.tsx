@@ -324,9 +324,23 @@ export default function Page() {
       });
 
       const data = (await res.json()) as Report;
+
+      // Handle validation errors (400) differently from server errors (500)
       if (!res.ok) {
-        // Handle error response structure from API
-        throw new Error((data as any).error || "Unknown server error");
+        if (res.status === 400) {
+          // Validation error: empty or non-safety document
+          // Show toast notification instead of rendering as issue
+          const errorMessage = (data as any).error || "문서 검증에 실패했습니다";
+          toast.error(errorMessage);
+
+          // Clear file and report state - don't show invalid document
+          setFile(null);
+          setReport(null);
+          return; // Exit early without showing error in UI
+        } else {
+          // Server error (500, 503, etc.) - still show as system error
+          throw new Error((data as any).error || "서버 오류가 발생했습니다");
+        }
       }
 
       // Step 4: Complete
@@ -347,18 +361,12 @@ export default function Page() {
       });
     } catch (e: any) {
       console.error(e);
-      setReport({
-        fileName: f.name,
-        issues: [
-          {
-            id: crypto.randomUUID(), // Ensure ID for fallback error too
-            severity: "error",
-            title: "검증 실패",
-            message: e?.message || "오류가 발생했습니다."
-          }
-        ],
-        chat: [{ role: "ai", text: `오류가 발생했어요: ${e?.message}` }]
-      });
+      // Only show system errors in the UI (not validation errors)
+      toast.error(e?.message || "문서 검증 중 오류가 발생했습니다");
+
+      // Clear file state for errors as well
+      setFile(null);
+      setReport(null);
     } finally {
       setLoading(false);
       setShowProgress(false);
@@ -367,6 +375,19 @@ export default function Page() {
 
   async function onPickFile(f: File) {
     dismissWelcome(); // Dismiss welcome screen when file is uploaded
+
+    // Client-side validation: Check if file has content before proceeding
+    if (f.size === 0) {
+      toast.error("빈 파일입니다. 내용이 있는 문서를 업로드해주세요");
+      return;
+    }
+
+    // For very small files (less than 100 bytes), likely empty or invalid
+    if (f.size < 100) {
+      toast.warning("파일이 너무 작습니다. 올바른 안전 점검 문서를 업로드해주세요");
+      return;
+    }
+
     setFile(f);
     setReport(null);
     setHistoricalFileName(undefined); // Clear historical flag
