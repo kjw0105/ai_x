@@ -51,8 +51,16 @@ export async function exportReportToPDF(data: ExportData) {
         projectName: data.projectName,
         issuesCount: data.issues.length,
         totalIssues: data.summary.totalIssues,
-        hasIssues: data.issues.length > 0
+        hasIssues: data.issues.length > 0,
+        criticalCount: data.summary.criticalCount,
+        warningCount: data.summary.warningCount,
+        infoCount: data.summary.infoCount
     });
+
+    // Log first few issues to verify they're being passed
+    if (data.issues.length > 0) {
+        console.log('[PDF Export] Sample issues:', data.issues.slice(0, 3));
+    }
 
     // DIAGNOSTIC CHECK 2: Validate data
     if (!data.fileName) {
@@ -76,6 +84,9 @@ export async function exportReportToPDF(data: ExportData) {
         <html>
         <head>
             <meta charset="UTF-8">
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap" rel="stylesheet">
             <style>
                 * {
                     margin: 0;
@@ -84,11 +95,12 @@ export async function exportReportToPDF(data: ExportData) {
                 }
 
                 body {
-                    font-family: 'Malgun Gothic', '맑은 고딕', Arial, sans-serif;
-                    line-height: 1.6;
+                    font-family: 'Nanum Myeongjo', 'Nanum Myeongjo', serif;
+                    line-height: 1.8;
                     color: #1e293b;
                     padding: 40px;
                     background: white;
+                    font-size: 14px;
                 }
 
                 .header {
@@ -388,13 +400,14 @@ export async function exportReportToPDF(data: ExportData) {
     tempDiv.style.position = 'relative'; // Normal flow
     tempDiv.style.width = '210mm'; // A4 width
     tempDiv.style.maxWidth = '800px'; // Reasonable screen width
-    tempDiv.style.height = 'auto';
+    tempDiv.style.minHeight = '100%'; // Ensure full height
+    tempDiv.style.height = 'auto'; // Auto height for all content
     tempDiv.style.background = 'white'; // Ensure white background
-    tempDiv.style.padding = '40px'; // Match body padding from HTML
-    tempDiv.style.overflow = 'visible';
+    tempDiv.style.padding = '0'; // Remove padding - HTML has its own
+    tempDiv.style.overflow = 'visible'; // CRITICAL: Must be visible for full capture
     tempDiv.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
-    tempDiv.style.maxHeight = '80vh'; // Don't overflow screen
-    tempDiv.style.overflowY = 'auto'; // Scrollable if needed
+    // REMOVED maxHeight constraint - this was cutting off content!
+    tempDiv.style.overflowY = 'visible'; // Changed from 'auto' to 'visible'
 
     overlay.appendChild(tempDiv);
 
@@ -406,15 +419,25 @@ export async function exportReportToPDF(data: ExportData) {
     // DIAGNOSTIC CHECK 3: Wait for DOM, fonts, and rendering
     console.log('[PDF Export] Waiting for fonts and rendering...');
 
-    // Wait for fonts to load
+    // Wait for fonts to load (including Google Fonts)
     if (document.fonts && document.fonts.ready) {
         await document.fonts.ready;
-        console.log('[PDF Export] Fonts loaded');
+        console.log('[PDF Export] System fonts loaded');
     }
 
-    // Additional wait for layout and painting
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Increased to 1.5 seconds
-    console.log('[PDF Export] DOM element fully rendered and ready');
+    // Additional wait for Google Fonts and layout painting
+    // Google Fonts need extra time to download and apply
+    await new Promise(resolve => setTimeout(resolve, 2500)); // Increased to 2.5 seconds for Google Fonts
+    console.log('[PDF Export] Google Fonts and layout fully rendered');
+
+    // Log actual dimensions being captured
+    console.log('[PDF Export] Element dimensions:', {
+        scrollWidth: tempDiv.scrollWidth,
+        scrollHeight: tempDiv.scrollHeight,
+        offsetWidth: tempDiv.offsetWidth,
+        offsetHeight: tempDiv.offsetHeight,
+        clientHeight: tempDiv.clientHeight
+    });
 
     // FIX: Check if fileName already contains a date pattern (YYYY-MM-DD)
     const datePattern = /^\d{4}-\d{2}-\d{2}_/;
@@ -437,25 +460,30 @@ export async function exportReportToPDF(data: ExportData) {
     const opt = {
         margin: [10, 10, 10, 10] as [number, number, number, number],
         filename: finalFilename,
-        image: { type: 'jpeg' as const, quality: 0.98 },
+        image: { type: 'png' as const, quality: 1.0 }, // PNG for sharper text
         html2canvas: {
-            scale: 2, // High quality
+            scale: 3, // Increased from 2 to 3 for much sharper text
             useCORS: true,
             letterRendering: true,
             logging: true, // ENABLE logging for debugging
             allowTaint: false,
             backgroundColor: '#ffffff',
-            scrollY: 0,
-            scrollX: 0,
+            scrollY: -window.scrollY, // Ensure we capture from top
+            scrollX: -window.scrollX,
+            windowWidth: tempDiv.scrollWidth,
+            windowHeight: tempDiv.scrollHeight,
             width: tempDiv.scrollWidth,
             height: tempDiv.scrollHeight,
             onclone: (clonedDoc: Document) => {
-                // Ensure cloned document has same styles
+                // Ensure cloned document has same styles and full height
                 console.log('[PDF Export] Document cloned for rendering');
-                const clonedElement = clonedDoc.querySelector('div');
+                const clonedElement = clonedDoc.body.querySelector('div');
                 if (clonedElement) {
                     (clonedElement as HTMLElement).style.maxHeight = 'none';
+                    (clonedElement as HTMLElement).style.height = 'auto';
                     (clonedElement as HTMLElement).style.overflow = 'visible';
+                    (clonedElement as HTMLElement).style.position = 'relative';
+                    console.log('[PDF Export] Cloned element height:', (clonedElement as HTMLElement).scrollHeight);
                 }
             }
         },
@@ -463,9 +491,13 @@ export async function exportReportToPDF(data: ExportData) {
             unit: 'mm' as const,
             format: 'a4' as const,
             orientation: 'portrait' as const,
-            compress: true
+            compress: false // Disable compression for better quality
         },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] as any }
+        pagebreak: {
+            mode: ['avoid-all', 'css', 'legacy'],
+            before: '.section', // Add page breaks before sections if needed
+            after: '.page-break'
+        }
     };
 
     // Generate PDF
