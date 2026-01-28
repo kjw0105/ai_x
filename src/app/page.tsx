@@ -275,6 +275,10 @@ export default function Page() {
     setShowProgress(true);
     setValidationStep(0);
 
+    // Track start time to ensure minimum display time for progress indicator
+    const startTime = Date.now();
+    const minDisplayTime = 800; // Minimum 800ms to make progress visible
+
     try {
       let text = "";
       let images: string[] = [];
@@ -327,7 +331,11 @@ export default function Page() {
 
       // Step 4: Complete
       setValidationStep(3);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show completion
+
+      // Ensure minimum display time for progress indicator
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
+      await new Promise(resolve => setTimeout(resolve, remainingTime + 500)); // Brief pause to show completion
 
       // Ensure IDs exist (client-side patch for legacy/migration)
       data.issues = data.issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));

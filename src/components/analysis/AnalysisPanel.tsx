@@ -114,8 +114,22 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
     const toast = useToast();
 
-    // Suggestion Modal State
+    // Suggestion Modal State - separate data and display state to prevent race condition
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
+    const [showModal, setShowModal] = useState(false);
+
+    // Use effect to delay modal mounting to prevent DOM race condition
+    useEffect(() => {
+        if (suggestion) {
+            // Small delay to ensure toast is rendered first and prevent race condition
+            const timer = setTimeout(() => {
+                setShowModal(true);
+            }, 100);
+            return () => clearTimeout(timer);
+        } else {
+            setShowModal(false);
+        }
+    }, [suggestion]);
 
     const reportExists = issues.length > 0 || chatMessages.length > 0;
 
@@ -232,8 +246,9 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             }
 
             if (data.suggestion) {
-                setSuggestion({ title: "AI 추천 수정안", text: data.suggestion });
+                // Show toast first, then set suggestion (modal will mount after delay via useEffect)
                 toast.success("AI 수정 제안이 생성되었습니다");
+                setSuggestion({ title: "AI 추천 수정안", text: data.suggestion });
             } else {
                 toast.warning("수정 제안을 생성할 수 없습니다");
             }
@@ -548,10 +563,10 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 </div>
             </div>
 
-            {/* Suggestion Modal - Using Portal to avoid DOM hierarchy issues */}
-            {suggestion && typeof window !== 'undefined' && createPortal(
+            {/* Suggestion Modal - Using Portal with delayed mounting to prevent race condition */}
+            {showModal && suggestion && typeof window !== 'undefined' && createPortal(
                 <div
-                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
                     onClick={() => setSuggestion(null)}
                 >
                     <div
