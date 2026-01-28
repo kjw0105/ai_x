@@ -163,7 +163,7 @@ async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null
 
 export async function POST(req: Request) {
   try {
-    const { provider, fileName, pdfText, pageImages, projectId } = await req.json();
+    const { provider, fileName, pdfText, pageImages, projectId, documentType } = await req.json();
 
     const p: Provider = (provider ?? "auto") as Provider;
 
@@ -251,6 +251,7 @@ export async function POST(req: Request) {
         docDataJson: JSON.stringify(extracted),
         issuesJson: JSON.stringify(validationIssues),
         projectId: projectId ?? null,
+        documentType: documentType ?? null,
         // Stage 4: Save inspector name and checklist for pattern analysis
         inspectorName: extracted.inspectorName ?? null,
         checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
@@ -285,7 +286,10 @@ export async function POST(req: Request) {
     }
 
     // Merge all issues: validation + structured + risk + pattern + cross-document analysis
-    const allIssues = [...validationIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues];
+    const allIssues = [...validationIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues].map(issue => ({
+      ...issue,
+      id: crypto.randomUUID()
+    }));
 
     // Stage 5: Risk Signals - Format output with non-judgmental language
     const riskSignals = allIssues

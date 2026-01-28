@@ -15,18 +15,22 @@ model Report {
   id        String   @id @default(uuid())
   fileName  String
   createdAt DateTime @default(now())
-  
+
   // Storing structured data as strings (JSON) to allow flexibility
   docDataJson String
   issuesJson  String
   chatJson    String?  // Optional chat history
-  
+
   score       Int?
-  
+
   // Stage 4: Pattern Analysis fields
   inspectorName String?  // Inspector name for pattern tracking
   checklistJson String?  // Extracted checklist items as JSON
-  
+
+  // Document categorization
+  documentType String?  // TBM, SAFETY_CHECKLIST, RISK_ASSESSMENT, PRE_WORK_CHECKLIST
+  tags         String?  // Comma-separated tags for additional categorization
+
   // Relation to Project context
   projectId   String?
   project     Project? @relation(fields: [projectId], references: [id])

@@ -103,71 +103,98 @@ interface AnalysisPanelProps {
     riskCalculation?: RiskCalculation; // Stage 3: Risk matrix data
 }
 
-// Issue Card Component
-function IssueCard({ issue, idx }: { issue: Issue; idx: number }) {
-    return (
-        <div
-            key={issue.id || idx}
-            className="chat-message flex gap-3"
-            style={{ animationDelay: `${0.2 + idx * 0.2}s` }}
-        >
-            <div className={`size-10 rounded-full flex items-center justify-center shrink-0 shadow-sm mt-1 ${avatarBgColor(issue.ruleId)}`}>
-                <span className={`material-symbols-outlined text-xl ${avatarColor(issue.ruleId)}`}>
-                    {severityIcon(issue.severity, issue.ruleId)}
-                </span>
-            </div>
-
-            <div className="flex flex-col gap-1 max-w-[85%]">
-                <div
-                    className={`bg-white dark:bg-surface-dark p-4 rounded-2xl rounded-tl-none shadow-sm border-l-4 ${severityBorder(
-                        issue.severity, issue.ruleId
-                    )} text-slate-800 dark:text-white`}
-                >
-                    <div className="flex items-center justify-between mb-2">
-                        <h4
-                            className={`font-black text-lg flex items-center gap-2 ${severityColor(
-                                issue.severity, issue.ruleId
-                            )}`}
-                        >
-                            <span className="material-symbols-outlined">
-                                {severityIcon(issue.severity, issue.ruleId)}
-                            </span>
-                            {issue.title}
-                        </h4>
-
-                        {issue.confidence !== undefined && (
-                            <span className="text-xs font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full text-slate-500">
-                                신뢰도 {issue.confidence}%
-                            </span>
-                        )}
-                    </div>
-
-                    <p className="text-[16px] leading-relaxed mb-4 whitespace-pre-line">{issue.message}</p>
-
-                    <div className="grid grid-cols-2 gap-2">
-                        <button className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm">
-                            확인했어
-                        </button>
-                        <button className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200">
-                            수정해줘
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile }: AnalysisPanelProps & { currentFile?: File | null }) {
+    const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
+    const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const [showRiskDetails, setShowRiskDetails] = useState(false);
+    const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
+
+    // Suggestion Modal State
+    const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
+
     const reportExists = issues.length > 0 || chatMessages.length > 0;
 
-    // Group issues by stage
-    const stage12Issues = issues.filter(i => getIssueStage(i.ruleId) === "stage1-2");
-    const stage3StructuredIssues = issues.filter(i => getIssueStage(i.ruleId) === "stage3-structured");
-    const stage3RiskIssues = issues.filter(i => getIssueStage(i.ruleId) === "stage3-risk");
-    const stage3CrossIssues = issues.filter(i => getIssueStage(i.ruleId) === "stage3-cross");
-    const stage4Issues = issues.filter(i => getIssueStage(i.ruleId) === "stage4");
+    // Filter hidden issues and by severity
+    const visibleIssues = issues.filter(i =>
+        !hiddenIssueIds.has(i.id) && severityFilters.has(i.severity)
+    );
+
+    const toggleSeverityFilter = (severity: string) => {
+        setSeverityFilters(prev => {
+            const next = new Set(prev);
+            if (next.has(severity)) {
+                next.delete(severity);
+            } else {
+                next.add(severity);
+            }
+            return next;
+        });
+    };
+
+    // Count issues by severity
+    const errorCount = issues.filter(i => i.severity === "error").length;
+    const warnCount = issues.filter(i => i.severity === "warn").length;
+    const infoCount = issues.filter(i => i.severity === "info").length;
+
+    const handleConfirm = (id: string) => {
+        setHiddenIssueIds(prev => {
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+        });
+    };
+
+    const handleFix = async (issue: Issue) => {
+        setProcessingIssueId(issue.id);
+        try {
+            let pdfText = "";
+            let fileData = null;
+            let fileType = "";
+
+            if (currentFile) {
+                fileType = currentFile.type;
+                if (fileType === "application/pdf") {
+                    fileData = await currentFile.arrayBuffer();
+                    // We need to send base64 or similar if we want to process it server side in this simple setup
+                    // For now let's just ask for text suggestion to keep it light unless we implement full upload
+                }
+            }
+
+            const res = await fetch("/api/fix", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    issue,
+                    fileType: "image/png", // forcing text suggestion for now to avoid massive payload issues
+                    pdfText: ""
+                })
+            });
+
+            const data = await res.json();
+            if (data.error) {
+                alert(`AI 수정 제안 실패: ${data.error}`);
+                return;
+            }
+
+            if (data.suggestion) {
+                setSuggestion({ title: "AI 추천 수정안", text: data.suggestion });
+            }
+        } catch (e: any) {
+            console.error(e);
+            alert("AI 수정 제안 시스템 오류");
+        } finally {
+            setProcessingIssueId(null);
+        }
+    };
+
+    // Group visible issues by stage
+    const stage12Issues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage1-2");
+    const stage3StructuredIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-structured");
+    const stage3RiskIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-risk");
+    const stage3CrossIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-cross");
+    const stage4Issues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage4");
+
+    // ... (Keep existing helpers and render logic, but pass handle functions to IssueCard)
 
     // Default welcome message if no chat
     const messages = chatMessages.length > 0 ? chatMessages : [
@@ -218,6 +245,49 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         </div>
                     </div>
                 </div>
+
+                {/* Severity Filter - Only show when there are issues */}
+                {reportExists && issues.length > 0 && (
+                    <div className="mt-4 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-200 dark:border-slate-700">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">필터:</span>
+                        <button
+                            onClick={() => toggleSeverityFilter("error")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("error")
+                                    ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">error</span>
+                            <span>심각 ({errorCount})</span>
+                        </button>
+                        <button
+                            onClick={() => toggleSeverityFilter("warn")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("warn")
+                                    ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">warning</span>
+                            <span>경고 ({warnCount})</span>
+                        </button>
+                        <button
+                            onClick={() => toggleSeverityFilter("info")}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                severityFilters.has("info")
+                                    ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-sm">info</span>
+                            <span>정보 ({infoCount})</span>
+                        </button>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">
+                            {visibleIssues.length} / {issues.length} 표시중
+                        </span>
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-slate-50 dark:bg-[#1a2233]">
@@ -240,7 +310,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </div>
                 ))}
 
-                {/* Risk Score Dashboard - Stage 3 */}
+                {/* Risk Dashboard */}
                 {riskCalculation && (
                     <div className="chat-message flex gap-3">
                         <div className="size-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0 shadow-sm mt-1">
@@ -262,23 +332,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                     </div>
                                 </div>
 
-                                {/* Risk Mismatch Warning */}
-                                {riskCalculation.inconsistency && riskCalculation.documentedRisk && (
-                                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
-                                        <div className="flex items-start gap-2">
-                                            <span className="material-symbols-outlined text-orange-600 text-xl">warning</span>
-                                            <div className="flex-1">
-                                                <p className="text-sm font-bold text-orange-800 mb-1">위험도 불일치 감지</p>
-                                                <p className="text-sm text-orange-700">
-                                                    문서 기록: <span className="font-bold">{riskLevelKo[riskCalculation.documentedRisk]}</span> vs
-                                                    계산 결과: <span className="font-bold">{riskLevelKo[riskCalculation.calculatedRisk]}</span>
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Risk Factors Breakdown */}
+                                {/* Risk Factors */}
                                 <button
                                     onClick={() => setShowRiskDetails(!showRiskDetails)}
                                     className="w-full flex items-center justify-between text-sm font-bold text-slate-600 hover:text-slate-800 py-2 border-t border-slate-200"
@@ -302,7 +356,6 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                                         <p className="text-sm font-medium text-slate-700">{factor.description}</p>
                                                         <span className="text-xs font-bold text-slate-500 ml-2">+{factor.impact}점</span>
                                                     </div>
-                                                    <p className="text-xs text-slate-500">{factor.category}</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -313,79 +366,39 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </div>
                 )}
 
-                {/* Stage 1-2: Format & Logic Validation */}
-                {stage12Issues.length > 0 && (
-                    <>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1 rounded-full border border-red-200">
-                                Stage 1-2: 형식 및 논리 검증
-                            </span>
+                {/* Render Issues by Stage */}
+                {[
+                    { title: "Stage 1-2: 형식 및 논리 검증", issues: stage12Issues, color: "text-red-500 bg-red-50 border-red-200" },
+                    { title: "Stage 3: 구조화된 계획 검증", issues: stage3StructuredIssues, color: "text-blue-600 bg-blue-50 border-blue-200" },
+                    { title: "Stage 3: 위험도 분석", issues: stage3RiskIssues, color: "text-purple-600 bg-purple-50 border-purple-200" },
+                    { title: "Stage 3: 문서 간 분석", issues: stage3CrossIssues, color: "text-cyan-600 bg-cyan-50 border-cyan-200" },
+                    { title: "Stage 4: 행동 패턴 분석", issues: stage4Issues, color: "text-purple-600 bg-purple-50 border-purple-200" },
+                ].map((group, idx) => (
+                    group.issues.length > 0 && (
+                        <div key={idx}>
+                            <div className="flex justify-center mb-4">
+                                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${group.color}`}>
+                                    {group.title}
+                                </span>
+                            </div>
+                            {group.issues.map((issue, i) => (
+                                <IssueCard
+                                    key={issue.id}
+                                    issue={issue}
+                                    idx={i}
+                                    onConfirm={() => handleConfirm(issue.id)}
+                                    onFix={() => handleFix(issue)}
+                                    isProcessing={processingIssueId === issue.id}
+                                />
+                            ))}
                         </div>
-                        {stage12Issues.map((issue, idx) => (
-                            <IssueCard key={issue.id || idx} issue={issue} idx={idx} />
-                        ))}
-                    </>
-                )}
-
-                {/* Stage 3: Structured Plan Validation */}
-                {stage3StructuredIssues.length > 0 && (
-                    <>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                                Stage 3: 구조화된 계획 검증
-                            </span>
-                        </div>
-                        {stage3StructuredIssues.map((issue, idx) => (
-                            <IssueCard key={issue.id || idx} issue={issue} idx={idx} />
-                        ))}
-                    </>
-                )}
-
-                {/* Stage 3: Risk Analysis */}
-                {stage3RiskIssues.length > 0 && (
-                    <>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1 rounded-full border border-purple-200">
-                                Stage 3: 위험도 분석
-                            </span>
-                        </div>
-                        {stage3RiskIssues.map((issue, idx) => (
-                            <IssueCard key={issue.id || idx} issue={issue} idx={idx} />
-                        ))}
-                    </>
-                )}
-
-                {/* Stage 3: Cross-Document Analysis */}
-                {stage3CrossIssues.length > 0 && (
-                    <>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-cyan-600 bg-cyan-50 px-3 py-1 rounded-full border border-cyan-200">
-                                Stage 3: 문서 간 분석
-                            </span>
-                        </div>
-                        {stage3CrossIssues.map((issue, idx) => (
-                            <IssueCard key={issue.id || idx} issue={issue} idx={idx} />
-                        ))}
-                    </>
-                )}
-
-                {/* Stage 4: Behavioral Patterns */}
-                {stage4Issues.length > 0 && (
-                    <>
-                        <div className="flex justify-center">
-                            <span className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1 rounded-full border border-purple-200">
-                                Stage 4: 행동 패턴 분석
-                            </span>
-                        </div>
-                        {stage4Issues.map((issue, idx) => (
-                            <IssueCard key={issue.id || idx} issue={issue} idx={idx} />
-                        ))}
-                    </>
-                )}
+                    )
+                ))}
 
                 <div className="h-4" />
             </div>
 
+            {/* Input Area */}
             <div className="p-6 bg-white dark:bg-surface-dark border-t border-slate-200 dark:border-slate-700">
                 <div className="grid grid-cols-2 gap-3 mb-4">
                     <button
@@ -408,7 +421,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 <div className="relative flex items-center gap-2">
                     <input
                         className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-full py-3 px-5 text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary"
-                        placeholder="메시지를 입력하세요..."
+                        placeholder="메시지를 입력하세요 (준비중)..."
                         type="text"
                         disabled
                     />
@@ -417,6 +430,102 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </button>
                 </div>
             </div>
+
+            {/* Suggestion Modal */}
+            {suggestion && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg">
+                        <h3 className="text-xl font-bold mb-4 dark:text-white">{suggestion.title}</h3>
+                        <div className="bg-slate-100 dark:bg-slate-900 p-4 rounded-xl font-mono text-sm overflow-auto max-h-[300px] mb-4 text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                            {suggestion.text}
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={() => navigator.clipboard.writeText(suggestion.text)}
+                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-800 font-bold"
+                            >
+                                복사하기
+                            </button>
+                            <button
+                                onClick={() => setSuggestion(null)}
+                                className="px-4 py-2 bg-primary text-white rounded-lg font-bold"
+                            >
+                                닫기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
+    );
+}
+
+// Updated IssueCard to accept handlers
+function IssueCard({ issue, idx, onConfirm, onFix, isProcessing }: { issue: Issue; idx: number; onConfirm: () => void; onFix: () => void; isProcessing: boolean }) {
+    const safeId = issue.id || `issue-${idx}`;
+    return (
+        <div
+            key={safeId}
+            className="chat-message flex gap-3 mb-4"
+            style={{ animationDelay: `${0.2 + idx * 0.2}s` }}
+        >
+            <div className={`size-10 rounded-full flex items-center justify-center shrink-0 shadow-sm mt-1 ${avatarBgColor(issue.ruleId)}`}>
+                <span className={`material-symbols-outlined text-xl ${avatarColor(issue.ruleId)}`}>
+                    {severityIcon(issue.severity, issue.ruleId)}
+                </span>
+            </div>
+
+            <div className="flex flex-col gap-1 max-w-[85%]">
+                <div
+                    className={`bg-white dark:bg-surface-dark p-4 rounded-2xl rounded-tl-none shadow-sm border-l-4 ${severityBorder(
+                        issue.severity, issue.ruleId
+                    )} text-slate-800 dark:text-white`}
+                >
+                    <div className="flex items-center justify-between mb-2">
+                        <h4
+                            className={`font-black text-lg flex items-center gap-2 ${severityColor(
+                                issue.severity, issue.ruleId
+                            )}`}
+                        >
+                            <span className="material-symbols-outlined">
+                                {severityIcon(issue.severity, issue.ruleId)}
+                            </span>
+                            {issue.title}
+                        </h4>
+
+                        {issue.confidence !== undefined && (
+                            <span className="text-xs font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full text-slate-500">
+                                신뢰도 {issue.confidence}%
+                            </span>
+                        )}
+                    </div>
+
+                    <p className="text-[16px] leading-relaxed mb-4 whitespace-pre-line">{issue.message}</p>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <button
+                            onClick={onConfirm}
+                            className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
+                        >
+                            확인했어
+                        </button>
+                        <button
+                            onClick={onFix}
+                            disabled={isProcessing}
+                            className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {isProcessing ? (
+                                <>
+                                    <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+                                    생성 중...
+                                </>
+                            ) : (
+                                "수정해줘"
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 }
