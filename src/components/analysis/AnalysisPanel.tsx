@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/contexts/ToastContext";
 import { ChatModal } from "../ChatModal";
+import { exportReportToPDF } from "@/lib/pdfExport";
 
 // Stage detection helper
 function getIssueStage(ruleId?: string): string {
@@ -104,9 +105,10 @@ interface AnalysisPanelProps {
     onModify: () => void;
     currentProjectName?: string;
     riskCalculation?: RiskCalculation; // Stage 3: Risk matrix data
+    historicalFileName?: string;
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile }: AnalysisPanelProps & { currentFile?: File | null }) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName }: AnalysisPanelProps & { currentFile?: File | null }) {
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
@@ -207,47 +209,43 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     };
 
     const handleExportPDF = async () => {
-        if (!currentFile) {
-            toast.warning("먼저 문서를 업로드하세요");
+        if (!currentFile && !historicalFileName) {
+            toast.warning("먼저 문서를 업로드하거나 기록을 선택하세요");
             return;
         }
 
         // DIAGNOSTIC: Log state before export
         console.log('[AnalysisPanel] Export PDF clicked');
-        console.log('[AnalysisPanel] Current file:', currentFile.name);
+        console.log('[AnalysisPanel] Current file:', currentFile?.name ?? historicalFileName);
         console.log('[AnalysisPanel] Issues count:', issues.length);
         console.log('[AnalysisPanel] Project name:', currentProjectName);
 
+        const exportData = {
+            fileName: currentFile?.name ?? historicalFileName ?? "report",
+            projectName: currentProjectName,
+            documentType: null, // Can be enhanced to track document type
+            createdAt: new Date().toISOString(), // Convert to ISO string for JSON
+            issues: issues.map(i => ({
+                severity: i.severity,
+                title: i.title,
+                message: i.message,
+                ruleId: i.ruleId,
+            })),
+            summary: {
+                totalIssues: issues.length,
+                criticalCount: issues.filter(i => i.severity === "error").length,
+                warningCount: issues.filter(i => i.severity === "warn").length,
+                infoCount: issues.filter(i => i.severity === "info").length,
+            },
+        };
+
         try {
-            const criticalCount = issues.filter(i => i.severity === "error").length;
-            const warningCount = issues.filter(i => i.severity === "warn").length;
-            const infoCount = issues.filter(i => i.severity === "info").length;
-
             console.log('[AnalysisPanel] Severity breakdown:', {
-                critical: criticalCount,
-                warning: warningCount,
-                info: infoCount,
-                total: issues.length
+                critical: exportData.summary.criticalCount,
+                warning: exportData.summary.warningCount,
+                info: exportData.summary.infoCount,
+                total: exportData.summary.totalIssues
             });
-
-            const exportData = {
-                fileName: currentFile.name,
-                projectName: currentProjectName,
-                documentType: null, // Can be enhanced to track document type
-                createdAt: new Date().toISOString(), // Convert to ISO string for JSON
-                issues: issues.map(i => ({
-                    severity: i.severity,
-                    title: i.title,
-                    message: i.message,
-                    ruleId: i.ruleId,
-                })),
-                summary: {
-                    totalIssues: issues.length,
-                    criticalCount,
-                    warningCount,
-                    infoCount,
-                },
-            };
 
             console.log('[AnalysisPanel] Prepared export data:', exportData);
             console.log('[AnalysisPanel] Calling backend API...');
@@ -292,7 +290,18 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         } catch (error: any) {
             console.error('[AnalysisPanel] PDF export failed:', error);
             console.error('[AnalysisPanel] Error message:', error.message);
-            toast.error(`PDF 생성에 실패했습니다: ${error.message || '알 수 없는 오류'}`);
+            toast.error(`PDF 생성에 실패했습니다. 브라우저에서 다시 시도합니다: ${error.message || '알 수 없는 오류'}`);
+
+            try {
+                await exportReportToPDF({
+                    ...exportData,
+                    createdAt: new Date(exportData.createdAt),
+                });
+                toast.success("브라우저에서 PDF를 생성했습니다");
+            } catch (fallbackError: any) {
+                console.error('[AnalysisPanel] Client-side PDF export failed:', fallbackError);
+                toast.error(`브라우저 PDF 생성도 실패했습니다: ${fallbackError.message || '알 수 없는 오류'}`);
+            }
         }
     };
 
@@ -355,7 +364,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </div>
 
                     {/* PDF Export Button */}
-                    {reportExists && currentFile && (
+                    {reportExists && (currentFile || historicalFileName) && (
                         <button
                             onClick={handleExportPDF}
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-bold rounded-lg transition-colors shadow-lg"

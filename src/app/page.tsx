@@ -17,6 +17,7 @@ import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixi
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
+import { exportReportToPDF } from "@/lib/pdfExport";
 
 // Type Definitions (Re-using some from validator or defining locally for now if implicit)
 // In validator.ts we have type Severity? Checking previous read..
@@ -563,6 +564,117 @@ export default function Page() {
     }
   }
 
+  async function exportReportFromHistory(id: string) {
+    setLoading(true);
+    dismissWelcome();
+    let exportData: {
+      fileName: string;
+      projectName?: string;
+      documentType?: string | null;
+      createdAt: string;
+      issues: Array<{
+        severity: string;
+        title: string;
+        message: string;
+        ruleId?: string;
+      }>;
+      summary: {
+        totalIssues: number;
+        criticalCount: number;
+        warningCount: number;
+        infoCount: number;
+      };
+    } | null = null;
+    try {
+      const res = await fetch(`/api/history?id=${id}`);
+      if (!res.ok) throw new Error("Failed to load report");
+      const data = await res.json();
+
+      let issues = JSON.parse(data.issuesJson);
+      issues = issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
+
+      exportData = {
+        fileName: data.fileName,
+        projectName: projects.find(p => p.id === currentProjectId)?.name,
+        documentType: data.documentType ?? null,
+        createdAt: new Date(data.createdAt).toISOString(),
+        issues: issues.map((i: any) => ({
+          severity: i.severity,
+          title: i.title,
+          message: i.message,
+          ruleId: i.ruleId,
+        })),
+        summary: {
+          totalIssues: issues.length,
+          criticalCount: issues.filter((i: any) => i.severity === "error").length,
+          warningCount: issues.filter((i: any) => i.severity === "warn").length,
+          infoCount: issues.filter((i: any) => i.severity === "info").length,
+        },
+      };
+
+      const response = await fetch("/api/export-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(exportData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "report.pdf";
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=["']?([^"';\n]*)["']?/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = decodeURIComponent(filenameMatch[1]);
+        }
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("PDF 리포트를 다시 다운로드했습니다");
+    } catch (error: any) {
+      try {
+        if (!exportData) {
+          throw error;
+        }
+        await exportReportToPDF({
+          fileName: exportData.fileName,
+          projectName: exportData.projectName,
+          documentType: exportData.documentType ?? null,
+          createdAt: new Date(exportData.createdAt),
+          issues: exportData.issues.map(i => ({
+            severity: i.severity,
+            title: i.title,
+            message: i.message,
+            ruleId: i.ruleId,
+          })),
+          summary: {
+            totalIssues: exportData.summary.totalIssues,
+            criticalCount: exportData.summary.criticalCount,
+            warningCount: exportData.summary.warningCount,
+            infoCount: exportData.summary.infoCount,
+          },
+        });
+        toast.success("브라우저에서 PDF를 생성했습니다");
+      } catch (fallbackError: any) {
+        toast.error(`PDF 재내보내기에 실패했습니다: ${fallbackError.message || "알 수 없는 오류"}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleCreateProject({ name, description, file }: { name: string; description: string; file: File | null }) {
     try {
       let contextText = "";
@@ -856,6 +968,7 @@ export default function Page() {
         isOpen={showHistory}
         onClose={() => setShowHistory(false)}
         onSelectReport={loadReportFromHistory}
+        onExportReport={exportReportFromHistory}
       />
 
       {showWelcome && !file ? (
@@ -867,6 +980,7 @@ export default function Page() {
         />
       ) : (
         <ResizableSplitLayout
+          initialLeftWidthPercent={70}
           left={
             <DocumentViewer
               file={file}
@@ -893,6 +1007,7 @@ export default function Page() {
               onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
               currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
               currentFile={file}
+              historicalFileName={historicalFileName}
             />
           }
         />

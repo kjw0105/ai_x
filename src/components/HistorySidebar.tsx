@@ -19,9 +19,10 @@ interface HistorySidebarProps {
     isOpen: boolean;
     onClose: () => void;
     onSelectReport: (id: string) => void;
+    onExportReport: (id: string) => void;
 }
 
-export default function HistorySidebar({ isOpen, onClose, onSelectReport }: HistorySidebarProps) {
+export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExportReport }: HistorySidebarProps) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string | null; fileName?: string } | null>(null);
@@ -87,16 +88,28 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                             </div>
                         </div>
 
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm({ id: item.id, fileName: item.fileName });
-                            }}
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full opacity-0 group-hover:opacity-100 transition-all"
-                            title="삭제"
-                        >
-                            <span className="material-symbols-outlined text-lg">delete</span>
-                        </button>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onExportReport(item.id);
+                                }}
+                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-full"
+                                title="PDF 다시 내보내기"
+                            >
+                                <span className="material-symbols-outlined text-lg">download</span>
+                            </button>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteConfirm({ id: item.id, fileName: item.fileName });
+                                }}
+                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full"
+                                title="삭제"
+                            >
+                                <span className="material-symbols-outlined text-lg">delete</span>
+                            </button>
+                        </div>
                     </div>
                 ))}
             </div>
