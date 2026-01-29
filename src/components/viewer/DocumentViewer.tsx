@@ -4,6 +4,7 @@ import { Issue } from "@/lib/validator";
 import { RefObject } from "react";
 import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
 import { EmptyDocumentState } from "@/components/EmptyDocumentState";
+import { RecentDocuments } from "@/components/RecentDocuments";
 
 interface DocumentViewerProps {
     file: File | null;
@@ -17,6 +18,9 @@ interface DocumentViewerProps {
     onClearFile?: () => void;
     historicalFileName?: string; // When viewing history without file
     documentType?: string | null; // Document type for badge
+    currentProjectId?: string | null;
+    currentReportId?: string;
+    onLoadDocument?: (id: string) => void;
 }
 export default function DocumentViewer({
     file,
@@ -29,7 +33,10 @@ export default function DocumentViewer({
     onStartTBM,
     onClearFile,
     historicalFileName,
-    documentType
+    documentType,
+    currentProjectId,
+    currentReportId,
+    onLoadDocument
 }: DocumentViewerProps) {
     const issueCount = reportIssues.length;
     // Local state removed, using props
@@ -102,6 +109,15 @@ export default function DocumentViewer({
                 )}
             </div>
 
+            {onLoadDocument && (
+                <RecentDocuments
+                    currentProjectId={currentProjectId ?? null}
+                    currentReportId={currentReportId}
+                    onSelectDocument={onLoadDocument}
+                    maxItems={4}
+                />
+            )}
+
             <div className="flex-1 overflow-auto p-8 flex justify-center items-start bg-slate-300/30">
                 {!file && !historicalFileName && (
                     <EmptyDocumentState
@@ -164,6 +180,7 @@ export default function DocumentViewer({
                                 </>
                             )}
 
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={pageImages[currentPage]}
                                 alt={`Page ${currentPage + 1}`}

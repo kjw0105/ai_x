@@ -6,6 +6,9 @@ import Header from "@/components/Header";
 import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
 import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
+import { ThreeColumnLayout } from "@/components/layout/ThreeColumnLayout";
+import { IssuesList } from "@/components/IssuesList";
+import { ChatPanel } from "@/components/ChatPanel";
 import HistorySidebar from "@/components/HistorySidebar";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
@@ -13,6 +16,7 @@ import TBMRecorderModal from "@/components/TBMRecorderModal";
 import { EditProjectModal } from "@/components/EditProjectModal";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { ProgressBar } from "@/components/ProgressBar";
+import { TempMasterDocModal } from "@/components/TempMasterDocModal";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
@@ -141,10 +145,15 @@ export default function Page() {
   const [showDashboard, setShowDashboard] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [historicalFileName, setHistoricalFileName] = useState<string | undefined>(undefined);
+  const [currentReportId, setCurrentReportId] = useState<string | undefined>(undefined);
   const [showDocTypeSelector, setShowDocTypeSelector] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
   const [showTBMModal, setShowTBMModal] = useState(false);
+
+  // Temporary master doc state (for non-project validation)
+  const [tempMasterDoc, setTempMasterDoc] = useState<{ text: string; fileName: string } | null>(null);
+  const [showTempMasterModal, setShowTempMasterModal] = useState(false);
 
   // Progress tracking state
   const [validationStep, setValidationStep] = useState(0);
@@ -182,8 +191,8 @@ export default function Page() {
   // Track data loading states (not blocking, just for UI feedback)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
-  // Welcome screen state - non-blocking, just shows in viewer area
-  const [showWelcome, setShowWelcome] = useState(false);
+  // Welcome screen state - always show on app load as entry point
+  const [showWelcome, setShowWelcome] = useState(true);
 
   // HYDRATION FIX: Load localStorage state in useEffect
   useEffect(() => {
@@ -191,7 +200,18 @@ export default function Page() {
     const savedProjectId = localStorage.getItem("current_project_id");
     if (savedProjectId) setCurrentProjectId(savedProjectId);
 
-    // 2. Auto-load last report (Option B - analysis only, like history sidebar)
+    // 2. Load temporary master doc from IndexedDB
+    async function loadTempMasterDoc() {
+      try {
+        const saved = await get("temp_master_doc");
+        if (saved) setTempMasterDoc(saved);
+      } catch (e) {
+        console.error("Failed to load temp master doc", e);
+      }
+    }
+    loadTempMasterDoc();
+
+    // 3. Auto-load last report (Option B - analysis only, like history sidebar)
     async function autoLoadLastReport() {
       try {
         const res = await fetch("/api/history");
@@ -213,8 +233,9 @@ export default function Page() {
     // Start loading projects (non-blocking)
     fetchProjects();
 
-    // Auto-load last report (non-blocking)
-    autoLoadLastReport();
+    // Note: Auto-load last report removed - welcome screen is now the entry point
+    // Users can manually load from history if needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refetch projects when selector key changes
@@ -222,15 +243,21 @@ export default function Page() {
     fetchProjects();
   }, [projectSelectorKey]);
 
-  // Persist currentProjectId
+  // Persist currentProjectId and clear temp master doc when switching to a project
   useEffect(() => {
     if (typeof window !== "undefined") {
       if (currentProjectId) {
         localStorage.setItem("current_project_id", currentProjectId);
+        // Clear temp master doc when switching to a project
+        if (tempMasterDoc) {
+          setTempMasterDoc(null);
+          del("temp_master_doc");
+        }
       } else {
         localStorage.removeItem("current_project_id");
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProjectId]);
 
   // PERFORMANCE: Preload PDF font on app startup
@@ -436,7 +463,8 @@ export default function Page() {
           pdfText: text,
           pageImages: imagesToSend,
           projectId: currentProjectId, // Pass context
-          documentType: documentType // Pass document type
+          documentType: documentType, // Pass document type
+          tempContextText: !currentProjectId && tempMasterDoc ? tempMasterDoc.text : undefined // Pass temp master doc if no project
         }),
         signal // Pass AbortSignal to fetch
       });
@@ -591,7 +619,7 @@ export default function Page() {
       setFile(null);
       setPageImages([]);
       setHistoricalFileName(data.fileName);
-      toast.success("검증 기록을 불러왔습니다");
+      setCurrentReportId(id); // Track which report is currently loaded
     } catch (e) {
       toast.error("기록을 불러오는 데 실패했습니다");
     } finally {
@@ -738,7 +766,7 @@ export default function Page() {
       // Ensure welcome screen is dismissed
       dismissWelcome();
 
-      toast.success(`프로젝트 "${name}"이(가) 생성되었습니다. 이제 검증할 문서를 업로드하세요.`);
+      // No toast needed - user is redirected and sees the project selected
     } catch (error) {
       toast.error("프로젝트 생성에 실패했습니다");
       throw error;
@@ -807,60 +835,165 @@ export default function Page() {
     setIsEditProjectModalOpen(true);
   }
 
-  // --- Persistence Logic ---
-  useEffect(() => {
-    // Load state from DB on mount
-    async function loadState() {
-      try {
-        const savedFile = await get("current_file");
-        const savedImages = await get("current_images");
-        const savedReport = await get("current_report");
-        const savedPage = await get("current_page");
+  // Temporary Master Doc functions
+  async function handleUploadTempMasterDoc(file: File) {
+    try {
+      const controller = new AbortController();
+      const text = await extractPdfText(file, controller.signal);
 
-        if (savedFile) setFile(savedFile);
-        if (savedImages) setPageImages(savedImages);
-        if (savedReport) setReport(savedReport);
-        if (savedPage) setCurrentPage(savedPage);
-      } catch (e) {
-        console.error("Failed to load state", e);
-      }
+      const tempDoc = { text, fileName: file.name };
+      setTempMasterDoc(tempDoc);
+      await set("temp_master_doc", tempDoc);
+
+      toast.success(`임시 마스터 문서 "${file.name}"이(가) 업로드되었습니다`);
+      setShowTempMasterModal(false);
+    } catch (error) {
+      console.error("Failed to upload temp master doc", error);
+      toast.error("임시 마스터 문서 업로드에 실패했습니다");
     }
-    loadState();
-  }, []); // Run once on mount
+  }
 
-  // Auto-save effects - also clear DB when values are cleared
+  async function handleClearTempMasterDoc() {
+    setTempMasterDoc(null);
+    await del("temp_master_doc");
+    toast.success("임시 마스터 문서가 삭제되었습니다");
+  }
+
+  // --- Project-Aware Persistence Logic ---
+  // Helper to get project-specific keys
+  function getProjectKey(key: string) {
+    return currentProjectId ? `project_${currentProjectId}_${key}` : `no_project_${key}`;
+  }
+
+  // Save current document state when switching projects
+  async function saveCurrentProjectState() {
+    try {
+      if (file) await set(getProjectKey("file"), file);
+      else await del(getProjectKey("file"));
+
+      if (pageImages.length > 0) await set(getProjectKey("images"), pageImages);
+      else await del(getProjectKey("images"));
+
+      if (report) await set(getProjectKey("report"), report);
+      else await del(getProjectKey("report"));
+
+      if (currentPage > 0) await set(getProjectKey("page"), currentPage);
+      else await del(getProjectKey("page"));
+    } catch (e) {
+      console.error("Failed to save project state", e);
+    }
+  }
+
+  // Load document state for current project
+  async function loadCurrentProjectState() {
+    try {
+      const savedFile = await get(getProjectKey("file"));
+      const savedImages = await get(getProjectKey("images"));
+      const savedReport = await get(getProjectKey("report"));
+      const savedPage = await get(getProjectKey("page"));
+
+      // If there's saved state, load it
+      if (savedFile || savedReport) {
+        setFile(savedFile || null);
+        setPageImages(savedImages || []);
+        setReport(savedReport || null);
+        setCurrentPage(savedPage || 0);
+        setHistoricalFileName(undefined);
+        setCurrentReportId(undefined); // Clear report ID since this is local state
+      } else {
+        // No saved state - check if project has history and auto-load most recent
+        // Only do this if we're not showing the welcome screen
+        if (!showWelcome && currentProjectId) {
+          try {
+            const url = `/api/history?projectId=${currentProjectId}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+              const history = await res.json();
+              if (Array.isArray(history) && history.length > 0) {
+                // Auto-load the most recent report for this project
+                await loadReportFromHistory(history[0].id);
+              } else {
+                // No history - clear state
+                clearDocumentState();
+              }
+            } else {
+              // API error - clear state
+              clearDocumentState();
+            }
+          } catch (e) {
+            if ((e as any)?.name !== 'AbortError') {
+              console.error("Failed to auto-load history", e);
+            }
+            // Clear state on error
+            clearDocumentState();
+          }
+        } else {
+          // Welcome screen is showing or no project - just clear state
+          clearDocumentState();
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load project state", e);
+      clearDocumentState();
+    }
+  }
+
+  function clearDocumentState() {
+    setFile(null);
+    setPageImages([]);
+    setReport(null);
+    setCurrentPage(0);
+    setHistoricalFileName(undefined);
+    setCurrentReportId(undefined);
+  }
+
+  // Load state for current project when projectId changes or welcome is dismissed
+  useEffect(() => {
+    loadCurrentProjectState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId, showWelcome]);
+
+  // Auto-save effects - save to project-specific keys
   useEffect(() => {
     if (file) {
-      set("current_file", file);
+      set(getProjectKey("file"), file);
     } else {
-      del("current_file");
+      del(getProjectKey("file"));
     }
-  }, [file]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, currentProjectId]);
 
   useEffect(() => {
     if (pageImages.length > 0) {
-      set("current_images", pageImages);
+      set(getProjectKey("images"), pageImages);
     } else {
-      del("current_images");
+      del(getProjectKey("images"));
     }
-  }, [pageImages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageImages, currentProjectId]);
 
   useEffect(() => {
     if (report) {
-      set("current_report", report);
+      set(getProjectKey("report"), report);
     } else {
-      del("current_report");
+      del(getProjectKey("report"));
     }
-  }, [report]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report, currentProjectId]);
 
-  // Debounce page save slightly if needed, or just save (it's small)
   useEffect(() => {
     if (currentPage > 0) {
-      set("current_page", currentPage);
+      set(getProjectKey("page"), currentPage);
     } else {
-      del("current_page");
+      del(getProjectKey("page"));
     }
-  }, [currentPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, currentProjectId]);
 
 
   function handleClearFile() {
@@ -869,12 +1002,13 @@ export default function Page() {
     setReport(null);
     setCurrentPage(0);
     setHistoricalFileName(undefined);
+    setCurrentReportId(undefined);
 
-    // Clear DB
-    del("current_file");
-    del("current_images");
-    del("current_report");
-    del("current_page");
+    // Clear DB for current project
+    del(getProjectKey("file"));
+    del(getProjectKey("images"));
+    del(getProjectKey("report"));
+    del(getProjectKey("page"));
   }
 
   function dismissWelcome() {
@@ -917,6 +1051,13 @@ export default function Page() {
           setEditingProject(null);
         }}
         onUpdate={handleUpdateProject}
+      />
+      <TempMasterDocModal
+        isOpen={showTempMasterModal}
+        onClose={() => setShowTempMasterModal(false)}
+        onUpload={handleUploadTempMasterDoc}
+        currentDoc={tempMasterDoc}
+        onClear={handleClearTempMasterDoc}
       />
       <ProjectDashboard
         isOpen={showDashboard}
@@ -985,6 +1126,8 @@ export default function Page() {
         onEditProject={handleOpenEditProject}
         onShowWelcome={showWelcomeScreen}
         currentFileName={file?.name}
+        hasTempMasterDoc={!!tempMasterDoc}
+        onOpenTempMasterDoc={() => setShowTempMasterModal(true)}
       />
 
       {/* Progress Modal */}
@@ -1004,6 +1147,7 @@ export default function Page() {
         onClose={() => setShowHistory(false)}
         onSelectReport={loadReportFromHistory}
         onExportReport={exportReportFromHistory}
+        currentProjectId={currentProjectId}
       />
 
       {showWelcome ? (
@@ -1015,39 +1159,76 @@ export default function Page() {
           onProceedWithoutProject={handleWelcomeProceedWithoutProject}
         />
       ) : (
-        <ResizableSplitLayout
-          initialLeftWidthPercent={70}
-          left={
-            <DocumentViewer
-              file={file}
-              pageImages={pageImages}
-              reportIssues={report?.issues ?? []}
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-              onPickFile={pickFileDialog}
-              onFileSelect={onPickFile}
-              onStartTBM={() => {
-                dismissWelcome();
-                setShowTBMModal(true);
-              }}
-              onClearFile={handleClearFile}
-              historicalFileName={historicalFileName}
-              documentType={report?.documentType}
+        <>
+          {/* Desktop: Three-Column Layout */}
+          <div className="hidden lg:flex flex-1 overflow-hidden">
+            <ThreeColumnLayout
+              left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
+              center={
+                <DocumentViewer
+                  file={file}
+                  pageImages={pageImages}
+                  reportIssues={report?.issues ?? []}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onPickFile={pickFileDialog}
+                  onFileSelect={onPickFile}
+                  onStartTBM={() => {
+                    dismissWelcome();
+                    setShowTBMModal(true);
+                  }}
+                  onClearFile={handleClearFile}
+                  historicalFileName={historicalFileName}
+                  documentType={report?.documentType}
+                  currentProjectId={currentProjectId}
+                  currentReportId={currentReportId}
+                  onLoadDocument={loadReportFromHistory}
+                />
+              }
+              right={<ChatPanel messages={report?.chat ?? []} loading={loading} />}
             />
-          }
-          right={
-            <AnalysisPanel
-              loading={loading}
-              issues={report?.issues ?? []}
-              chatMessages={report?.chat ?? []}
-              onReupload={pickFileDialog}
-              onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-              currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
-              currentFile={file}
-              historicalFileName={historicalFileName}
+          </div>
+
+          {/* Mobile/Tablet: Resizable Two-Column Layout */}
+          <div className="flex lg:hidden flex-1 overflow-hidden">
+            <ResizableSplitLayout
+              initialLeftWidthPercent={70}
+              left={
+                <DocumentViewer
+                  file={file}
+                  pageImages={pageImages}
+                  reportIssues={report?.issues ?? []}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onPickFile={pickFileDialog}
+                  onFileSelect={onPickFile}
+                  onStartTBM={() => {
+                    dismissWelcome();
+                    setShowTBMModal(true);
+                  }}
+                  onClearFile={handleClearFile}
+                  historicalFileName={historicalFileName}
+                  documentType={report?.documentType}
+                  currentProjectId={currentProjectId}
+                  currentReportId={currentReportId}
+                  onLoadDocument={loadReportFromHistory}
+                />
+              }
+              right={
+                <AnalysisPanel
+                  loading={loading}
+                  issues={report?.issues ?? []}
+                  chatMessages={report?.chat ?? []}
+                  onReupload={pickFileDialog}
+                  onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
+                  currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+                  currentFile={file}
+                  historicalFileName={historicalFileName}
+                />
+              }
             />
-          }
-        />
+          </div>
+        </>
       )}
     </div>
   );

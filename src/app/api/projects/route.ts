@@ -15,10 +15,7 @@ export async function GET() {
                 name: true,
                 description: true,
                 createdAt: true,
-                // Don't return the huge contextText by default unless needed, to save bandwidth
-                // But for simplicity/small scale, returning it is fine? 
-                // Let's exclude it for list view if it gets huge.
-                // Actually Prisma select makes this easy.
+                contextText: true, // Include to show indicator if master doc exists
             }
         });
         return NextResponse.json(projects);

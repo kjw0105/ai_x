@@ -19,9 +19,12 @@ export async function GET(req: Request) {
             return NextResponse.json(report);
         }
 
-        // Fetch list (top 20)
+        // Fetch list (top 100, filtered by project if specified)
+        const projectId = searchParams.get("projectId");
+
         const reports = await prisma.report.findMany({
-            take: 20,
+            where: projectId ? { projectId } : undefined,
+            take: 100,
             orderBy: { createdAt: "desc" }
         });
 
