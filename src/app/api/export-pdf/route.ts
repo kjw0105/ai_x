@@ -49,6 +49,20 @@ function getSeverityBgColor(severity: string): string {
     return map[severity] || "#f1f5f9";
 }
 
+/**
+ * Escapes HTML special characters to prevent injection attacks.
+ * Prevents SSRF, XSS, and local file disclosure during PDF generation.
+ */
+function escapeHtml(unsafe: string | undefined | null): string {
+    if (!unsafe) return '';
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 function buildHTMLContent(data: ExportData): string {
     const createdAt = new Date(data.createdAt);
 
@@ -254,18 +268,18 @@ function buildHTMLContent(data: ExportData): string {
             <div class="info-box">
                 <div class="info-row">
                     <div class="info-label">파일명</div>
-                    <div class="info-value">${data.fileName}</div>
+                    <div class="info-value">${escapeHtml(data.fileName)}</div>
                 </div>
                 ${data.projectName ? `
                 <div class="info-row">
                     <div class="info-label">프로젝트</div>
-                    <div class="info-value">${data.projectName}</div>
+                    <div class="info-value">${escapeHtml(data.projectName)}</div>
                 </div>
                 ` : ''}
                 ${data.documentType ? `
                 <div class="info-row">
                     <div class="info-label">문서 유형</div>
-                    <div class="info-value">${data.documentType}</div>
+                    <div class="info-value">${escapeHtml(data.documentType)}</div>
                 </div>
                 ` : ''}
                 <div class="info-row">
@@ -327,8 +341,8 @@ function buildHTMLContent(data: ExportData): string {
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="issue-title">${issue.title}</div>
-                                        <div class="issue-message">${issue.message}</div>
+                                        <div class="issue-title">${escapeHtml(issue.title)}</div>
+                                        <div class="issue-message">${escapeHtml(issue.message)}</div>
                                     </td>
                                 </tr>
                             `).join('')}
