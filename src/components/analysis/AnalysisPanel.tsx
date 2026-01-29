@@ -1,7 +1,9 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { useToast } from "@/contexts/ToastContext";
 import { ChatModal } from "../ChatModal";
 
 // Stage detection helper
@@ -107,6 +109,7 @@ interface AnalysisPanelProps {
 export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile }: AnalysisPanelProps & { currentFile?: File | null }) {
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
+    const toast = useToast();
     const [showRiskDetails, setShowRiskDetails] = useState(false);
     const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
 
@@ -114,7 +117,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
 
     // Chat UI (click-to-open)
-   
+
 
     // Chat modal (replaces the disabled bottom input)
     const [showChatModal, setShowChatModal] = useState(false);
@@ -194,6 +197,96 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         }
     };
 
+    const handleExportPDF = async () => {
+        if (!currentFile) {
+            toast.warning("먼저 문서를 업로드하세요");
+            return;
+        }
+
+        // DIAGNOSTIC: Log state before export
+        console.log('[AnalysisPanel] Export PDF clicked');
+        console.log('[AnalysisPanel] Current file:', currentFile.name);
+        console.log('[AnalysisPanel] Issues count:', issues.length);
+        console.log('[AnalysisPanel] Project name:', currentProjectName);
+
+        try {
+            const criticalCount = issues.filter(i => i.severity === "error").length;
+            const warningCount = issues.filter(i => i.severity === "warn").length;
+            const infoCount = issues.filter(i => i.severity === "info").length;
+
+            console.log('[AnalysisPanel] Severity breakdown:', {
+                critical: criticalCount,
+                warning: warningCount,
+                info: infoCount,
+                total: issues.length
+            });
+
+            const exportData = {
+                fileName: currentFile.name,
+                projectName: currentProjectName,
+                documentType: null, // Can be enhanced to track document type
+                createdAt: new Date().toISOString(), // Convert to ISO string for JSON
+                issues: issues.map(i => ({
+                    severity: i.severity,
+                    title: i.title,
+                    message: i.message,
+                    ruleId: i.ruleId,
+                })),
+                summary: {
+                    totalIssues: issues.length,
+                    criticalCount,
+                    warningCount,
+                    infoCount,
+                },
+            };
+
+            console.log('[AnalysisPanel] Prepared export data:', exportData);
+            console.log('[AnalysisPanel] Calling backend API...');
+
+            // Call backend API for PDF generation
+            const response = await fetch('/api/export-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(exportData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
+
+            console.log('[AnalysisPanel] PDF generated, downloading...');
+
+            // Get filename from Content-Disposition header
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = 'report.pdf';
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename[^;=\n]*=["']?([^"';\n]*)["']?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = decodeURIComponent(filenameMatch[1]);
+                }
+            }
+
+            // Download the PDF
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            console.log('[AnalysisPanel] PDF export completed successfully');
+            toast.success("PDF 리포트가 다운로드되었습니다");
+        } catch (error: any) {
+            console.error('[AnalysisPanel] PDF export failed:', error);
+            console.error('[AnalysisPanel] Error message:', error.message);
+            toast.error(`PDF 생성에 실패했습니다: ${error.message || '알 수 없는 오류'}`);
+        }
+    };
+
     // Group visible issues by stage
     const stage12Issues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage1-2");
     const stage3StructuredIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-structured");
@@ -259,33 +352,30 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">필터:</span>
                         <button
                             onClick={() => toggleSeverityFilter("error")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("error")
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("error")
                                     ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
                                     : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
+                                }`}
                         >
                             <span className="material-symbols-outlined text-sm">error</span>
                             <span>심각 ({errorCount})</span>
                         </button>
                         <button
                             onClick={() => toggleSeverityFilter("warn")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("warn")
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("warn")
                                     ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
                                     : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
+                                }`}
                         >
                             <span className="material-symbols-outlined text-sm">warning</span>
                             <span>경고 ({warnCount})</span>
                         </button>
                         <button
                             onClick={() => toggleSeverityFilter("info")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("info")
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("info")
                                     ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
                                     : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
+                                }`}
                         >
                             <span className="material-symbols-outlined text-sm">info</span>
                             <span>정보 ({infoCount})</span>
