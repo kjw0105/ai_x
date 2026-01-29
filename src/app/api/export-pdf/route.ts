@@ -395,12 +395,7 @@ const htmlPdfModule =
   (runtimeRequire?.("html-pdf-node") ?? require("html-pdf-node")) as any;
 
 const htmlPdf = htmlPdfModule?.default ?? htmlPdfModule;
-<<<<<<< HEAD
-
-            generatePdf =
-=======
         generatePdf =
->>>>>>> 497d91dac07e845d1e85e21c83d0d8ce57365620
                 (htmlPdf as any).generatePdf ??
                 (htmlPdf as any).default?.generatePdf ??
                 (htmlPdf as any).default ??
