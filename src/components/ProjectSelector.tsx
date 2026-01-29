@@ -13,6 +13,7 @@ export type Project = {
 interface ProjectSelectorProps {
     projects: Project[];
     currentProjectId: string | null;
+    isLoadingProjects: boolean;
     onProjectChange: (projectId: string | null) => void;
     onOpenNewProject: () => void;
     onDeleteProject: (projectId: string) => void;
@@ -20,7 +21,7 @@ interface ProjectSelectorProps {
     onShowWelcome?: () => void;
 }
 
-export function ProjectSelector({ projects, currentProjectId, onProjectChange, onOpenNewProject, onDeleteProject, onEditProject, onShowWelcome }: ProjectSelectorProps) {
+export function ProjectSelector({ projects, currentProjectId, isLoadingProjects, onProjectChange, onOpenNewProject, onDeleteProject, onEditProject, onShowWelcome }: ProjectSelectorProps) {
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [isOpen, setIsOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(0);
@@ -202,7 +203,20 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
                             일반 검증 (프로젝트 없음)
                         </button>
 
-                        {projects.map((p, index) => {
+                        {/* Skeleton Loaders */}
+                        {isLoadingProjects && (
+                            <>
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="w-full px-4 py-3 animate-pulse">
+                                        <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+                                        <div className="h-3 bg-gray-700/50 rounded w-1/2"></div>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+
+                        {/* Actual Project List */}
+                        {!isLoadingProjects && projects.map((p, index) => {
                             const optionIndex = index + 1;
                             const isActive = activeIndex === optionIndex;
                             return (
