@@ -178,7 +178,10 @@ export default function Page() {
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description: string } | null>(null);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
 
-  // Initialize welcome state - default to false to match server
+  // Track data loading states (not blocking, just for UI feedback)
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+
+  // Welcome screen state - non-blocking, just shows in viewer area
   const [showWelcome, setShowWelcome] = useState(false);
 
   // HYDRATION FIX: Load localStorage state in useEffect
@@ -187,18 +190,33 @@ export default function Page() {
     const savedProjectId = localStorage.getItem("current_project_id");
     if (savedProjectId) setCurrentProjectId(savedProjectId);
 
-    // 2. Restore Welcome Screen State
-    const dismissed = localStorage.getItem("welcome_dismissed");
-    const hasProject = localStorage.getItem("current_project_id"); // Checked again for logic consistency
+    // 2. Auto-load last report (Option B - analysis only, like history sidebar)
+    async function autoLoadLastReport() {
+      try {
+        const res = await fetch("/api/history");
+        if (!res.ok) return;
+        const history = await res.json();
+        if (!Array.isArray(history) || history.length === 0) return;
 
-    // Show welcome if not dismissed AND no saved project
-    // Note: If project exists, we definitely don't show welcome (unless explicit override logic)
-    // If no project and not dismissed, show it.
-    if (dismissed !== "true" && !hasProject) {
-      setShowWelcome(true);
+        // Get the most recent report
+        const lastReport = history[0];
+
+        // Load it (analysis only, no file)
+        await loadReportFromHistory(lastReport.id);
+      } catch (e) {
+        // Silently fail - not critical to app startup
+        console.error("Failed to auto-load last report:", e);
+      }
     }
+
+    // Start loading projects (non-blocking)
+    fetchProjects();
+
+    // Auto-load last report (non-blocking)
+    autoLoadLastReport();
   }, []);
 
+  // Refetch projects when selector key changes
   useEffect(() => {
     fetchProjects();
   }, [projectSelectorKey]);
@@ -228,6 +246,7 @@ export default function Page() {
   }, []);
 
   async function fetchProjects() {
+    setIsLoadingProjects(true);
     try {
       const res = await fetch("/api/projects");
       if (res.ok) {
@@ -235,6 +254,8 @@ export default function Page() {
       }
     } catch (e) {
       console.error("Failed to fetch projects");
+    } finally {
+      setIsLoadingProjects(false);
     }
   }
 
@@ -582,7 +603,8 @@ export default function Page() {
       let contextText = "";
       if (file) {
         // Extract text from Master Plan
-        contextText = await extractPdfText(file);
+        const controller = new AbortController();
+        contextText = await extractPdfText(file, controller.signal);
       }
 
       const res = await fetch("/api/projects", {
@@ -641,7 +663,8 @@ export default function Page() {
     try {
       let contextText = undefined;
       if (data.file) {
-        contextText = await extractPdfText(data.file);
+        const controller = new AbortController();
+        contextText = await extractPdfText(data.file, controller.signal);
       }
 
       const res = await fetch(`/api/projects/${projectId}`, {
@@ -744,13 +767,11 @@ export default function Page() {
 
   function dismissWelcome() {
     setShowWelcome(false);
-    localStorage.setItem("welcome_dismissed", "true");
   }
 
   function showWelcomeScreen() {
+    // Clear current work and show welcome screen
     setShowWelcome(true);
-    localStorage.setItem("welcome_dismissed", "false");
-    // Clear current work when going back to welcome
     handleClearFile();
   }
 
@@ -835,9 +856,9 @@ export default function Page() {
         key={projectSelectorKey}
         loading={loading}
         reportExists={!!report}
+        isLoadingProjects={isLoadingProjects}
         onUpload={pickFileDialog}
         onStartTBM={() => {
-          dismissWelcome();
           setShowTBMModal(true);
         }}
         onShowHistory={() => setShowHistory(true)}
@@ -872,9 +893,10 @@ export default function Page() {
         onSelectReport={loadReportFromHistory}
       />
 
-      {showWelcome && !file ? (
+      {showWelcome ? (
         <WelcomeScreen
           projects={projects}
+          isLoadingProjects={isLoadingProjects}
           onCreateProject={handleWelcomeCreateProject}
           onSelectProject={handleWelcomeSelectProject}
           onProceedWithoutProject={handleWelcomeProceedWithoutProject}
@@ -889,6 +911,7 @@ export default function Page() {
               currentPage={currentPage}
               onPageChange={setCurrentPage}
               onPickFile={pickFileDialog}
+              onFileSelect={onPickFile}
               onStartTBM={() => {
                 dismissWelcome();
                 setShowTBMModal(true);

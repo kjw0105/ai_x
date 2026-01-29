@@ -3,6 +3,7 @@
 import { Issue } from "@/lib/validator";
 import { RefObject } from "react";
 import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
+import { EmptyDocumentState } from "@/components/EmptyDocumentState";
 
 interface DocumentViewerProps {
     file: File | null;
@@ -11,6 +12,7 @@ interface DocumentViewerProps {
     currentPage: number;
     onPageChange: (page: number) => void;
     onPickFile: () => void;
+    onFileSelect: (file: File) => void; // For drag & drop
     onStartTBM?: () => void;
     onClearFile?: () => void;
     historicalFileName?: string; // When viewing history without file
@@ -23,6 +25,7 @@ export default function DocumentViewer({
     currentPage,
     onPageChange,
     onPickFile,
+    onFileSelect,
     onStartTBM,
     onClearFile,
     historicalFileName,
@@ -101,30 +104,10 @@ export default function DocumentViewer({
 
             <div className="flex-1 overflow-auto p-8 flex justify-center items-start bg-slate-300/30">
                 {!file && !historicalFileName && (
-                    <div className="w-full max-w-[800px] bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 border border-slate-200 dark:border-slate-700 mt-20">
-                        <h3 className="text-2xl font-black mb-2">서류를 올려주세요</h3>
-                        <p className="text-slate-600 dark:text-slate-300 mb-6">
-                            PDF 또는 이미지(JPG/PNG)를 업로드하면 AI가 빠진 항목/불일치/수정사항을 알려줘요.
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3">
-                            {onStartTBM && (
-                                <button
-                                    onClick={onStartTBM}
-                                    className="px-6 py-3 rounded-2xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-black border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm inline-flex items-center gap-2"
-                                >
-                                    <span className="material-symbols-outlined">mic</span>
-                                    TBM 시작
-                                </button>
-                            )}
-                            <button
-                                onClick={onPickFile}
-                                className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
-                            >
-                                <span className="material-symbols-outlined">add_a_photo</span>
-                                파일 업로드
-                            </button>
-                        </div>
-                    </div>
+                    <EmptyDocumentState
+                        onUploadClick={onPickFile}
+                        onFileSelect={onFileSelect}
+                    />
                 )}
 
                 {!file && historicalFileName && (

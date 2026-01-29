@@ -26,11 +26,13 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
     const [loading, setLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string | null; fileName?: string } | null>(null);
     const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
+    const [displayCount, setDisplayCount] = useState(30); // Show 30 items initially
     const toast = useToast();
 
     useEffect(() => {
         if (isOpen) {
             setLoading(true);
+            setDisplayCount(30); // Reset to 30 when opening
             fetch("/api/history")
                 .then((res) => res.json())
                 .then((data) => {
@@ -76,7 +78,7 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                     <div className="text-center p-8 text-slate-400 text-sm">기록이 없습니다.</div>
                 )}
 
-                {history.map((item) => (
+                {history.slice(0, displayCount).map((item) => (
                     <div
                         key={item.id}
                         className="group relative flex items-center p-3 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
@@ -105,6 +107,17 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                         </button>
                     </div>
                 ))}
+
+                {/* Load More Button */}
+                {!loading && history.length > displayCount && (
+                    <button
+                        onClick={() => setDisplayCount(prev => prev + 30)}
+                        className="w-full mt-4 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                    >
+                        <span className="material-symbols-outlined">expand_more</span>
+                        이전 문서 더 보기 ({history.length - displayCount}개 남음)
+                    </button>
+                )}
             </div>
 
             {/* Delete Single Item Confirmation */}

@@ -4,6 +4,7 @@ import { Breadcrumbs } from "./Breadcrumbs";
 interface HeaderProps {
     loading: boolean;
     reportExists: boolean;
+    isLoadingProjects: boolean; // Track if projects are being fetched
     onUpload: () => void;
     onStartTBM?: () => void;
     onShowHistory: () => void;
@@ -27,6 +28,7 @@ interface HeaderProps {
 export default function Header({
     loading,
     reportExists,
+    isLoadingProjects,
     onUpload,
     onStartTBM,
     onShowHistory,
@@ -78,6 +80,7 @@ export default function Header({
                     <ProjectSelector
                         projects={projects}
                         currentProjectId={currentProjectId}
+                        isLoadingProjects={isLoadingProjects}
                         onProjectChange={onProjectChange}
                         onOpenNewProject={onOpenNewProject}
                         onDeleteProject={onDeleteProject}
@@ -124,6 +127,7 @@ export default function Header({
                     title="다크모드 토글"
                 >
                     <span className="material-symbols-outlined">dark_mode</span>
+                </button>
 
                     {/* Hide action buttons when welcome screen is visible */}
                     {!showWelcome && (
@@ -131,8 +135,13 @@ export default function Header({
                             {onStartTBM && (
                                 <button
                                     onClick={onStartTBM}
-                                    className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-black border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm inline-flex items-center gap-2"
-                                    title="TBM(작업 전 대화) 녹음"
+                                    disabled={isLoadingProjects}
+                                    className={`px-4 py-2 rounded-xl font-black border shadow-sm inline-flex items-center gap-2 transition-colors ${
+                                        isLoadingProjects
+                                            ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 cursor-not-allowed opacity-60'
+                                            : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                                    }`}
+                                    title={isLoadingProjects ? "프로젝트 로딩 중..." : "TBM(작업 전 대화) 녹음"}
                                 >
                                     <span className="material-symbols-outlined">mic</span>
                                     TBM 시작
@@ -141,7 +150,13 @@ export default function Header({
 
                             <button
                                 onClick={onUpload}
-                                className="px-4 py-2 rounded-xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
+                                disabled={isLoadingProjects}
+                                className={`px-4 py-2 rounded-xl font-black shadow-lg inline-flex items-center gap-2 transition-colors ${
+                                    isLoadingProjects
+                                        ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-slate-200 cursor-not-allowed opacity-60'
+                                        : 'bg-primary text-white shadow-green-200 hover:bg-green-600'
+                                }`}
+                                title={isLoadingProjects ? "프로젝트 로딩 중..." : "파일 업로드"}
                             >
                                 <span className="material-symbols-outlined">upload</span>
                                 파일 업로드
