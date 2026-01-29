@@ -79,7 +79,6 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
         previouslyOpenRef.current = isOpen;
     }, [isOpen]);
 
-    async function handleDelete(projectId: string, projectName: string, e: React.MouseEvent) {
     function handleDelete(projectId: string, projectName: string, e: React.MouseEvent) {
         e.stopPropagation();
         setProjectToDelete({ id: projectId, name: projectName });

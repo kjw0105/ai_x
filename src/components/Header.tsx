@@ -124,6 +124,7 @@ export default function Header({
                     title="다크모드 토글"
                 >
                     <span className="material-symbols-outlined">dark_mode</span>
+                </button>
 
                     {/* Hide action buttons when welcome screen is visible */}
                     {!showWelcome && (
