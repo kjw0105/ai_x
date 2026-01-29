@@ -261,12 +261,12 @@ export async function POST(req: Request) {
     // If docType is "unknown" and no safety-related fields are found, reject the document
     const isSafetyDocument =
       extracted.docType !== "unknown" ||
-      extracted.fields.점검일자 ||
-      extracted.fields.현장명 ||
-      extracted.fields.작업내용 ||
-      extracted.signature.담당 !== "unknown" ||
-      extracted.signature.소장 !== "unknown" ||
-      extracted.checklist.length > 0;
+      (extracted.fields?.점검일자 ?? false) ||
+      (extracted.fields?.현장명 ?? false) ||
+      (extracted.fields?.작업내용 ?? false) ||
+      (extracted.signature?.담당 && extracted.signature.담당 !== "unknown") ||
+      (extracted.signature?.소장 && extracted.signature.소장 !== "unknown") ||
+      (extracted.checklist?.length ?? 0) > 0;
 
     if (!isSafetyDocument) {
       return NextResponse.json(

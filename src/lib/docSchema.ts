@@ -160,7 +160,7 @@ export function parseDocExtraction(raw: unknown): ParseResult {
     if (chatError) return chatError;
   }
 
-  const data = raw as DocData & { chat?: ChatMessage[] };
+  const data = raw as unknown as DocData & { chat?: ChatMessage[] };
   return {
     data: {
       ...data,
