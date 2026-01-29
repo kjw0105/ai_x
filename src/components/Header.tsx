@@ -23,6 +23,10 @@ interface HeaderProps {
 
     // Breadcrumbs Props
     currentFileName?: string;
+
+    // Temp Master Doc Props
+    hasTempMasterDoc?: boolean;
+    onOpenTempMasterDoc?: () => void;
 }
 
 export default function Header({
@@ -42,7 +46,9 @@ export default function Header({
     onDeleteProject,
     onEditProject,
     onShowWelcome,
-    currentFileName
+    currentFileName,
+    hasTempMasterDoc,
+    onOpenTempMasterDoc
 }: HeaderProps) {
     // Build breadcrumbs
     const currentProject = projects.find(p => p.id === currentProjectId);
@@ -150,6 +156,23 @@ export default function Header({
                                 >
                                     <span className="material-symbols-outlined">mic</span>
                                     TBM 시작
+                                </button>
+                            )}
+
+                            {/* Temp Master Doc Button - Show only when no project selected */}
+                            {!currentProjectId && onOpenTempMasterDoc && (
+                                <button
+                                    onClick={onOpenTempMasterDoc}
+                                    disabled={isLoadingProjects}
+                                    className={`px-4 py-2 rounded-xl font-black border shadow-sm inline-flex items-center gap-2 transition-colors ${
+                                        hasTempMasterDoc
+                                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-200 dark:hover:bg-blue-900/50'
+                                            : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                                    } ${isLoadingProjects ? 'cursor-not-allowed opacity-60' : ''}`}
+                                    title={hasTempMasterDoc ? "임시 마스터 문서 활성화됨" : "임시 마스터 문서 업로드"}
+                                >
+                                    <span className="material-symbols-outlined">{hasTempMasterDoc ? 'check_circle' : 'description'}</span>
+                                    임시 마스터
                                 </button>
                             )}
 

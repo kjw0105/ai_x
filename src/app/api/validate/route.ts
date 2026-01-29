@@ -168,7 +168,7 @@ async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null
 
 export async function POST(req: Request) {
   try {
-    const { provider, fileName, pdfText, pageImages, projectId, documentType } = await req.json();
+    const { provider, fileName, pdfText, pageImages, projectId, documentType, tempContextText } = await req.json();
 
     // VALIDATION: Check if document has sufficient content
     const hasText = pdfText && pdfText.trim().length >= 50;
@@ -193,7 +193,7 @@ export async function POST(req: Request) {
 
     const p: Provider = (provider ?? "auto") as Provider;
 
-    // Fetch Project Context if projectId is present
+    // Fetch Project Context if projectId is present, or use temporary context
     let contextText = "";
     let masterPlan: MasterSafetyPlan | null = null;
     let projectIsStructured = false;
@@ -217,6 +217,9 @@ export async function POST(req: Request) {
           }
         }
       }
+    } else if (tempContextText) {
+      // Use temporary master doc context for non-project validation
+      contextText = tempContextText;
     }
 
     // auto: 스캔(텍스트 거의 없음)이면 비전 강한 쪽(둘 중 아무거나)로

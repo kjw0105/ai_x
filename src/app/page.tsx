@@ -16,6 +16,7 @@ import TBMRecorderModal from "@/components/TBMRecorderModal";
 import { EditProjectModal } from "@/components/EditProjectModal";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { ProgressBar } from "@/components/ProgressBar";
+import { TempMasterDocModal } from "@/components/TempMasterDocModal";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
@@ -150,6 +151,10 @@ export default function Page() {
   const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
   const [showTBMModal, setShowTBMModal] = useState(false);
 
+  // Temporary master doc state (for non-project validation)
+  const [tempMasterDoc, setTempMasterDoc] = useState<{ text: string; fileName: string } | null>(null);
+  const [showTempMasterModal, setShowTempMasterModal] = useState(false);
+
   // Progress tracking state
   const [validationStep, setValidationStep] = useState(0);
   const [showProgress, setShowProgress] = useState(false);
@@ -195,7 +200,18 @@ export default function Page() {
     const savedProjectId = localStorage.getItem("current_project_id");
     if (savedProjectId) setCurrentProjectId(savedProjectId);
 
-    // 2. Auto-load last report (Option B - analysis only, like history sidebar)
+    // 2. Load temporary master doc from IndexedDB
+    async function loadTempMasterDoc() {
+      try {
+        const saved = await get("temp_master_doc");
+        if (saved) setTempMasterDoc(saved);
+      } catch (e) {
+        console.error("Failed to load temp master doc", e);
+      }
+    }
+    loadTempMasterDoc();
+
+    // 3. Auto-load last report (Option B - analysis only, like history sidebar)
     async function autoLoadLastReport() {
       try {
         const res = await fetch("/api/history");
@@ -227,15 +243,21 @@ export default function Page() {
     fetchProjects();
   }, [projectSelectorKey]);
 
-  // Persist currentProjectId
+  // Persist currentProjectId and clear temp master doc when switching to a project
   useEffect(() => {
     if (typeof window !== "undefined") {
       if (currentProjectId) {
         localStorage.setItem("current_project_id", currentProjectId);
+        // Clear temp master doc when switching to a project
+        if (tempMasterDoc) {
+          setTempMasterDoc(null);
+          del("temp_master_doc");
+        }
       } else {
         localStorage.removeItem("current_project_id");
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProjectId]);
 
   // PERFORMANCE: Preload PDF font on app startup
@@ -441,7 +463,8 @@ export default function Page() {
           pdfText: text,
           pageImages: imagesToSend,
           projectId: currentProjectId, // Pass context
-          documentType: documentType // Pass document type
+          documentType: documentType, // Pass document type
+          tempContextText: !currentProjectId && tempMasterDoc ? tempMasterDoc.text : undefined // Pass temp master doc if no project
         }),
         signal // Pass AbortSignal to fetch
       });
@@ -812,6 +835,30 @@ export default function Page() {
     setIsEditProjectModalOpen(true);
   }
 
+  // Temporary Master Doc functions
+  async function handleUploadTempMasterDoc(file: File) {
+    try {
+      const controller = new AbortController();
+      const text = await extractPdfText(file, controller.signal);
+
+      const tempDoc = { text, fileName: file.name };
+      setTempMasterDoc(tempDoc);
+      await set("temp_master_doc", tempDoc);
+
+      toast.success(`임시 마스터 문서 "${file.name}"이(가) 업로드되었습니다`);
+      setShowTempMasterModal(false);
+    } catch (error) {
+      console.error("Failed to upload temp master doc", error);
+      toast.error("임시 마스터 문서 업로드에 실패했습니다");
+    }
+  }
+
+  async function handleClearTempMasterDoc() {
+    setTempMasterDoc(null);
+    await del("temp_master_doc");
+    toast.success("임시 마스터 문서가 삭제되었습니다");
+  }
+
   // --- Project-Aware Persistence Logic ---
   // Helper to get project-specific keys
   function getProjectKey(key: string) {
@@ -1005,6 +1052,13 @@ export default function Page() {
         }}
         onUpdate={handleUpdateProject}
       />
+      <TempMasterDocModal
+        isOpen={showTempMasterModal}
+        onClose={() => setShowTempMasterModal(false)}
+        onUpload={handleUploadTempMasterDoc}
+        currentDoc={tempMasterDoc}
+        onClear={handleClearTempMasterDoc}
+      />
       <ProjectDashboard
         isOpen={showDashboard}
         onClose={() => setShowDashboard(false)}
@@ -1072,6 +1126,8 @@ export default function Page() {
         onEditProject={handleOpenEditProject}
         onShowWelcome={showWelcomeScreen}
         currentFileName={file?.name}
+        hasTempMasterDoc={!!tempMasterDoc}
+        onOpenTempMasterDoc={() => setShowTempMasterModal(true)}
       />
 
       {/* Progress Modal */}
