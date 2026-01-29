@@ -11,6 +11,7 @@ import { validateAgainstStructuredPlan } from "@/lib/structuredValidation";
 import type { MasterSafetyPlan, StructuredValidationIssue } from "@/lib/masterPlanSchema";
 import { calculateRiskLevel, riskCalculationToIssues } from "@/lib/riskMatrix";
 import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } from "@/lib/crossDocumentAnalysis";
+import { parseDocExtraction } from "@/lib/docSchema";
 
 type Provider = "openai" | "claude" | "auto";
 
@@ -92,6 +93,10 @@ function safeJsonParse(text: string) {
     }
     throw new Error("Model did not return valid JSON");
   }
+}
+
+function sanitizeDocData(raw: unknown) {
+  return parseDocExtraction(raw);
 }
 
 async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null; contextText?: string }) {
@@ -240,18 +245,28 @@ export async function POST(req: Request) {
 
     // 3. Validation Logic (Code-based)
     // LLM 결과(extraction)에 대해 규칙 검사를 수행한다.
-    const extracted = result as DocData;
+    const sanitized = sanitizeDocData(result);
+    if ("error" in sanitized) {
+      return NextResponse.json(
+        {
+          error: sanitized.error
+        },
+        { status: 400 }
+      );
+    }
+
+    const extracted = sanitized.data;
 
     // VALIDATION: Check if document is safety-related
     // If docType is "unknown" and no safety-related fields are found, reject the document
     const isSafetyDocument =
       extracted.docType !== "unknown" ||
-      extracted.fields?.점검일자 ||
-      extracted.fields?.현장명 ||
-      extracted.fields?.작업내용 ||
-      (extracted.signature?.담당 && extracted.signature.담당 !== "unknown") ||
-      (extracted.signature?.소장 && extracted.signature.소장 !== "unknown") ||
-      (extracted.checklist && extracted.checklist.length > 0);
+      extracted.fields.점검일자 ||
+      extracted.fields.현장명 ||
+      extracted.fields.작업내용 ||
+      extracted.signature.담당 !== "unknown" ||
+      extracted.signature.소장 !== "unknown" ||
+      extracted.checklist.length > 0;
 
     if (!isSafetyDocument) {
       return NextResponse.json(
@@ -304,7 +319,7 @@ export async function POST(req: Request) {
         documentType: documentType ?? null,
         // Stage 4: Save inspector name and checklist for pattern analysis
         inspectorName: extracted.inspectorName ?? null,
-        checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
+        checklistJson: extracted.checklist.length > 0 ? JSON.stringify(extracted.checklist) : null,
       }
     });
 
