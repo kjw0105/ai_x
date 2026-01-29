@@ -44,6 +44,16 @@ function getSeverityBgColor(severity: string): string {
     return map[severity] || "#f1f5f9";
 }
 
+function escapeHtml(unsafe: string | undefined | null): string {
+    if (!unsafe) return "";
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 export async function exportReportToPDF(data: ExportData) {
     // DIAGNOSTIC CHECK 1: Log data being passed
     console.log('[PDF Export] Starting PDF generation with data:', {
@@ -74,7 +84,17 @@ export async function exportReportToPDF(data: ExportData) {
     }
 
     // Dynamic import to avoid SSR issues
-    const html2pdf = (await import('html2pdf.js')).default;
+    const html2pdfModule = await import('html2pdf.js');
+    const html2pdf =
+        (html2pdfModule as any).default ??
+        (html2pdfModule as any).default?.default ??
+        (html2pdfModule as any).html2pdf ??
+        (html2pdfModule as any).default?.html2pdf ??
+        html2pdfModule;
+
+    if (typeof html2pdf !== 'function') {
+        throw new Error('PDF Export Error: html2pdf.js did not load correctly');
+    }
 
     console.log('[PDF Export] html2pdf library loaded successfully');
 
@@ -281,18 +301,18 @@ export async function exportReportToPDF(data: ExportData) {
             <div class="info-box">
                 <div class="info-row">
                     <div class="info-label">파일명</div>
-                    <div class="info-value">${data.fileName}</div>
+                    <div class="info-value">${escapeHtml(data.fileName)}</div>
                 </div>
                 ${data.projectName ? `
                 <div class="info-row">
                     <div class="info-label">프로젝트</div>
-                    <div class="info-value">${data.projectName}</div>
+                    <div class="info-value">${escapeHtml(data.projectName)}</div>
                 </div>
                 ` : ''}
                 ${data.documentType ? `
                 <div class="info-row">
                     <div class="info-label">문서 유형</div>
-                    <div class="info-value">${data.documentType}</div>
+                    <div class="info-value">${escapeHtml(data.documentType)}</div>
                 </div>
                 ` : ''}
                 <div class="info-row">
@@ -354,8 +374,8 @@ export async function exportReportToPDF(data: ExportData) {
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="issue-title">${issue.title}</div>
-                                        <div class="issue-message">${issue.message}</div>
+                                        <div class="issue-title">${escapeHtml(issue.title)}</div>
+                                        <div class="issue-message">${escapeHtml(issue.message)}</div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -506,10 +526,30 @@ export async function exportReportToPDF(data: ExportData) {
         console.log('[PDF Export] Options:', opt);
 
         // Use outputPdf to get the blob first for better error tracking
-        const pdfBlob = await html2pdf()
+        const worker = html2pdf()
             .set(opt)
-            .from(tempDiv)
-            .outputPdf('blob');
+            .from(tempDiv);
+
+        let pdfBlob: Blob | null = null;
+        if (typeof (worker as any).outputPdf === 'function') {
+            pdfBlob = await (worker as any).outputPdf('blob');
+        } else if (typeof (worker as any).output === 'function') {
+            pdfBlob = await (worker as any).output('blob');
+        } else {
+            await (worker as any).save();
+        }
+
+        if (!pdfBlob) {
+            loadingMsg.textContent = '✓ PDF 생성 완료';
+            loadingMsg.style.color = '#22c55e';
+            setTimeout(() => {
+                if (document.body.contains(overlay)) {
+                    document.body.removeChild(overlay);
+                    console.log('[PDF Export] Overlay cleaned up');
+                }
+            }, 1000);
+            return;
+        }
 
         console.log('[PDF Export] PDF blob generated successfully, size:', pdfBlob.size, 'bytes');
 
@@ -533,9 +573,6 @@ export async function exportReportToPDF(data: ExportData) {
         // Update loading message to show success
         loadingMsg.textContent = `✓ PDF 생성 완료! (${Math.round(pdfBlob.size / 1024)}KB)`;
         loadingMsg.style.color = '#22c55e';
-
-        // Show success alert with details
-        alert(`PDF EXPORT SUCCESS!\nFile: ${finalFilename}\nSize: ${pdfBlob.size} bytes (${Math.round(pdfBlob.size / 1024)}KB)`);
 
         // Remove overlay after short delay
         setTimeout(() => {
