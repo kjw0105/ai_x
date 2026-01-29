@@ -136,7 +136,7 @@ export default function DocumentViewer({
                 )}
 
                 {totalPages > 0 && (
-                    <div className="relative w-full max-w-[900px] mb-8">
+                    <div className="relative w-full max-w-[1200px] mb-8">
                         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden pdf-page-shadow relative group">
                             <div className="absolute top-0 left-0 bg-slate-800/80 text-white text-xs px-2 py-1 rounded-br-lg z-10 font-mono">
                                 PAGE {currentPage + 1} / {totalPages}
