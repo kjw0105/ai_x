@@ -293,20 +293,7 @@ export async function POST(req: Request) {
       // Non-critical, continue without risk analysis
     }
 
-    // --- DB SAVE ---
-    // Save the result to the database for history (including Stage 4 fields)
-    const savedReport = await prisma.report.create({
-      data: {
-        fileName: fileName ?? "Untitled",
-        docDataJson: JSON.stringify(extracted),
-        issuesJson: JSON.stringify(validationIssues),
-        projectId: projectId ?? null,
-        documentType: documentType ?? null,
-        // Stage 4: Save inspector name and checklist for pattern analysis
-        inspectorName: extracted.inspectorName ?? null,
-        checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
-      }
-    });
+    const reportId = crypto.randomUUID();
 
     // Stage 4: Pattern Analysis - Check for suspicious patterns
     let patternIssues: typeof validationIssues = [];
@@ -327,7 +314,7 @@ export async function POST(req: Request) {
     let crossDocIssues: typeof validationIssues = [];
     if (projectId) {
       try {
-        const crossIssues = await analyzeCrossDocumentIssues(projectId, savedReport.id);
+        const crossIssues = await analyzeCrossDocumentIssues(projectId, reportId);
         crossDocIssues = crossDocumentIssuesToValidationIssues(crossIssues);
       } catch (e) {
         console.warn("Cross-document analysis failed:", e);
@@ -340,6 +327,25 @@ export async function POST(req: Request) {
       ...issue,
       id: crypto.randomUUID()
     }));
+    // --- DB SAVE ---
+    // Save the result to the database for history (including Stage 4 fields)
+    const extractedChat = Array.isArray((extracted as { chat?: unknown }).chat)
+      ? JSON.stringify((extracted as { chat?: unknown[] }).chat)
+      : null;
+    const savedReport = await prisma.report.create({
+      data: {
+        id: reportId,
+        fileName: fileName ?? "Untitled",
+        docDataJson: JSON.stringify(extracted),
+        issuesJson: JSON.stringify(allIssues),
+        chatJson: extractedChat,
+        projectId: projectId ?? null,
+        documentType: documentType ?? null,
+        // Stage 4: Save inspector name and checklist for pattern analysis
+        inspectorName: extracted.inspectorName ?? null,
+        checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
+      }
+    });
 
     // Stage 5: Risk Signals - Format output with non-judgmental language
     const riskSignals = allIssues
