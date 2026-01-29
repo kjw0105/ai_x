@@ -48,30 +48,35 @@ export default function Header({
     const currentProject = projects.find(p => p.id === currentProjectId);
     const breadcrumbItems = [
         { label: "홈", onClick: onShowWelcome },
-        ...(currentProject ? [{ label: currentProject.name }] : []),
+        ...(currentProject ? [{
+            label: currentProject.name,
+            badge: currentProject.contextText && currentProject.contextText.trim().length > 0
+                ? { text: "마스터", color: "blue" as const, tooltip: "마스터 안전 계획서 등록됨" }
+                : { text: "없음", color: "gray" as const, tooltip: "마스터 안전 계획서 미등록" }
+        }] : []),
         ...(currentFileName ? [{ label: currentFileName }] : []),
     ];
 
     return (
         <header className="flex flex-col border-b border-solid border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark shrink-0 z-20 shadow-sm">
-            <div className="flex items-center justify-between whitespace-nowrap px-6 py-4">
+            <div className="flex items-center justify-between whitespace-nowrap px-4 lg:px-6 py-2 lg:py-3">
                 <div className="flex items-center gap-6">
                     <button
                         type="button"
                         onClick={onShowWelcome}
                         disabled={!onShowWelcome}
-                        className="flex items-center gap-3 text-slate-800 dark:text-white cursor-pointer rounded-xl px-2 py-1 -mx-2 -my-1 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:shadow-none"
+                        className="flex items-center gap-2 text-slate-800 dark:text-white cursor-pointer rounded-lg px-1.5 py-1 -mx-1.5 -my-1 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:shadow-none"
                         aria-label="Go to welcome screen"
                         title="Go to welcome screen"
                     >
-                        <div className="size-12 flex items-center justify-center bg-primary rounded-xl text-white shadow-lg shadow-primary/30">
-                            <span className="material-symbols-outlined text-3xl">safety_check</span>
+                        <div className="size-9 lg:size-10 flex items-center justify-center bg-primary rounded-lg text-white shadow-md shadow-primary/20">
+                            <span className="material-symbols-outlined text-2xl">safety_check</span>
                         </div>
                         <div>
-                            <h2 className="text-2xl font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+                            <h2 className="text-lg lg:text-xl font-black leading-tight tracking-tight text-slate-900 dark:text-white">
                                 스마트 안전지킴이
                             </h2>
-                            <p className="text-xs text-slate-500 font-bold">경상남도 중소기업 지원 시스템</p>
+                            <p className="text-[10px] lg:text-xs text-slate-500 font-bold">경상남도 중소기업 지원 시스템</p>
                         </div>
                     </button>
                 </div>

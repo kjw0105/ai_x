@@ -6,6 +6,9 @@ import Header from "@/components/Header";
 import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
 import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
+import { ThreeColumnLayout } from "@/components/layout/ThreeColumnLayout";
+import { IssuesList } from "@/components/IssuesList";
+import { ChatPanel } from "@/components/ChatPanel";
 import HistorySidebar from "@/components/HistorySidebar";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
@@ -1100,42 +1103,76 @@ export default function Page() {
           onProceedWithoutProject={handleWelcomeProceedWithoutProject}
         />
       ) : (
-        <ResizableSplitLayout
-          initialLeftWidthPercent={70}
-          left={
-            <DocumentViewer
-              file={file}
-              pageImages={pageImages}
-              reportIssues={report?.issues ?? []}
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-              onPickFile={pickFileDialog}
-              onFileSelect={onPickFile}
-              onStartTBM={() => {
-                dismissWelcome();
-                setShowTBMModal(true);
-              }}
-              onClearFile={handleClearFile}
-              historicalFileName={historicalFileName}
-              documentType={report?.documentType}
-              currentProjectId={currentProjectId}
-              currentReportId={currentReportId}
-              onLoadDocument={loadReportFromHistory}
+        <>
+          {/* Desktop: Three-Column Layout */}
+          <div className="hidden lg:flex flex-1 overflow-hidden">
+            <ThreeColumnLayout
+              left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
+              center={
+                <DocumentViewer
+                  file={file}
+                  pageImages={pageImages}
+                  reportIssues={report?.issues ?? []}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onPickFile={pickFileDialog}
+                  onFileSelect={onPickFile}
+                  onStartTBM={() => {
+                    dismissWelcome();
+                    setShowTBMModal(true);
+                  }}
+                  onClearFile={handleClearFile}
+                  historicalFileName={historicalFileName}
+                  documentType={report?.documentType}
+                  currentProjectId={currentProjectId}
+                  currentReportId={currentReportId}
+                  onLoadDocument={loadReportFromHistory}
+                />
+              }
+              right={<ChatPanel messages={report?.chat ?? []} loading={loading} />}
             />
-          }
-          right={
-            <AnalysisPanel
-              loading={loading}
-              issues={report?.issues ?? []}
-              chatMessages={report?.chat ?? []}
-              onReupload={pickFileDialog}
-              onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-              currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
-              currentFile={file}
-              historicalFileName={historicalFileName}
+          </div>
+
+          {/* Mobile/Tablet: Resizable Two-Column Layout */}
+          <div className="flex lg:hidden flex-1 overflow-hidden">
+            <ResizableSplitLayout
+              initialLeftWidthPercent={70}
+              left={
+                <DocumentViewer
+                  file={file}
+                  pageImages={pageImages}
+                  reportIssues={report?.issues ?? []}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onPickFile={pickFileDialog}
+                  onFileSelect={onPickFile}
+                  onStartTBM={() => {
+                    dismissWelcome();
+                    setShowTBMModal(true);
+                  }}
+                  onClearFile={handleClearFile}
+                  historicalFileName={historicalFileName}
+                  documentType={report?.documentType}
+                  currentProjectId={currentProjectId}
+                  currentReportId={currentReportId}
+                  onLoadDocument={loadReportFromHistory}
+                />
+              }
+              right={
+                <AnalysisPanel
+                  loading={loading}
+                  issues={report?.issues ?? []}
+                  chatMessages={report?.chat ?? []}
+                  onReupload={pickFileDialog}
+                  onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
+                  currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+                  currentFile={file}
+                  historicalFileName={historicalFileName}
+                />
+              }
             />
-          }
-        />
+          </div>
+        </>
       )}
     </div>
   );

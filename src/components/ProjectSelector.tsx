@@ -234,26 +234,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                                             className="flex-1 text-left flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
                                         >
                                             <span className="truncate block flex-1">
-                                                <span className="font-medium block flex items-center gap-1.5">
-                                                    {p.name}
-                                                    {p.contextText && p.contextText.trim().length > 0 ? (
-                                                        <span
-                                                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                                                            title="마스터 안전 계획서 등록됨"
-                                                        >
-                                                            <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>description</span>
-                                                            <span>마스터</span>
-                                                        </span>
-                                                    ) : (
-                                                        <span
-                                                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-slate-500/20 text-slate-400 border border-slate-500/30"
-                                                            title="마스터 안전 계획서 미등록"
-                                                        >
-                                                            <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>description</span>
-                                                            <span>없음</span>
-                                                        </span>
-                                                    )}
-                                                </span>
+                                                <span className="font-medium block">{p.name}</span>
                                                 {p.description && <span className="text-xs text-gray-500 truncate block">{p.description}</span>}
                                             </span>
                                             {currentProjectId === p.id && (
