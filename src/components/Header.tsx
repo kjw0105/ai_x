@@ -138,15 +138,13 @@ export default function Header({
                                     disabled={isLoadingProjects}
                                     className={`px-4 py-2 rounded-xl font-black border shadow-sm inline-flex items-center gap-2 transition-colors ${
                                         isLoadingProjects
-                                            ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 cursor-not-allowed'
+                                            ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 cursor-not-allowed opacity-60'
                                             : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
                                     }`}
                                     title={isLoadingProjects ? "프로젝트 로딩 중..." : "TBM(작업 전 대화) 녹음"}
                                 >
-                                    <span className={`material-symbols-outlined ${isLoadingProjects ? 'animate-pulse' : ''}`}>
-                                        {isLoadingProjects ? 'hourglass_empty' : 'mic'}
-                                    </span>
-                                    {isLoadingProjects ? '로딩 중...' : 'TBM 시작'}
+                                    <span className="material-symbols-outlined">mic</span>
+                                    TBM 시작
                                 </button>
                             )}
 
@@ -155,15 +153,13 @@ export default function Header({
                                 disabled={isLoadingProjects}
                                 className={`px-4 py-2 rounded-xl font-black shadow-lg inline-flex items-center gap-2 transition-colors ${
                                     isLoadingProjects
-                                        ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-slate-200 cursor-not-allowed'
+                                        ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-slate-200 cursor-not-allowed opacity-60'
                                         : 'bg-primary text-white shadow-green-200 hover:bg-green-600'
                                 }`}
                                 title={isLoadingProjects ? "프로젝트 로딩 중..." : "파일 업로드"}
                             >
-                                <span className={`material-symbols-outlined ${isLoadingProjects ? 'animate-pulse' : ''}`}>
-                                    {isLoadingProjects ? 'hourglass_empty' : 'upload'}
-                                </span>
-                                {isLoadingProjects ? '로딩 중...' : '파일 업로드'}
+                                <span className="material-symbols-outlined">upload</span>
+                                파일 업로드
                             </button>
                         </>
                     )}

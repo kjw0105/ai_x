@@ -7,6 +7,7 @@ import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
 import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
 import HistorySidebar from "@/components/HistorySidebar";
+import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
 import TBMRecorderModal from "@/components/TBMRecorderModal";
 import { EditProjectModal } from "@/components/EditProjectModal";
@@ -179,6 +180,9 @@ export default function Page() {
 
   // Track data loading states (not blocking, just for UI feedback)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+
+  // Welcome screen state - non-blocking, just shows in viewer area
+  const [showWelcome, setShowWelcome] = useState(false);
 
   // HYDRATION FIX: Load localStorage state in useEffect
   useEffect(() => {
@@ -761,9 +765,29 @@ export default function Page() {
     del("current_page");
   }
 
-  // No-op function to maintain compatibility with existing code
   function dismissWelcome() {
-    // Welcome screen removed - this function is now a no-op
+    setShowWelcome(false);
+  }
+
+  function showWelcomeScreen() {
+    // Clear current work and show welcome screen
+    setShowWelcome(true);
+    handleClearFile();
+  }
+
+  function handleWelcomeCreateProject() {
+    dismissWelcome();
+    setIsProjectModalOpen(true);
+  }
+
+  function handleWelcomeSelectProject(projectId: string) {
+    dismissWelcome();
+    setCurrentProjectId(projectId);
+  }
+
+  function handleWelcomeProceedWithoutProject() {
+    dismissWelcome();
+    setCurrentProjectId(null);
   }
 
   return (
@@ -840,14 +864,14 @@ export default function Page() {
         onShowHistory={() => setShowHistory(true)}
         onShowDashboard={() => setShowDashboard(true)}
         toggleDark={toggleDark}
-        showWelcome={false}
+        showWelcome={showWelcome}
         projects={projects}
         currentProjectId={currentProjectId}
         onProjectChange={setCurrentProjectId}
         onOpenNewProject={() => setIsProjectModalOpen(true)}
         onDeleteProject={handleDeleteProject}
         onEditProject={handleOpenEditProject}
-        onShowWelcome={undefined}
+        onShowWelcome={showWelcomeScreen}
         currentFileName={file?.name}
       />
 
@@ -869,37 +893,47 @@ export default function Page() {
         onSelectReport={loadReportFromHistory}
       />
 
-      <ResizableSplitLayout
-        left={
-          <DocumentViewer
-            file={file}
-            pageImages={pageImages}
-            reportIssues={report?.issues ?? []}
-            currentPage={currentPage}
-            onPageChange={setCurrentPage}
-            onPickFile={pickFileDialog}
-            onFileSelect={onPickFile}
-            onStartTBM={() => {
-              dismissWelcome();
-              setShowTBMModal(true);
-            }}
-            onClearFile={handleClearFile}
-            historicalFileName={historicalFileName}
-            documentType={report?.documentType}
-          />
-        }
-        right={
-          <AnalysisPanel
-            loading={loading}
-            issues={report?.issues ?? []}
-            chatMessages={report?.chat ?? []}
-            onReupload={pickFileDialog}
-            onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-            currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
-            currentFile={file}
-          />
-        }
-      />
+      {showWelcome ? (
+        <WelcomeScreen
+          projects={projects}
+          isLoadingProjects={isLoadingProjects}
+          onCreateProject={handleWelcomeCreateProject}
+          onSelectProject={handleWelcomeSelectProject}
+          onProceedWithoutProject={handleWelcomeProceedWithoutProject}
+        />
+      ) : (
+        <ResizableSplitLayout
+          left={
+            <DocumentViewer
+              file={file}
+              pageImages={pageImages}
+              reportIssues={report?.issues ?? []}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              onPickFile={pickFileDialog}
+              onFileSelect={onPickFile}
+              onStartTBM={() => {
+                dismissWelcome();
+                setShowTBMModal(true);
+              }}
+              onClearFile={handleClearFile}
+              historicalFileName={historicalFileName}
+              documentType={report?.documentType}
+            />
+          }
+          right={
+            <AnalysisPanel
+              loading={loading}
+              issues={report?.issues ?? []}
+              chatMessages={report?.chat ?? []}
+              onReupload={pickFileDialog}
+              onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
+              currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+              currentFile={file}
+            />
+          }
+        />
+      )}
     </div>
   );
 }
