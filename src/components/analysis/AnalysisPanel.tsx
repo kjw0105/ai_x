@@ -111,6 +111,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
     const [showRiskDetails, setShowRiskDetails] = useState(false);
+    const [isExportingPDF, setIsExportingPDF] = useState(false);
 
     // Smart severity filter: Only show buttons for severities that exist in issues
     const availableSeverities = useMemo(() => {
@@ -212,6 +213,13 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             return;
         }
 
+        // Prevent double-clicks while generating
+        if (isExportingPDF) {
+            return;
+        }
+
+        setIsExportingPDF(true);
+
         // DIAGNOSTIC: Log state before export
         console.log('[AnalysisPanel] Export PDF clicked');
         console.log('[AnalysisPanel] Current file:', currentFile.name);
@@ -293,6 +301,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             console.error('[AnalysisPanel] PDF export failed:', error);
             console.error('[AnalysisPanel] Error message:', error.message);
             toast.error(`PDF 생성에 실패했습니다: ${error.message || '알 수 없는 오류'}`);
+        } finally {
+            setIsExportingPDF(false);
         }
     };
 
@@ -358,11 +368,25 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     {reportExists && currentFile && (
                         <button
                             onClick={handleExportPDF}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-bold rounded-lg transition-colors shadow-lg"
-                            title="PDF로 보고서 내보내기"
+                            disabled={isExportingPDF}
+                            className={`flex items-center gap-2 px-4 py-2 font-bold rounded-lg transition-colors shadow-lg ${
+                                isExportingPDF
+                                    ? 'bg-slate-400 dark:bg-slate-600 text-white cursor-not-allowed'
+                                    : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white'
+                            }`}
+                            title={isExportingPDF ? "PDF 생성 중..." : "PDF로 보고서 내보내기"}
                         >
-                            <span className="material-symbols-outlined text-lg">download</span>
-                            <span className="hidden sm:inline">PDF 내보내기</span>
+                            {isExportingPDF ? (
+                                <>
+                                    <span className="material-symbols-outlined text-lg animate-spin">refresh</span>
+                                    <span className="hidden sm:inline">생성 중...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="material-symbols-outlined text-lg">download</span>
+                                    <span className="hidden sm:inline">PDF 내보내기</span>
+                                </>
+                            )}
                         </button>
                     )}
                 </div>
