@@ -181,6 +181,9 @@ export default function Page() {
   // Initialize welcome state - default to false to match server
   const [showWelcome, setShowWelcome] = useState(false);
 
+  // Track if client-side hydration is complete
+  const [isHydrated, setIsHydrated] = useState(false);
+
   // HYDRATION FIX: Load localStorage state in useEffect
   useEffect(() => {
     // 1. Restore Project ID
@@ -197,11 +200,17 @@ export default function Page() {
     if (dismissed !== "true" && !hasProject) {
       setShowWelcome(true);
     }
+
+    // Mark hydration as complete
+    setIsHydrated(true);
   }, []);
 
+  // Fetch projects only after hydration is complete
   useEffect(() => {
-    fetchProjects();
-  }, [projectSelectorKey]);
+    if (isHydrated) {
+      fetchProjects();
+    }
+  }, [projectSelectorKey, isHydrated]);
 
   // Persist currentProjectId
   useEffect(() => {
@@ -773,6 +782,16 @@ export default function Page() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-gray-900 overflow-hidden relative">
+      {/* Hydration Loading Overlay */}
+      {!isHydrated && (
+        <div className="fixed inset-0 z-[9999] bg-white dark:bg-gray-900 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="size-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            <p className="text-slate-600 dark:text-slate-400 font-medium">앱 초기화 중...</p>
+          </div>
+        </div>
+      )}
+
       <NewProjectModal
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}
