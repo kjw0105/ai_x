@@ -43,11 +43,10 @@ export function EmptyDocumentState({ onUploadClick, onFileSelect }: EmptyDocumen
         >
             <button
                 onClick={onUploadClick}
-                className={`flex flex-col items-center justify-center gap-6 p-12 rounded-3xl border-2 border-dashed transition-all duration-300 max-w-md w-full ${
-                    isDragging
+                className={`flex flex-col items-center justify-center gap-6 p-12 rounded-3xl border-2 border-dashed transition-all duration-300 max-w-md w-full ${isDragging
                         ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 scale-105"
                         : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/10 hover:scale-105"
-                }`}
+                    }`}
             >
                 {/* Icon */}
                 <div className={`relative ${isDragging ? "animate-bounce" : ""}`}>
@@ -80,7 +79,7 @@ export function EmptyDocumentState({ onUploadClick, onFileSelect }: EmptyDocumen
                 {!isDragging && (
                     <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
                         <span className="material-symbols-outlined text-sm">info</span>
-                        <span>헤더의 "파일 업로드" 버튼도 사용할 수 있습니다</span>
+                        <span>헤더의 &quot;파일 업로드&quot; 버튼도 사용할 수 있습니다</span>
                     </div>
                 )}
             </button>
