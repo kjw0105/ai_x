@@ -85,6 +85,7 @@ export default function Header({
                     <button
                         onClick={onShowDashboard}
                         className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold"
+                        aria-label="프로젝트 대시보드 열기"
                         title="프로젝트 대시보드"
                     >
                         <span className="material-symbols-outlined">dashboard</span>
@@ -94,6 +95,7 @@ export default function Header({
                 <button
                     onClick={onShowHistory}
                     className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold"
+                    aria-label="기록 보기"
                     title="기록 보기"
                 >
                     <span className="material-symbols-outlined">history</span>
@@ -102,6 +104,7 @@ export default function Header({
                 <button
                     onClick={toggleDark}
                     className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold"
+                    aria-label="다크모드 토글"
                     title="다크모드 토글"
                 >
                     <span className="material-symbols-outlined">dark_mode</span>
