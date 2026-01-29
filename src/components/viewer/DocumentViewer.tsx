@@ -61,6 +61,7 @@ export default function DocumentViewer({
                             disabled={!file}
                             className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:bg-transparent"
                             title={file ? "현재 파일 삭제" : "삭제할 파일 없음"}
+                            aria-label={file ? "현재 파일 삭제" : "삭제할 파일 없음"}
                         >
                             <span className="material-symbols-outlined text-xl">delete</span>
                         </button>
@@ -79,6 +80,7 @@ export default function DocumentViewer({
                             onClick={handlePrev}
                             disabled={!hasPrev}
                             className="p-1 hover:bg-white dark:hover:bg-slate-600 rounded disabled:opacity-30 transition-colors"
+                            aria-label="이전 페이지"
                         >
                             <span className="material-symbols-outlined text-base">chevron_left</span>
                         </button>
@@ -89,6 +91,7 @@ export default function DocumentViewer({
                             onClick={handleNext}
                             disabled={!hasNext}
                             className="p-1 hover:bg-white dark:hover:bg-slate-600 rounded disabled:opacity-30 transition-colors"
+                            aria-label="다음 페이지"
                         >
                             <span className="material-symbols-outlined text-base">chevron_right</span>
                         </button>
@@ -163,6 +166,7 @@ export default function DocumentViewer({
                                         onClick={(e) => { e.stopPropagation(); handlePrev(); }}
                                         disabled={!hasPrev}
                                         className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 disabled:opacity-0 transition-all"
+                                        aria-label="이전 페이지"
                                     >
                                         <span className="material-symbols-outlined">chevron_left</span>
                                     </button>
@@ -170,6 +174,7 @@ export default function DocumentViewer({
                                         onClick={(e) => { e.stopPropagation(); handleNext(); }}
                                         disabled={!hasNext}
                                         className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 disabled:opacity-0 transition-all"
+                                        aria-label="다음 페이지"
                                     >
                                         <span className="material-symbols-outlined">chevron_right</span>
                                     </button>

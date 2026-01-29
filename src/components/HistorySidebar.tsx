@@ -55,10 +55,15 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                         disabled={history.length === 0}
                         className="p-1 text-slate-400 hover:text-red-500 rounded-full disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400"
                         title={history.length === 0 ? "삭제할 기록 없음" : "모든 기록 지우기"}
+                        aria-label={history.length === 0 ? "삭제할 기록 없음" : "모든 기록 지우기"}
                     >
                         <span className="material-symbols-outlined text-lg">delete</span>
                     </button>
-                    <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full">
+                    <button
+                        onClick={onClose}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"
+                        aria-label="기록 패널 닫기"
+                    >
                         <span className="material-symbols-outlined">close</span>
                     </button>
                 </div>
@@ -94,6 +99,7 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport }: Hist
                             }}
                             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full opacity-0 group-hover:opacity-100 transition-all"
                             title="삭제"
+                            aria-label={`기록 삭제: ${item.fileName}`}
                         >
                             <span className="material-symbols-outlined text-lg">delete</span>
                         </button>
