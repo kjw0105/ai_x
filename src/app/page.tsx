@@ -7,7 +7,6 @@ import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
 import ResizableSplitLayout from "@/components/layout/ResizableSplitLayout";
 import HistorySidebar from "@/components/HistorySidebar";
-import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
 import TBMRecorderModal from "@/components/TBMRecorderModal";
 import { EditProjectModal } from "@/components/EditProjectModal";
@@ -178,9 +177,6 @@ export default function Page() {
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description: string } | null>(null);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
 
-  // Initialize welcome state - default to false to match server
-  const [showWelcome, setShowWelcome] = useState(false);
-
   // Track data loading states (not blocking, just for UI feedback)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
@@ -190,18 +186,30 @@ export default function Page() {
     const savedProjectId = localStorage.getItem("current_project_id");
     if (savedProjectId) setCurrentProjectId(savedProjectId);
 
-    // 2. Restore Welcome Screen State
-    const dismissed = localStorage.getItem("welcome_dismissed");
-    const hasProject = localStorage.getItem("current_project_id"); // Checked again for logic consistency
+    // 2. Auto-load last report (Option B - analysis only, like history sidebar)
+    async function autoLoadLastReport() {
+      try {
+        const res = await fetch("/api/history");
+        if (!res.ok) return;
+        const history = await res.json();
+        if (!Array.isArray(history) || history.length === 0) return;
 
-    // Show welcome IMMEDIATELY if not dismissed AND no saved project (Option A)
-    // Project list will load progressively with skeleton loaders
-    if (dismissed !== "true" && !hasProject) {
-      setShowWelcome(true);
+        // Get the most recent report
+        const lastReport = history[0];
+
+        // Load it (analysis only, no file)
+        await loadReportFromHistory(lastReport.id);
+      } catch (e) {
+        // Silently fail - not critical to app startup
+        console.error("Failed to auto-load last report:", e);
+      }
     }
 
     // Start loading projects (non-blocking)
     fetchProjects();
+
+    // Auto-load last report (non-blocking)
+    autoLoadLastReport();
   }, []);
 
   // Refetch projects when selector key changes
@@ -753,31 +761,9 @@ export default function Page() {
     del("current_page");
   }
 
+  // No-op function to maintain compatibility with existing code
   function dismissWelcome() {
-    setShowWelcome(false);
-    localStorage.setItem("welcome_dismissed", "true");
-  }
-
-  function showWelcomeScreen() {
-    setShowWelcome(true);
-    localStorage.setItem("welcome_dismissed", "false");
-    // Clear current work when going back to welcome
-    handleClearFile();
-  }
-
-  function handleWelcomeCreateProject() {
-    dismissWelcome();
-    setIsProjectModalOpen(true);
-  }
-
-  function handleWelcomeSelectProject(projectId: string) {
-    dismissWelcome();
-    setCurrentProjectId(projectId);
-  }
-
-  function handleWelcomeProceedWithoutProject() {
-    dismissWelcome();
-    setCurrentProjectId(null);
+    // Welcome screen removed - this function is now a no-op
   }
 
   return (
@@ -849,20 +835,19 @@ export default function Page() {
         isLoadingProjects={isLoadingProjects}
         onUpload={pickFileDialog}
         onStartTBM={() => {
-          dismissWelcome();
           setShowTBMModal(true);
         }}
         onShowHistory={() => setShowHistory(true)}
         onShowDashboard={() => setShowDashboard(true)}
         toggleDark={toggleDark}
-        showWelcome={showWelcome}
+        showWelcome={false}
         projects={projects}
         currentProjectId={currentProjectId}
         onProjectChange={setCurrentProjectId}
         onOpenNewProject={() => setIsProjectModalOpen(true)}
         onDeleteProject={handleDeleteProject}
         onEditProject={handleOpenEditProject}
-        onShowWelcome={showWelcomeScreen}
+        onShowWelcome={undefined}
         currentFileName={file?.name}
       />
 
@@ -884,46 +869,37 @@ export default function Page() {
         onSelectReport={loadReportFromHistory}
       />
 
-      {showWelcome && !file ? (
-        <WelcomeScreen
-          projects={projects}
-          isLoadingProjects={isLoadingProjects}
-          onCreateProject={handleWelcomeCreateProject}
-          onSelectProject={handleWelcomeSelectProject}
-          onProceedWithoutProject={handleWelcomeProceedWithoutProject}
-        />
-      ) : (
-        <ResizableSplitLayout
-          left={
-            <DocumentViewer
-              file={file}
-              pageImages={pageImages}
-              reportIssues={report?.issues ?? []}
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-              onPickFile={pickFileDialog}
-              onStartTBM={() => {
-                dismissWelcome();
-                setShowTBMModal(true);
-              }}
-              onClearFile={handleClearFile}
-              historicalFileName={historicalFileName}
-              documentType={report?.documentType}
-            />
-          }
-          right={
-            <AnalysisPanel
-              loading={loading}
-              issues={report?.issues ?? []}
-              chatMessages={report?.chat ?? []}
-              onReupload={pickFileDialog}
-              onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-              currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
-              currentFile={file}
-            />
-          }
-        />
-      )}
+      <ResizableSplitLayout
+        left={
+          <DocumentViewer
+            file={file}
+            pageImages={pageImages}
+            reportIssues={report?.issues ?? []}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            onPickFile={pickFileDialog}
+            onFileSelect={onPickFile}
+            onStartTBM={() => {
+              dismissWelcome();
+              setShowTBMModal(true);
+            }}
+            onClearFile={handleClearFile}
+            historicalFileName={historicalFileName}
+            documentType={report?.documentType}
+          />
+        }
+        right={
+          <AnalysisPanel
+            loading={loading}
+            issues={report?.issues ?? []}
+            chatMessages={report?.chat ?? []}
+            onReupload={pickFileDialog}
+            onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
+            currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+            currentFile={file}
+          />
+        }
+      />
     </div>
   );
 }
