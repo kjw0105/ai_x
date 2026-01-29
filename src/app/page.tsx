@@ -141,6 +141,7 @@ export default function Page() {
   const [showDashboard, setShowDashboard] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [historicalFileName, setHistoricalFileName] = useState<string | undefined>(undefined);
+  const [currentReportId, setCurrentReportId] = useState<string | undefined>(undefined);
   const [showDocTypeSelector, setShowDocTypeSelector] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
@@ -182,8 +183,8 @@ export default function Page() {
   // Track data loading states (not blocking, just for UI feedback)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
-  // Welcome screen state - non-blocking, just shows in viewer area
-  const [showWelcome, setShowWelcome] = useState(false);
+  // Welcome screen state - always show on app load as entry point
+  const [showWelcome, setShowWelcome] = useState(true);
 
   // HYDRATION FIX: Load localStorage state in useEffect
   useEffect(() => {
@@ -213,8 +214,9 @@ export default function Page() {
     // Start loading projects (non-blocking)
     fetchProjects();
 
-    // Auto-load last report (non-blocking)
-    autoLoadLastReport();
+    // Note: Auto-load last report removed - welcome screen is now the entry point
+    // Users can manually load from history if needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refetch projects when selector key changes
@@ -591,7 +593,7 @@ export default function Page() {
       setFile(null);
       setPageImages([]);
       setHistoricalFileName(data.fileName);
-      toast.success("검증 기록을 불러왔습니다");
+      setCurrentReportId(id); // Track which report is currently loaded
     } catch (e) {
       toast.error("기록을 불러오는 데 실패했습니다");
     } finally {
@@ -738,7 +740,7 @@ export default function Page() {
       // Ensure welcome screen is dismissed
       dismissWelcome();
 
-      toast.success(`프로젝트 "${name}"이(가) 생성되었습니다. 이제 검증할 문서를 업로드하세요.`);
+      // No toast needed - user is redirected and sees the project selected
     } catch (error) {
       toast.error("프로젝트 생성에 실패했습니다");
       throw error;
@@ -807,60 +809,141 @@ export default function Page() {
     setIsEditProjectModalOpen(true);
   }
 
-  // --- Persistence Logic ---
-  useEffect(() => {
-    // Load state from DB on mount
-    async function loadState() {
-      try {
-        const savedFile = await get("current_file");
-        const savedImages = await get("current_images");
-        const savedReport = await get("current_report");
-        const savedPage = await get("current_page");
+  // --- Project-Aware Persistence Logic ---
+  // Helper to get project-specific keys
+  function getProjectKey(key: string) {
+    return currentProjectId ? `project_${currentProjectId}_${key}` : `no_project_${key}`;
+  }
 
-        if (savedFile) setFile(savedFile);
-        if (savedImages) setPageImages(savedImages);
-        if (savedReport) setReport(savedReport);
-        if (savedPage) setCurrentPage(savedPage);
-      } catch (e) {
-        console.error("Failed to load state", e);
-      }
+  // Save current document state when switching projects
+  async function saveCurrentProjectState() {
+    try {
+      if (file) await set(getProjectKey("file"), file);
+      else await del(getProjectKey("file"));
+
+      if (pageImages.length > 0) await set(getProjectKey("images"), pageImages);
+      else await del(getProjectKey("images"));
+
+      if (report) await set(getProjectKey("report"), report);
+      else await del(getProjectKey("report"));
+
+      if (currentPage > 0) await set(getProjectKey("page"), currentPage);
+      else await del(getProjectKey("page"));
+    } catch (e) {
+      console.error("Failed to save project state", e);
     }
-    loadState();
-  }, []); // Run once on mount
+  }
 
-  // Auto-save effects - also clear DB when values are cleared
+  // Load document state for current project
+  async function loadCurrentProjectState() {
+    try {
+      const savedFile = await get(getProjectKey("file"));
+      const savedImages = await get(getProjectKey("images"));
+      const savedReport = await get(getProjectKey("report"));
+      const savedPage = await get(getProjectKey("page"));
+
+      // If there's saved state, load it
+      if (savedFile || savedReport) {
+        setFile(savedFile || null);
+        setPageImages(savedImages || []);
+        setReport(savedReport || null);
+        setCurrentPage(savedPage || 0);
+        setHistoricalFileName(undefined);
+        setCurrentReportId(undefined); // Clear report ID since this is local state
+      } else {
+        // No saved state - check if project has history and auto-load most recent
+        // Only do this if we're not showing the welcome screen
+        if (!showWelcome && currentProjectId) {
+          try {
+            const url = `/api/history?projectId=${currentProjectId}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+              const history = await res.json();
+              if (Array.isArray(history) && history.length > 0) {
+                // Auto-load the most recent report for this project
+                await loadReportFromHistory(history[0].id);
+              } else {
+                // No history - clear state
+                clearDocumentState();
+              }
+            } else {
+              // API error - clear state
+              clearDocumentState();
+            }
+          } catch (e) {
+            if ((e as any)?.name !== 'AbortError') {
+              console.error("Failed to auto-load history", e);
+            }
+            // Clear state on error
+            clearDocumentState();
+          }
+        } else {
+          // Welcome screen is showing or no project - just clear state
+          clearDocumentState();
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load project state", e);
+      clearDocumentState();
+    }
+  }
+
+  function clearDocumentState() {
+    setFile(null);
+    setPageImages([]);
+    setReport(null);
+    setCurrentPage(0);
+    setHistoricalFileName(undefined);
+    setCurrentReportId(undefined);
+  }
+
+  // Load state for current project when projectId changes or welcome is dismissed
+  useEffect(() => {
+    loadCurrentProjectState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId, showWelcome]);
+
+  // Auto-save effects - save to project-specific keys
   useEffect(() => {
     if (file) {
-      set("current_file", file);
+      set(getProjectKey("file"), file);
     } else {
-      del("current_file");
+      del(getProjectKey("file"));
     }
-  }, [file]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, currentProjectId]);
 
   useEffect(() => {
     if (pageImages.length > 0) {
-      set("current_images", pageImages);
+      set(getProjectKey("images"), pageImages);
     } else {
-      del("current_images");
+      del(getProjectKey("images"));
     }
-  }, [pageImages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageImages, currentProjectId]);
 
   useEffect(() => {
     if (report) {
-      set("current_report", report);
+      set(getProjectKey("report"), report);
     } else {
-      del("current_report");
+      del(getProjectKey("report"));
     }
-  }, [report]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report, currentProjectId]);
 
-  // Debounce page save slightly if needed, or just save (it's small)
   useEffect(() => {
     if (currentPage > 0) {
-      set("current_page", currentPage);
+      set(getProjectKey("page"), currentPage);
     } else {
-      del("current_page");
+      del(getProjectKey("page"));
     }
-  }, [currentPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, currentProjectId]);
 
 
   function handleClearFile() {
@@ -869,12 +952,13 @@ export default function Page() {
     setReport(null);
     setCurrentPage(0);
     setHistoricalFileName(undefined);
+    setCurrentReportId(undefined);
 
-    // Clear DB
-    del("current_file");
-    del("current_images");
-    del("current_report");
-    del("current_page");
+    // Clear DB for current project
+    del(getProjectKey("file"));
+    del(getProjectKey("images"));
+    del(getProjectKey("report"));
+    del(getProjectKey("page"));
   }
 
   function dismissWelcome() {
@@ -1004,6 +1088,7 @@ export default function Page() {
         onClose={() => setShowHistory(false)}
         onSelectReport={loadReportFromHistory}
         onExportReport={exportReportFromHistory}
+        currentProjectId={currentProjectId}
       />
 
       {showWelcome ? (
@@ -1033,6 +1118,9 @@ export default function Page() {
               onClearFile={handleClearFile}
               historicalFileName={historicalFileName}
               documentType={report?.documentType}
+              currentProjectId={currentProjectId}
+              currentReportId={currentReportId}
+              onLoadDocument={loadReportFromHistory}
             />
           }
           right={

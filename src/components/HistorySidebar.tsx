@@ -20,9 +20,10 @@ interface HistorySidebarProps {
     onClose: () => void;
     onSelectReport: (id: string) => void;
     onExportReport: (id: string) => void;
+    currentProjectId?: string | null;
 }
 
-export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExportReport }: HistorySidebarProps) {
+export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExportReport, currentProjectId }: HistorySidebarProps) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string | null; fileName?: string } | null>(null);
@@ -34,24 +35,34 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExpo
         if (isOpen) {
             setLoading(true);
             setDisplayCount(30); // Reset to 30 when opening
-            fetch("/api/history")
+            const url = currentProjectId
+                ? `/api/history?projectId=${currentProjectId}`
+                : "/api/history";
+            fetch(url)
                 .then((res) => res.json())
                 .then((data) => {
                     if (Array.isArray(data)) setHistory(data);
                 })
                 .finally(() => setLoading(false));
         }
-    }, [isOpen]);
+    }, [isOpen, currentProjectId]);
 
     return (
         <div
             className={`fixed inset-y-0 right-0 w-80 bg-white dark:bg-surface-dark shadow-2xl transform transition-transform duration-300 z-50 border-l border-slate-200 dark:border-slate-700 ${isOpen ? "translate-x-0" : "translate-x-full"}`}
         >
             <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700">
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                    <span className="material-symbols-outlined">history</span>
-                    최근 검증 기록
-                </h2>
+                <div className="flex-1 min-w-0">
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <span className="material-symbols-outlined">history</span>
+                        최근 검증 기록
+                    </h2>
+                    {currentProjectId && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            현재 프로젝트의 기록만 표시
+                        </p>
+                    )}
+                </div>
                 <div className="flex gap-1">
                     <button
                         onClick={() => setDeleteAllConfirm(true)}
