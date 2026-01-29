@@ -10,6 +10,7 @@ export type Project = {
 
 interface WelcomeScreenProps {
     projects: Project[];
+    isLoadingProjects: boolean;
     onCreateProject: () => void;
     onSelectProject: (projectId: string) => void;
     onProceedWithoutProject: () => void;
@@ -17,6 +18,7 @@ interface WelcomeScreenProps {
 
 export function WelcomeScreen({
     projects,
+    isLoadingProjects,
     onCreateProject,
     onSelectProject,
     onProceedWithoutProject
@@ -60,19 +62,26 @@ export function WelcomeScreen({
                     {/* Select Existing Project */}
                     <button
                         onClick={projects.length > 0 ? undefined : onProceedWithoutProject}
-                        disabled={projects.length === 0}
+                        disabled={isLoadingProjects || projects.length === 0}
                         className="group bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-lg hover:shadow-2xl border-2 border-transparent hover:border-green-500 transition-all duration-300 text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-transparent"
                     >
                         <div className="flex items-center justify-center size-16 bg-green-500/10 rounded-xl mb-4 group-hover:bg-green-500/20 transition-colors">
-                            <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                            </svg>
+                            {isLoadingProjects ? (
+                                <svg className="w-8 h-8 text-green-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            ) : (
+                                <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                </svg>
+                            )}
                         </div>
                         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
                             기존 프로젝트 선택
                         </h3>
                         <p className="text-sm text-slate-600 dark:text-slate-400">
-                            {projects.length > 0 ? "저장된 프로젝트에서 선택하여 계속하세요" : "아직 생성된 프로젝트가 없습니다"}
+                            {isLoadingProjects ? "프로젝트 로딩 중..." : projects.length > 0 ? "저장된 프로젝트에서 선택하여 계속하세요" : "아직 생성된 프로젝트가 없습니다"}
                         </p>
                     </button>
 
@@ -96,16 +105,29 @@ export function WelcomeScreen({
                 </div>
 
                 {/* Existing Projects List */}
-                {projects.length > 0 && (
+                {(isLoadingProjects || projects.length > 0) && (
                     <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                             </svg>
-                            최근 프로젝트
+                            {isLoadingProjects ? '프로젝트 로딩 중...' : '최근 프로젝트'}
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto">
-                            {projects.slice(0, 6).map(project => (
+                            {/* Skeleton Loaders */}
+                            {isLoadingProjects && (
+                                <>
+                                    {[1, 2, 3, 4].map(i => (
+                                        <div key={i} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 animate-pulse">
+                                            <div className="h-5 bg-slate-200 dark:bg-slate-600 rounded w-3/4 mb-2"></div>
+                                            <div className="h-3 bg-slate-200 dark:bg-slate-600 rounded w-1/2"></div>
+                                        </div>
+                                    ))}
+                                </>
+                            )}
+
+                            {/* Actual Project List */}
+                            {!isLoadingProjects && projects.slice(0, 6).map(project => (
                                 <button
                                     key={project.id}
                                     onClick={() => onSelectProject(project.id)}

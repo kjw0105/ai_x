@@ -3,6 +3,7 @@
 import { Issue } from "@/lib/validator";
 import { RefObject } from "react";
 import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
+import { EmptyDocumentState } from "@/components/EmptyDocumentState";
 
 interface DocumentViewerProps {
     file: File | null;
@@ -11,6 +12,7 @@ interface DocumentViewerProps {
     currentPage: number;
     onPageChange: (page: number) => void;
     onPickFile: () => void;
+    onFileSelect: (file: File) => void; // For drag & drop
     onStartTBM?: () => void;
     onClearFile?: () => void;
     historicalFileName?: string; // When viewing history without file
@@ -23,6 +25,7 @@ export default function DocumentViewer({
     currentPage,
     onPageChange,
     onPickFile,
+    onFileSelect,
     onStartTBM,
     onClearFile,
     historicalFileName,
@@ -61,6 +64,7 @@ export default function DocumentViewer({
                             disabled={!file}
                             className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:bg-transparent"
                             title={file ? "현재 파일 삭제" : "삭제할 파일 없음"}
+                            aria-label={file ? "현재 파일 삭제" : "삭제할 파일 없음"}
                         >
                             <span className="material-symbols-outlined text-xl">delete</span>
                         </button>
@@ -79,6 +83,7 @@ export default function DocumentViewer({
                             onClick={handlePrev}
                             disabled={!hasPrev}
                             className="p-1 hover:bg-white dark:hover:bg-slate-600 rounded disabled:opacity-30 transition-colors"
+                            aria-label="이전 페이지"
                         >
                             <span className="material-symbols-outlined text-base">chevron_left</span>
                         </button>
@@ -89,6 +94,7 @@ export default function DocumentViewer({
                             onClick={handleNext}
                             disabled={!hasNext}
                             className="p-1 hover:bg-white dark:hover:bg-slate-600 rounded disabled:opacity-30 transition-colors"
+                            aria-label="다음 페이지"
                         >
                             <span className="material-symbols-outlined text-base">chevron_right</span>
                         </button>
@@ -98,30 +104,10 @@ export default function DocumentViewer({
 
             <div className="flex-1 overflow-auto p-8 flex justify-center items-start bg-slate-300/30">
                 {!file && !historicalFileName && (
-                    <div className="w-full max-w-[800px] bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 border border-slate-200 dark:border-slate-700 mt-20">
-                        <h3 className="text-2xl font-black mb-2">서류를 올려주세요</h3>
-                        <p className="text-slate-600 dark:text-slate-300 mb-6">
-                            PDF 또는 이미지(JPG/PNG)를 업로드하면 AI가 빠진 항목/불일치/수정사항을 알려줘요.
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3">
-                            {onStartTBM && (
-                                <button
-                                    onClick={onStartTBM}
-                                    className="px-6 py-3 rounded-2xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-black border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm inline-flex items-center gap-2"
-                                >
-                                    <span className="material-symbols-outlined">mic</span>
-                                    TBM 시작
-                                </button>
-                            )}
-                            <button
-                                onClick={onPickFile}
-                                className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
-                            >
-                                <span className="material-symbols-outlined">add_a_photo</span>
-                                파일 업로드
-                            </button>
-                        </div>
-                    </div>
+                    <EmptyDocumentState
+                        onUploadClick={onPickFile}
+                        onFileSelect={onFileSelect}
+                    />
                 )}
 
                 {!file && historicalFileName && (
@@ -163,6 +149,7 @@ export default function DocumentViewer({
                                         onClick={(e) => { e.stopPropagation(); handlePrev(); }}
                                         disabled={!hasPrev}
                                         className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 disabled:opacity-0 transition-all"
+                                        aria-label="이전 페이지"
                                     >
                                         <span className="material-symbols-outlined">chevron_left</span>
                                     </button>
@@ -170,6 +157,7 @@ export default function DocumentViewer({
                                         onClick={(e) => { e.stopPropagation(); handleNext(); }}
                                         disabled={!hasNext}
                                         className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 disabled:opacity-0 transition-all"
+                                        aria-label="다음 페이지"
                                     >
                                         <span className="material-symbols-outlined">chevron_right</span>
                                     </button>

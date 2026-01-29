@@ -27,11 +27,13 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExpo
     const [loading, setLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string | null; fileName?: string } | null>(null);
     const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
+    const [displayCount, setDisplayCount] = useState(30); // Show 30 items initially
     const toast = useToast();
 
     useEffect(() => {
         if (isOpen) {
             setLoading(true);
+            setDisplayCount(30); // Reset to 30 when opening
             fetch("/api/history")
                 .then((res) => res.json())
                 .then((data) => {
@@ -56,10 +58,15 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExpo
                         disabled={history.length === 0}
                         className="p-1 text-slate-400 hover:text-red-500 rounded-full disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400"
                         title={history.length === 0 ? "삭제할 기록 없음" : "모든 기록 지우기"}
+                        aria-label={history.length === 0 ? "삭제할 기록 없음" : "모든 기록 지우기"}
                     >
                         <span className="material-symbols-outlined text-lg">delete</span>
                     </button>
-                    <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full">
+                    <button
+                        onClick={onClose}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"
+                        aria-label="기록 패널 닫기"
+                    >
                         <span className="material-symbols-outlined">close</span>
                     </button>
                 </div>
@@ -72,7 +79,7 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExpo
                     <div className="text-center p-8 text-slate-400 text-sm">기록이 없습니다.</div>
                 )}
 
-                {history.map((item) => (
+                {history.slice(0, displayCount).map((item) => (
                     <div
                         key={item.id}
                         className="group relative flex items-center p-3 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
@@ -96,6 +103,7 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExpo
                                 }}
                                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-full"
                                 title="PDF 다시 내보내기"
+                                aria-label={`PDF 다시 내보내기: ${item.fileName}`}
                             >
                                 <span className="material-symbols-outlined text-lg">download</span>
                             </button>
@@ -106,12 +114,24 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExpo
                                 }}
                                 className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full"
                                 title="삭제"
+                                aria-label={`기록 삭제: ${item.fileName}`}
                             >
                                 <span className="material-symbols-outlined text-lg">delete</span>
                             </button>
                         </div>
                     </div>
                 ))}
+
+                {/* Load More Button */}
+                {!loading && history.length > displayCount && (
+                    <button
+                        onClick={() => setDisplayCount(prev => prev + 30)}
+                        className="w-full mt-4 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                    >
+                        <span className="material-symbols-outlined">expand_more</span>
+                        이전 문서 더 보기 ({history.length - displayCount}개 남음)
+                    </button>
+                )}
             </div>
 
             {/* Delete Single Item Confirmation */}

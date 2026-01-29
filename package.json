@@ -34,8 +34,13 @@
     "@types/react": "^18.2.79",
     "@types/react-dom": "^18.2.25",
     "autoprefixer": "^10.4.19",
+<<<<<<< HEAD
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.6",
+=======
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.0",
+>>>>>>> 497d91dac07e845d1e85e21c83d0d8ce57365620
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.4.5"
