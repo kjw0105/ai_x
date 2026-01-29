@@ -680,7 +680,7 @@ export default function Page() {
       let contextText = "";
       if (file) {
         // Extract text from Master Plan
-        contextText = await extractPdfText(file);
+        contextText = await extractPdfText(file, null as any);
       }
 
       const res = await fetch("/api/projects", {
@@ -739,7 +739,7 @@ export default function Page() {
     try {
       let contextText = undefined;
       if (data.file) {
-        contextText = await extractPdfText(data.file);
+        contextText = await extractPdfText(data.file, new AbortController().signal);
       }
 
       const res = await fetch(`/api/projects/${projectId}`, {

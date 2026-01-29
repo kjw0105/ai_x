@@ -395,7 +395,7 @@ const htmlPdfModule =
   (runtimeRequire?.("html-pdf-node") ?? require("html-pdf-node")) as any;
 
 const htmlPdf = htmlPdfModule?.default ?? htmlPdfModule;
- main
+
             generatePdf =
                 (htmlPdf as any).generatePdf ??
                 (htmlPdf as any).default?.generatePdf ??
@@ -452,7 +452,7 @@ const htmlPdf = htmlPdfModule?.default ?? htmlPdfModule;
         }
 
         // Return PDF as blob
-        return new NextResponse(pdfBuffer, {
+        return new NextResponse(new Uint8Array(pdfBuffer), {
             headers: {
                 'Content-Type': 'application/pdf',
                 'Content-Disposition': `attachment; filename="${encodeURIComponent(finalFilename)}"`,
