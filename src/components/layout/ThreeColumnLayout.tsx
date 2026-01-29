@@ -72,8 +72,12 @@ export function ThreeColumnLayout({ left, center, right }: ThreeColumnLayoutProp
 
       {/* Center Column - Document Viewer */}
       <div
-        className="flex-1 transition-all duration-300"
-        style={{ width: widths.center }}
+        className={`transition-all duration-300 ${
+          leftCollapsed && rightCollapsed ? "flex-1" : ""
+        }`}
+        style={{
+          width: leftCollapsed && rightCollapsed ? "100%" : widths.center,
+        }}
       >
         {center}
       </div>
