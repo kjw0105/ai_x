@@ -381,8 +381,30 @@ export async function POST(req: Request) {
         // Build HTML content
         const htmlContent = buildHTMLContent(data);
 
-        // Dynamic import of html-pdf-node
-        const htmlPdf = require('html-pdf-node');
+        // Dynamic import of html-pdf-node (ESM-friendly)
+        let generatePdf: ((file: { content: string }, options: Record<string, unknown>) => Promise<Buffer>) | null = null;
+        try {
+            const htmlPdf = await import('html-pdf-node');
+            generatePdf =
+                (htmlPdf as any).generatePdf ??
+                (htmlPdf as any).default?.generatePdf ??
+                (htmlPdf as any).default ??
+                null;
+        } catch (importError: any) {
+            console.error('[API Export PDF] Failed to load html-pdf-node:', importError);
+            return NextResponse.json(
+                { error: "PDF generation dependency is missing. Please install html-pdf-node." },
+                { status: 500 }
+            );
+        }
+
+        if (!generatePdf) {
+            console.error('[API Export PDF] html-pdf-node did not expose generatePdf.');
+            return NextResponse.json(
+                { error: "PDF generation module is unavailable. Please verify html-pdf-node installation." },
+                { status: 500 }
+            );
+        }
 
         const options = {
             format: 'A4',
@@ -401,7 +423,7 @@ export async function POST(req: Request) {
         console.log('[API Export PDF] Generating PDF...');
 
         // Generate PDF buffer
-        const pdfBuffer = await htmlPdf.generatePdf(file, options);
+        const pdfBuffer = await generatePdf(file, options);
 
         console.log('[API Export PDF] PDF generated successfully, size:', pdfBuffer.length);
 
