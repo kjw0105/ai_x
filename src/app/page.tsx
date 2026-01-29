@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Header from "@/components/Header";
 import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
@@ -12,10 +12,12 @@ import { DocumentTypeSelector } from "@/components/DocumentTypeSelector";
 import TBMRecorderModal from "@/components/TBMRecorderModal";
 import { EditProjectModal } from "@/components/EditProjectModal";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
+import { ProgressBar } from "@/components/ProgressBar";
 import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixing if validator.ts export is slightly different
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
+import { ModalDialog } from "@/components/ModalDialog";
 
 // Type Definitions (Re-using some from validator or defining locally for now if implicit)
 // In validator.ts we have type Severity? Checking previous read..
@@ -34,6 +36,9 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const titleId = useId();
+  const descriptionId = useId();
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!isOpen) return null;
 
@@ -51,69 +56,80 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700">
-        <h3 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">New Project</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Project Name</label>
+    <ModalDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      labelledBy={titleId}
+      describedBy={descriptionId}
+      overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700"
+      initialFocusRef={nameInputRef}
+    >
+      <h3 id={titleId} className="text-xl font-bold mb-2 text-slate-900 dark:text-white">New Project</h3>
+      <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+        Provide the project details below to create a new workspace.
+      </p>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Project Name</label>
+          <input
+            ref={nameInputRef}
+            required
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            value={name} onChange={e => setName(e.target.value)}
+            placeholder="e.g. Gimpo Han River Site A"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+          <input
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            value={description} onChange={e => setDescription(e.target.value)}
+            placeholder="Optional description"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            마스터 안전 계획서 (선택사항)
+          </label>
+          <div className="flex items-center gap-2">
             <input
-              required
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              value={name} onChange={e => setName(e.target.value)}
-              placeholder="e.g. Gimpo Han River Site A"
+              type="file"
+              accept="application/pdf"
+              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
+              onChange={e => setFile(e.target.files?.[0] || null)}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
-            <input
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              value={description} onChange={e => setDescription(e.target.value)}
-              placeholder="Optional description"
-            />
+          <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">
+              💡 이 문서는 무엇인가요?
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-400">
+              프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
+            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
+              ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              마스터 안전 계획서 (선택사항)
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept="application/pdf"
-                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
-                onChange={e => setFile(e.target.files?.[0] || null)}
-              />
-            </div>
-            <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">
-                💡 이 문서는 무엇인가요?
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-400">
-                프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
-              </p>
-              <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
-                ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
-              </p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? "Creating..." : "Create Project"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? "Creating..." : "Create Project"}
+          </button>
+        </div>
+      </form>
+    </ModalDialog>
   );
 }
 
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const validationAbortController = useRef<AbortController | null>(null);
   const toast = useToast();
 
   const [file, setFile] = useState<File | null>(null);
@@ -129,37 +145,59 @@ export default function Page() {
   const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
   const [showTBMModal, setShowTBMModal] = useState(false);
 
+  // Progress tracking state
+  const [validationStep, setValidationStep] = useState(0);
+  const [showProgress, setShowProgress] = useState(false);
+
+  const validationSteps = [
+    { id: "extract", label: "텍스트 추출", icon: "description" },
+    { id: "analyze", label: "AI 분석", icon: "psychology" },
+    { id: "validate", label: "규칙 검증", icon: "task_alt" },
+    { id: "complete", label: "완료", icon: "check_circle" },
+  ];
+
   // Reset page when file changes
   useEffect(() => {
     setCurrentPage(0);
   }, [file, pageImages]);
 
+  // Cleanup: Abort any pending validation on unmount
+  useEffect(() => {
+    return () => {
+      if (validationAbortController.current) {
+        validationAbortController.current.abort();
+      }
+    };
+  }, []);
+
   // Project State
   const [projects, setProjects] = useState<any[]>([]); // Should use Project type
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("current_project_id");
-    }
-    return null;
-  });
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description: string } | null>(null);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
-  // Initialize welcome state from localStorage on client only to avoid hydration mismatch
-  const [showWelcome, setShowWelcome] = useState(() => {
-    if (typeof window !== "undefined") {
-      const showWelcomeState = localStorage.getItem("show_welcome");
-      // If explicitly set, use that value
-      if (showWelcomeState !== null) {
-        return showWelcomeState === "true";
-      }
-      // Otherwise, show welcome if no project exists
-      const hasProject = localStorage.getItem("current_project_id");
-      return !hasProject;
+
+  // Initialize welcome state - default to false to match server
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // HYDRATION FIX: Load localStorage state in useEffect
+  useEffect(() => {
+    // 1. Restore Project ID
+    const savedProjectId = localStorage.getItem("current_project_id");
+    if (savedProjectId) setCurrentProjectId(savedProjectId);
+
+    // 2. Restore Welcome Screen State
+    const dismissed = localStorage.getItem("welcome_dismissed");
+    const hasProject = localStorage.getItem("current_project_id"); // Checked again for logic consistency
+
+    // Show welcome if not dismissed AND no saved project
+    // Note: If project exists, we definitely don't show welcome (unless explicit override logic)
+    // If no project and not dismissed, show it.
+    if (dismissed !== "true" && !hasProject) {
+      setShowWelcome(true);
     }
-    return false; // Default to false on server to avoid hydration issues
-  });
+  }, []);
 
   useEffect(() => {
     fetchProjects();
@@ -175,6 +213,19 @@ export default function Page() {
       }
     }
   }, [currentProjectId]);
+
+  // PERFORMANCE: Preload PDF font on app startup
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Preload Nanum Myeongjo font for PDF exports
+      const link = document.createElement('link');
+      link.href = 'https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap';
+      link.rel = 'stylesheet';
+      link.as = 'style';
+      document.head.appendChild(link);
+      console.log('[App] Preloaded Nanum Myeongjo font for PDF exports');
+    }
+  }, []);
 
   async function fetchProjects() {
     try {
@@ -228,13 +279,20 @@ export default function Page() {
     setShowTBMModal(true);
   }
 
-  async function renderPdfPages(pdfFile: File) {
+  async function renderPdfPages(pdfFile: File, signal: AbortSignal) {
     const pdfjs = await getPdfjs();
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     const buf = await pdfFile.arrayBuffer();
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     const pdf = await (pdfjs as any).getDocument({ data: buf }).promise;
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
     const images: string[] = [];
     for (let i = 1; i <= pdf.numPages; i++) {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
       // Optimized scale for viewing
       const page = await pdf.getPage(i);
       const viewport = page.getViewport({ scale: 1.5 });
@@ -246,16 +304,26 @@ export default function Page() {
       await page.render({ canvasContext: ctx, viewport }).promise;
       images.push(canvas.toDataURL("image/jpeg"));
     }
+
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     setPageImages(images);
     return images;
   }
 
-  async function extractPdfText(pdfFile: File) {
+  async function extractPdfText(pdfFile: File, signal: AbortSignal) {
     const pdfjs = await getPdfjs();
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     const buf = await pdfFile.arrayBuffer();
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     const pdf = await (pdfjs as any).getDocument({ data: buf }).promise;
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     let full = "";
     for (let p = 1; p <= pdf.numPages; p++) {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
       const page = await pdf.getPage(p);
       const content = await page.getTextContent();
       const pageText = content.items
@@ -267,24 +335,66 @@ export default function Page() {
   }
 
   async function runValidation(f: File, documentType: DocumentType | null = null) {
+    // Abort any previous validation request
+    if (validationAbortController.current) {
+      validationAbortController.current.abort();
+    }
+
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    validationAbortController.current = controller;
+    const signal = controller.signal;
+
     setLoading(true);
+
+    // Track start time to ensure minimum display time for progress indicator
+    const startTime = Date.now();
+    const minDisplayTime = 800; // Minimum 800ms to make progress visible
+
     try {
       let text = "";
       let images: string[] = [];
 
+      // Step 1: Extracting - Do this BEFORE showing progress
       if (f.type === "application/pdf") {
-        images = await renderPdfPages(f);
-        text = await extractPdfText(f);
+        images = await renderPdfPages(f, signal);
+        text = await extractPdfText(f, signal);
       } else if (f.type.startsWith("image/")) {
         // Logic to get dataURL from file object for API
         const reader = new FileReader();
-        const dataUrl = await new Promise<string>((resolve) => {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(f);
         });
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
         images = [dataUrl];
       }
 
+      // Check if request was aborted after extraction
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+      // VALIDATION: Check if extracted content is sufficient
+      const hasText = text && text.trim().length >= 50;
+      const hasImages = images && images.length > 0;
+
+      if (!hasText && !hasImages) {
+        if (!signal.aborted) {
+          toast.error("문서에 내용이 없거나 읽을 수 없습니다");
+          setFile(null);
+          setReport(null);
+          setLoading(false);
+          setShowProgress(false);
+        }
+        return; // Exit early without showing progress
+      }
+
+      // Now show progress bar after confirming document has content
+      setShowProgress(true);
+      setValidationStep(0);
+
+      // Step 2: Analyzing
+      setValidationStep(1);
       // Token Opt: First + Last
       let imagesToSend: string[] = [];
       if (images.length > 0) {
@@ -294,6 +404,8 @@ export default function Page() {
         }
       }
 
+      // Step 3: Validating
+      setValidationStep(2);
       const res = await fetch("/api/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -303,14 +415,50 @@ export default function Page() {
           pageImages: imagesToSend,
           projectId: currentProjectId, // Pass context
           documentType: documentType // Pass document type
-        })
+        }),
+        signal // Pass AbortSignal to fetch
       });
 
+      // Check if request was aborted after fetch
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
       const data = (await res.json()) as Report;
+
+      // Check if request was aborted after parsing JSON
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+      // Handle validation errors (400) differently from server errors (500)
       if (!res.ok) {
-        // Handle error response structure from API
-        throw new Error((data as any).error || "Unknown server error");
+        if (res.status === 400) {
+          // Validation error: empty or non-safety document
+          // Show toast notification instead of rendering as issue
+          if (!signal.aborted) {
+            const errorMessage = (data as any).error || "문서 검증에 실패했습니다";
+            toast.error(errorMessage);
+
+            // Clear file and report state - don't show invalid document
+            setFile(null);
+            setReport(null);
+            setLoading(false);
+            setShowProgress(false);
+          }
+          return; // Exit early without showing error in UI
+        } else {
+          // Server error (500, 503, etc.) - still show as system error
+          throw new Error((data as any).error || "서버 오류가 발생했습니다");
+        }
       }
+
+      // Step 4: Complete
+      setValidationStep(3);
+
+      // Ensure minimum display time for progress indicator
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
+      await new Promise(resolve => setTimeout(resolve, remainingTime + 500)); // Brief pause to show completion
+
+      // Final check before updating state
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       // Ensure IDs exist (client-side patch for legacy/migration)
       data.issues = data.issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
@@ -321,26 +469,38 @@ export default function Page() {
         documentType: documentType
       });
     } catch (e: any) {
+      // Silently ignore aborted requests - they're expected when user picks a new file
+      if (e?.name === "AbortError") {
+        return;
+      }
+
       console.error(e);
-      setReport({
-        fileName: f.name,
-        issues: [
-          {
-            id: crypto.randomUUID(), // Ensure ID for fallback error too
-            severity: "error",
-            title: "검증 실패",
-            message: e?.message || "오류가 발생했습니다."
-          }
-        ],
-        chat: [{ role: "ai", text: `오류가 발생했어요: ${e?.message}` }]
-      });
+      // Only show system errors in the UI (not validation errors)
+      toast.error(e?.message || "문서 검증 중 오류가 발생했습니다");
+
+      // Clear file state for errors as well (only if this request is still current)
+      if (!signal.aborted) {
+        setFile(null);
+        setReport(null);
+      }
     } finally {
-      setLoading(false);
+      // Only update loading/progress state if this request is still current
+      if (!signal.aborted) {
+        setLoading(false);
+        setShowProgress(false);
+      }
     }
   }
 
   async function onPickFile(f: File) {
     dismissWelcome(); // Dismiss welcome screen when file is uploaded
+
+    // Basic client-side validation: Check for zero-byte files
+    if (f.size === 0) {
+      toast.error("빈 파일입니다. 내용이 있는 문서를 업로드해주세요");
+      return;
+    }
+
     setFile(f);
     setReport(null);
     setHistoricalFileName(undefined); // Clear historical flag
@@ -584,12 +744,12 @@ export default function Page() {
 
   function dismissWelcome() {
     setShowWelcome(false);
-    localStorage.setItem("show_welcome", "false");
+    localStorage.setItem("welcome_dismissed", "true");
   }
 
   function showWelcomeScreen() {
     setShowWelcome(true);
-    localStorage.setItem("show_welcome", "true");
+    localStorage.setItem("welcome_dismissed", "false");
     // Clear current work when going back to welcome
     handleClearFile();
   }
@@ -691,7 +851,20 @@ export default function Page() {
         onDeleteProject={handleDeleteProject}
         onEditProject={handleOpenEditProject}
         onShowWelcome={showWelcomeScreen}
+        currentFileName={file?.name}
       />
+
+      {/* Progress Modal */}
+      {showProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-3xl border border-slate-200 dark:border-slate-700">
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-6 text-center">
+              문서 검증 중...
+            </h3>
+            <ProgressBar currentStep={validationStep} steps={validationSteps} />
+          </div>
+        </div>
+      )}
 
       <HistorySidebar
         isOpen={showHistory}
@@ -708,35 +881,35 @@ export default function Page() {
         />
       ) : (
         <ResizableSplitLayout
-        left={
-          <DocumentViewer
-            file={file}
-            pageImages={pageImages}
-            reportIssues={report?.issues ?? []}
-            currentPage={currentPage}
-            onPageChange={setCurrentPage}
-            onPickFile={pickFileDialog}
-            onStartTBM={() => {
-              dismissWelcome();
-              setShowTBMModal(true);
-            }}
-            onClearFile={handleClearFile}
-            historicalFileName={historicalFileName}
-            documentType={report?.documentType}
-          />
-        }
-        right={
-          <AnalysisPanel
-            loading={loading}
-            issues={report?.issues ?? []}
-            chatMessages={report?.chat ?? []}
-            onReupload={pickFileDialog}
-            onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-            currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
-            currentFile={file}
-          />
-        }
-      />
+          left={
+            <DocumentViewer
+              file={file}
+              pageImages={pageImages}
+              reportIssues={report?.issues ?? []}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              onPickFile={pickFileDialog}
+              onStartTBM={() => {
+                dismissWelcome();
+                setShowTBMModal(true);
+              }}
+              onClearFile={handleClearFile}
+              historicalFileName={historicalFileName}
+              documentType={report?.documentType}
+            />
+          }
+          right={
+            <AnalysisPanel
+              loading={loading}
+              issues={report?.issues ?? []}
+              chatMessages={report?.chat ?? []}
+              onReupload={pickFileDialog}
+              onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
+              currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+              currentFile={file}
+            />
+          }
+        />
       )}
     </div>
   );

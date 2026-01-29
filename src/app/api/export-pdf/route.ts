@@ -1,8 +1,13 @@
+export const runtime = "nodejs";
+
+import { NextResponse } from "next/server";
+
+// Define types
 interface ExportData {
     fileName: string;
     projectName?: string;
     documentType?: string | null;
-    createdAt: Date;
+    createdAt: string; // ISO string from client
     issues: Array<{
         severity: string;
         title: string;
@@ -44,42 +49,24 @@ function getSeverityBgColor(severity: string): string {
     return map[severity] || "#f1f5f9";
 }
 
-export async function exportReportToPDF(data: ExportData) {
-    // DIAGNOSTIC CHECK 1: Log data being passed
-    console.log('[PDF Export] Starting PDF generation with data:', {
-        fileName: data.fileName,
-        projectName: data.projectName,
-        issuesCount: data.issues.length,
-        totalIssues: data.summary.totalIssues,
-        hasIssues: data.issues.length > 0,
-        criticalCount: data.summary.criticalCount,
-        warningCount: data.summary.warningCount,
-        infoCount: data.summary.infoCount
-    });
+/**
+ * Escapes HTML special characters to prevent injection attacks.
+ * Prevents SSRF, XSS, and local file disclosure during PDF generation.
+ */
+function escapeHtml(unsafe: string | undefined | null): string {
+    if (!unsafe) return '';
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
-    // Log first few issues to verify they're being passed
-    if (data.issues.length > 0) {
-        console.log('[PDF Export] Sample issues:', data.issues.slice(0, 3));
-    }
+function buildHTMLContent(data: ExportData): string {
+    const createdAt = new Date(data.createdAt);
 
-    // DIAGNOSTIC CHECK 2: Validate data
-    if (!data.fileName) {
-        throw new Error('PDF Export Error: fileName is required');
-    }
-    if (!data.issues) {
-        throw new Error('PDF Export Error: issues array is required');
-    }
-    if (!data.summary) {
-        throw new Error('PDF Export Error: summary object is required');
-    }
-
-    // Dynamic import to avoid SSR issues
-    const html2pdf = (await import('html2pdf.js')).default;
-
-    console.log('[PDF Export] html2pdf library loaded successfully');
-
-    // Create HTML template
-    const htmlContent = `
+    return `
         <!DOCTYPE html>
         <html>
         <head>
@@ -95,7 +82,7 @@ export async function exportReportToPDF(data: ExportData) {
                 }
 
                 body {
-                    font-family: 'Nanum Myeongjo', 'Nanum Myeongjo', serif;
+                    font-family: 'Nanum Myeongjo', serif;
                     line-height: 1.8;
                     color: #1e293b;
                     padding: 40px;
@@ -155,16 +142,16 @@ export async function exportReportToPDF(data: ExportData) {
 
                 .section {
                     margin-bottom: 30px;
+                    page-break-inside: avoid;
                 }
 
                 .section-title {
                     font-size: 20px;
                     font-weight: bold;
-                    color: #0f172a;
+                    color: white;
                     margin-bottom: 15px;
                     padding: 10px 15px;
                     background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-                    color: white;
                     border-radius: 6px;
                 }
 
@@ -281,23 +268,23 @@ export async function exportReportToPDF(data: ExportData) {
             <div class="info-box">
                 <div class="info-row">
                     <div class="info-label">파일명</div>
-                    <div class="info-value">${data.fileName}</div>
+                    <div class="info-value">${escapeHtml(data.fileName)}</div>
                 </div>
                 ${data.projectName ? `
                 <div class="info-row">
                     <div class="info-label">프로젝트</div>
-                    <div class="info-value">${data.projectName}</div>
+                    <div class="info-value">${escapeHtml(data.projectName)}</div>
                 </div>
                 ` : ''}
                 ${data.documentType ? `
                 <div class="info-row">
                     <div class="info-label">문서 유형</div>
-                    <div class="info-value">${data.documentType}</div>
+                    <div class="info-value">${escapeHtml(data.documentType)}</div>
                 </div>
                 ` : ''}
                 <div class="info-row">
                     <div class="info-label">생성 날짜</div>
-                    <div class="info-value">${data.createdAt.toLocaleString('ko-KR', {
+                    <div class="info-value">${createdAt.toLocaleString('ko-KR', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
@@ -354,8 +341,8 @@ export async function exportReportToPDF(data: ExportData) {
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="issue-title">${issue.title}</div>
-                                        <div class="issue-message">${issue.message}</div>
+                                        <div class="issue-title">${escapeHtml(issue.title)}</div>
+                                        <div class="issue-message">${escapeHtml(issue.message)}</div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -371,200 +358,80 @@ export async function exportReportToPDF(data: ExportData) {
         </body>
         </html>
     `;
+}
 
-    // Create overlay container for better UX
-    const overlay = document.createElement('div');
-    overlay.style.position = 'fixed';
-    overlay.style.inset = '0';
-    overlay.style.zIndex = '999999';
-    overlay.style.background = 'rgba(0, 0, 0, 0.8)';
-    overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.flexDirection = 'column';
-    overlay.style.gap = '20px';
-
-    // Loading message
-    const loadingMsg = document.createElement('div');
-    loadingMsg.style.color = 'white';
-    loadingMsg.style.fontSize = '20px';
-    loadingMsg.style.fontWeight = 'bold';
-    loadingMsg.textContent = 'PDF 생성 중... 잠시만 기다려주세요';
-    overlay.appendChild(loadingMsg);
-
-    // Create the actual PDF content container
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = htmlContent;
-
-    // CRITICAL: Element must be visible and properly rendered for html2canvas
-    tempDiv.style.position = 'relative'; // Normal flow
-    tempDiv.style.width = '210mm'; // A4 width
-    tempDiv.style.maxWidth = '800px'; // Reasonable screen width
-    tempDiv.style.minHeight = '100%'; // Ensure full height
-    tempDiv.style.height = 'auto'; // Auto height for all content
-    tempDiv.style.background = 'white'; // Ensure white background
-    tempDiv.style.padding = '0'; // Remove padding - HTML has its own
-    tempDiv.style.overflow = 'visible'; // CRITICAL: Must be visible for full capture
-    tempDiv.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
-    // REMOVED maxHeight constraint - this was cutting off content!
-    tempDiv.style.overflowY = 'visible'; // Changed from 'auto' to 'visible'
-
-    overlay.appendChild(tempDiv);
-
-    console.log('[PDF Export] Created temp container, HTML length:', htmlContent.length);
-    console.log('[PDF Export] Appending overlay to document body...');
-
-    document.body.appendChild(overlay);
-
-    // DIAGNOSTIC CHECK 3: Wait for DOM, fonts, and rendering
-    console.log('[PDF Export] Waiting for fonts and rendering...');
-
-    // Wait for fonts to load (including Google Fonts)
-    if (document.fonts && document.fonts.ready) {
-        await document.fonts.ready;
-        console.log('[PDF Export] System fonts loaded');
-    }
-
-    // Additional wait for layout painting
-    // NOTE: Font is now preloaded on app startup, so we can reduce wait time significantly
-    await new Promise(resolve => setTimeout(resolve, 800)); // Reduced from 2500ms to 800ms (font preloaded!)
-    console.log('[PDF Export] Layout fully rendered (font preloaded)');
-
-    // Log actual dimensions being captured
-    console.log('[PDF Export] Element dimensions:', {
-        scrollWidth: tempDiv.scrollWidth,
-        scrollHeight: tempDiv.scrollHeight,
-        offsetWidth: tempDiv.offsetWidth,
-        offsetHeight: tempDiv.offsetHeight,
-        clientHeight: tempDiv.clientHeight
-    });
-
-    // FIX: Check if fileName already contains a date pattern (YYYY-MM-DD)
-    const datePattern = /^\d{4}-\d{2}-\d{2}_/;
-    let finalFilename: string;
-
-    if (datePattern.test(data.fileName)) {
-        // FileName already has date, don't add it again
-        const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
-        finalFilename = `${cleanFileName}_report.pdf`;
-        console.log('[PDF Export] Filename already has date, using:', finalFilename);
-    } else {
-        // Add date prefix
-        const dateStr = data.createdAt.toISOString().split('T')[0];
-        const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
-        finalFilename = `${dateStr}_${cleanFileName}_report.pdf`;
-        console.log('[PDF Export] Adding date prefix:', finalFilename);
-    }
-
-    // PDF options - optimized for content capture
-    const opt = {
-        margin: [10, 10, 10, 10] as [number, number, number, number],
-        filename: finalFilename,
-        image: { type: 'png' as const, quality: 1.0 }, // PNG for sharper text
-        html2canvas: {
-            scale: 3, // Increased from 2 to 3 for much sharper text
-            useCORS: true,
-            letterRendering: true,
-            logging: true, // ENABLE logging for debugging
-            allowTaint: false,
-            backgroundColor: '#ffffff',
-            scrollY: -window.scrollY, // Ensure we capture from top
-            scrollX: -window.scrollX,
-            windowWidth: tempDiv.scrollWidth,
-            windowHeight: tempDiv.scrollHeight,
-            width: tempDiv.scrollWidth,
-            height: tempDiv.scrollHeight,
-            onclone: (clonedDoc: Document) => {
-                // Ensure cloned document has same styles and full height
-                console.log('[PDF Export] Document cloned for rendering');
-                const clonedElement = clonedDoc.body.querySelector('div');
-                if (clonedElement) {
-                    (clonedElement as HTMLElement).style.maxHeight = 'none';
-                    (clonedElement as HTMLElement).style.height = 'auto';
-                    (clonedElement as HTMLElement).style.overflow = 'visible';
-                    (clonedElement as HTMLElement).style.position = 'relative';
-                    console.log('[PDF Export] Cloned element height:', (clonedElement as HTMLElement).scrollHeight);
-                }
-            }
-        },
-        jsPDF: {
-            unit: 'mm' as const,
-            format: 'a4' as const,
-            orientation: 'portrait' as const,
-            compress: false // Disable compression for better quality
-        },
-        pagebreak: {
-            mode: ['avoid-all', 'css', 'legacy'],
-            before: '.section', // Add page breaks before sections if needed
-            after: '.page-break'
-        }
-    };
-
-    // Generate PDF
+export async function POST(req: Request) {
     try {
-        console.log('[PDF Export] Starting html2pdf conversion...');
-        console.log('[PDF Export] Options:', opt);
+        const data: ExportData = await req.json();
 
-        // Use outputPdf to get the blob first for better error tracking
-        const pdfBlob = await html2pdf()
-            .set(opt)
-            .from(tempDiv)
-            .outputPdf('blob');
+        console.log('[API Export PDF] Received request:', {
+            fileName: data.fileName,
+            issuesCount: data.issues?.length,
+            projectName: data.projectName
+        });
 
-        console.log('[PDF Export] PDF blob generated successfully, size:', pdfBlob.size, 'bytes');
-
-        // DIAGNOSTIC CHECK 4: Verify PDF is not empty
-        if (pdfBlob.size === 0 || pdfBlob.size < 1000) {
-            throw new Error(`PDF Export Error: Generated PDF is too small (${pdfBlob.size} bytes). This usually means the content failed to render.`);
+        // Validate required fields
+        if (!data.fileName || !data.issues || !data.summary) {
+            return NextResponse.json(
+                { error: "Missing required fields" },
+                { status: 400 }
+            );
         }
 
-        // Now trigger the download with the blob
-        const url = URL.createObjectURL(pdfBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = finalFilename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        // Build HTML content
+        const htmlContent = buildHTMLContent(data);
 
-        console.log('[PDF Export] PDF download triggered successfully:', finalFilename);
+        // Dynamic import of html-pdf-node
+        const htmlPdf = require('html-pdf-node');
 
-        // Update loading message to show success
-        loadingMsg.textContent = `✓ PDF 생성 완료! (${Math.round(pdfBlob.size / 1024)}KB)`;
-        loadingMsg.style.color = '#22c55e';
+        const options = {
+            format: 'A4',
+            printBackground: true,
+            margin: {
+                top: '10mm',
+                right: '10mm',
+                bottom: '10mm',
+                left: '10mm'
+            },
+            preferCSSPageSize: true
+        };
 
-        // Show success alert with details
-        alert(`PDF EXPORT SUCCESS!\nFile: ${finalFilename}\nSize: ${pdfBlob.size} bytes (${Math.round(pdfBlob.size / 1024)}KB)`);
+        const file = { content: htmlContent };
 
-        // Remove overlay after short delay
-        setTimeout(() => {
-            if (document.body.contains(overlay)) {
-                document.body.removeChild(overlay);
-                console.log('[PDF Export] Overlay cleaned up');
-            }
-        }, 1000);
+        console.log('[API Export PDF] Generating PDF...');
+
+        // Generate PDF buffer
+        const pdfBuffer = await htmlPdf.generatePdf(file, options);
+
+        console.log('[API Export PDF] PDF generated successfully, size:', pdfBuffer.length);
+
+        // Generate filename
+        const datePattern = /^\d{4}-\d{2}-\d{2}_/;
+        let finalFilename: string;
+
+        if (datePattern.test(data.fileName)) {
+            const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+            finalFilename = `${cleanFileName}_report.pdf`;
+        } else {
+            const dateStr = new Date(data.createdAt).toISOString().split('T')[0];
+            const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+            finalFilename = `${dateStr}_${cleanFileName}_report.pdf`;
+        }
+
+        // Return PDF as blob
+        return new NextResponse(pdfBuffer, {
+            headers: {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `attachment; filename="${encodeURIComponent(finalFilename)}"`,
+                'Content-Length': pdfBuffer.length.toString(),
+            },
+        });
+
     } catch (error: any) {
-        // DIAGNOSTIC CHECK 5: Enhanced error logging
-        console.error('[PDF Export] CRITICAL ERROR during PDF generation:');
-        console.error('[PDF Export] Error type:', error.constructor.name);
-        console.error('[PDF Export] Error message:', error.message);
-        console.error('[PDF Export] Error stack:', error.stack);
-        console.error('[PDF Export] Full error object:', error);
-
-        // Update loading message to show error
-        loadingMsg.textContent = '❌ PDF 생성 실패';
-        loadingMsg.style.color = '#ef4444';
-
-        // Clean up on error
-        setTimeout(() => {
-            if (document.body.contains(overlay)) {
-                document.body.removeChild(overlay);
-                console.log('[PDF Export] Overlay cleaned up after error');
-            }
-        }, 2000);
-
-        // Re-throw with more context
-        throw new Error(`PDF generation failed: ${error.message || 'Unknown error'}`);
+        console.error('[API Export PDF] Error:', error);
+        return NextResponse.json(
+            { error: `PDF generation failed: ${error.message}` },
+            { status: 500 }
+        );
     }
 }
