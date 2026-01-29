@@ -115,6 +115,7 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
 
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const validationAbortController = useRef<AbortController | null>(null);
   const toast = useToast();
 
   const [file, setFile] = useState<File | null>(null);
@@ -145,6 +146,15 @@ export default function Page() {
   useEffect(() => {
     setCurrentPage(0);
   }, [file, pageImages]);
+
+  // Cleanup: Abort any pending validation on unmount
+  useEffect(() => {
+    return () => {
+      if (validationAbortController.current) {
+        validationAbortController.current.abort();
+      }
+    };
+  }, []);
 
   // Project State
   const [projects, setProjects] = useState<any[]>([]); // Should use Project type
@@ -255,13 +265,20 @@ export default function Page() {
     setShowTBMModal(true);
   }
 
-  async function renderPdfPages(pdfFile: File) {
+  async function renderPdfPages(pdfFile: File, signal: AbortSignal) {
     const pdfjs = await getPdfjs();
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     const buf = await pdfFile.arrayBuffer();
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     const pdf = await (pdfjs as any).getDocument({ data: buf }).promise;
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
     const images: string[] = [];
     for (let i = 1; i <= pdf.numPages; i++) {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
       // Optimized scale for viewing
       const page = await pdf.getPage(i);
       const viewport = page.getViewport({ scale: 1.5 });
@@ -273,16 +290,26 @@ export default function Page() {
       await page.render({ canvasContext: ctx, viewport }).promise;
       images.push(canvas.toDataURL("image/jpeg"));
     }
+
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     setPageImages(images);
     return images;
   }
 
-  async function extractPdfText(pdfFile: File) {
+  async function extractPdfText(pdfFile: File, signal: AbortSignal) {
     const pdfjs = await getPdfjs();
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     const buf = await pdfFile.arrayBuffer();
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     const pdf = await (pdfjs as any).getDocument({ data: buf }).promise;
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     let full = "";
     for (let p = 1; p <= pdf.numPages; p++) {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
       const page = await pdf.getPage(p);
       const content = await page.getTextContent();
       const pageText = content.items
@@ -294,6 +321,16 @@ export default function Page() {
   }
 
   async function runValidation(f: File, documentType: DocumentType | null = null) {
+    // Abort any previous validation request
+    if (validationAbortController.current) {
+      validationAbortController.current.abort();
+    }
+
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    validationAbortController.current = controller;
+    const signal = controller.signal;
+
     setLoading(true);
 
     // Track start time to ensure minimum display time for progress indicator
@@ -306,26 +343,35 @@ export default function Page() {
 
       // Step 1: Extracting - Do this BEFORE showing progress
       if (f.type === "application/pdf") {
-        images = await renderPdfPages(f);
-        text = await extractPdfText(f);
+        images = await renderPdfPages(f, signal);
+        text = await extractPdfText(f, signal);
       } else if (f.type.startsWith("image/")) {
         // Logic to get dataURL from file object for API
         const reader = new FileReader();
-        const dataUrl = await new Promise<string>((resolve) => {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(f);
         });
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
         images = [dataUrl];
       }
+
+      // Check if request was aborted after extraction
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       // VALIDATION: Check if extracted content is sufficient
       const hasText = text && text.trim().length >= 50;
       const hasImages = images && images.length > 0;
 
       if (!hasText && !hasImages) {
-        toast.error("문서에 내용이 없거나 읽을 수 없습니다");
-        setFile(null);
-        setReport(null);
+        if (!signal.aborted) {
+          toast.error("문서에 내용이 없거나 읽을 수 없습니다");
+          setFile(null);
+          setReport(null);
+          setLoading(false);
+          setShowProgress(false);
+        }
         return; // Exit early without showing progress
       }
 
@@ -355,22 +401,33 @@ export default function Page() {
           pageImages: imagesToSend,
           projectId: currentProjectId, // Pass context
           documentType: documentType // Pass document type
-        })
+        }),
+        signal // Pass AbortSignal to fetch
       });
 
+      // Check if request was aborted after fetch
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
       const data = (await res.json()) as Report;
+
+      // Check if request was aborted after parsing JSON
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       // Handle validation errors (400) differently from server errors (500)
       if (!res.ok) {
         if (res.status === 400) {
           // Validation error: empty or non-safety document
           // Show toast notification instead of rendering as issue
-          const errorMessage = (data as any).error || "문서 검증에 실패했습니다";
-          toast.error(errorMessage);
+          if (!signal.aborted) {
+            const errorMessage = (data as any).error || "문서 검증에 실패했습니다";
+            toast.error(errorMessage);
 
-          // Clear file and report state - don't show invalid document
-          setFile(null);
-          setReport(null);
+            // Clear file and report state - don't show invalid document
+            setFile(null);
+            setReport(null);
+            setLoading(false);
+            setShowProgress(false);
+          }
           return; // Exit early without showing error in UI
         } else {
           // Server error (500, 503, etc.) - still show as system error
@@ -386,6 +443,9 @@ export default function Page() {
       const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
       await new Promise(resolve => setTimeout(resolve, remainingTime + 500)); // Brief pause to show completion
 
+      // Final check before updating state
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
       // Ensure IDs exist (client-side patch for legacy/migration)
       data.issues = data.issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
 
@@ -395,16 +455,26 @@ export default function Page() {
         documentType: documentType
       });
     } catch (e: any) {
+      // Silently ignore aborted requests - they're expected when user picks a new file
+      if (e?.name === "AbortError") {
+        return;
+      }
+
       console.error(e);
       // Only show system errors in the UI (not validation errors)
       toast.error(e?.message || "문서 검증 중 오류가 발생했습니다");
 
-      // Clear file state for errors as well
-      setFile(null);
-      setReport(null);
+      // Clear file state for errors as well (only if this request is still current)
+      if (!signal.aborted) {
+        setFile(null);
+        setReport(null);
+      }
     } finally {
-      setLoading(false);
-      setShowProgress(false);
+      // Only update loading/progress state if this request is still current
+      if (!signal.aborted) {
+        setLoading(false);
+        setShowProgress(false);
+      }
     }
   }
 

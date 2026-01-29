@@ -249,8 +249,8 @@ export async function POST(req: Request) {
       extracted.fields?.점검일자 ||
       extracted.fields?.현장명 ||
       extracted.fields?.작업내용 ||
-      extracted.signature?.담당 !== "unknown" ||
-      extracted.signature?.소장 !== "unknown" ||
+      (extracted.signature?.담당 && extracted.signature.담당 !== "unknown") ||
+      (extracted.signature?.소장 && extracted.signature.소장 !== "unknown") ||
       (extracted.checklist && extracted.checklist.length > 0);
 
     if (!isSafetyDocument) {

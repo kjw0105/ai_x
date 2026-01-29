@@ -111,6 +111,15 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
     const [showRiskDetails, setShowRiskDetails] = useState(false);
+
+    // Smart severity filter: Only show buttons for severities that exist in issues
+    const availableSeverities = useMemo(() => {
+        const severities = new Set<string>();
+        issues.forEach(issue => severities.add(issue.severity));
+        return severities;
+    }, [issues]);
+
+    // Initialize filters to only include available severities
     const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
 
     // Suggestion Modal State
@@ -344,42 +353,60 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             )}
                         </div>
                     </div>
+
+                    {/* PDF Export Button */}
+                    {reportExists && currentFile && (
+                        <button
+                            onClick={handleExportPDF}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-bold rounded-lg transition-colors shadow-lg"
+                            title="PDF로 보고서 내보내기"
+                        >
+                            <span className="material-symbols-outlined text-lg">download</span>
+                            <span className="hidden sm:inline">PDF 내보내기</span>
+                        </button>
+                    )}
                 </div>
 
-                {/* Severity Filter - Only show when there are issues */}
-                {reportExists && issues.length > 0 && (
+                {/* Severity Filter - Only show when there are issues and only show buttons for available severities */}
+                {reportExists && issues.length > 0 && availableSeverities.size > 0 && (
                     <div className="mt-4 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-200 dark:border-slate-700">
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">필터:</span>
-                        <button
-                            onClick={() => toggleSeverityFilter("error")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("error")
-                                    ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                                }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">error</span>
-                            <span>심각 ({errorCount})</span>
-                        </button>
-                        <button
-                            onClick={() => toggleSeverityFilter("warn")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("warn")
-                                    ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                                }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">warning</span>
-                            <span>경고 ({warnCount})</span>
-                        </button>
-                        <button
-                            onClick={() => toggleSeverityFilter("info")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("info")
-                                    ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
-                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                                }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">info</span>
-                            <span>정보 ({infoCount})</span>
-                        </button>
+                        {availableSeverities.has("error") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("error")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("error")
+                                        ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                    }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">error</span>
+                                <span>심각 ({errorCount})</span>
+                            </button>
+                        )}
+                        {availableSeverities.has("warn") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("warn")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("warn")
+                                        ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                    }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">warning</span>
+                                <span>경고 ({warnCount})</span>
+                            </button>
+                        )}
+                        {availableSeverities.has("info") && (
+                            <button
+                                onClick={() => toggleSeverityFilter("info")}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("info")
+                                        ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
+                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                    }`}
+                            >
+                                <span className="material-symbols-outlined text-sm">info</span>
+                                <span>정보 ({infoCount})</span>
+                            </button>
+                        )}
                         <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">
                             {visibleIssues.length} / {issues.length} 표시중
                         </span>
