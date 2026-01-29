@@ -24,11 +24,11 @@ export function ConfirmModal({
     onCancel,
     variant = "warning"
 }: ConfirmModalProps) {
-    if (!isOpen) return null;
-
     const titleId = useId();
     const descriptionId = useId();
     const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
+
+    if (!isOpen) return null;
 
     const variantColors = {
         danger: "bg-red-600 hover:bg-red-700",

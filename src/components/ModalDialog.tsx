@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode, RefObject } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
 
 const FOCUSABLE_SELECTORS = [
@@ -66,7 +66,7 @@ export function ModalDialog({
 
   if (!isOpen) return null;
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape" && closeOnEscape && onClose) {
       event.stopPropagation();
       onClose();
