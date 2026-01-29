@@ -1,4 +1,5 @@
 import { ProjectSelector } from "./ProjectSelector";
+import { Breadcrumbs } from "./Breadcrumbs";
 
 interface HeaderProps {
     loading: boolean;
@@ -18,6 +19,9 @@ interface HeaderProps {
     onDeleteProject: (projectId: string) => void;
     onEditProject?: (project: { id: string; name: string; description: string }) => void;
     onShowWelcome?: () => void;
+
+    // Breadcrumbs Props
+    currentFileName?: string;
 }
 
 export default function Header({
@@ -35,10 +39,20 @@ export default function Header({
     onOpenNewProject,
     onDeleteProject,
     onEditProject,
-    onShowWelcome
+    onShowWelcome,
+    currentFileName
 }: HeaderProps) {
+    // Build breadcrumbs
+    const currentProject = projects.find(p => p.id === currentProjectId);
+    const breadcrumbItems = [
+        { label: "홈", onClick: onShowWelcome },
+        ...(currentProject ? [{ label: currentProject.name }] : []),
+        ...(currentFileName ? [{ label: currentFileName }] : []),
+    ];
+
     return (
-        <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark px-6 py-4 shrink-0 z-20 shadow-sm">
+        <header className="flex flex-col border-b border-solid border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark shrink-0 z-20 shadow-sm">
+            <div className="flex items-center justify-between whitespace-nowrap px-6 py-4">
             <div className="flex items-center gap-6">
                 <button
                     type="button"
@@ -131,6 +145,13 @@ export default function Header({
                     </>
                 )}
             </div>
+
+            {/* Breadcrumbs - Only show when not on welcome screen and has multiple items */}
+            {!showWelcome && breadcrumbItems.length > 1 && (
+                <div className="px-6 pb-3">
+                    <Breadcrumbs items={breadcrumbItems} />
+                </div>
+            )}
         </header>
     );
 }
