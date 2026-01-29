@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Header from "@/components/Header";
 import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
@@ -17,6 +17,8 @@ import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixi
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
+import { ModalDialog } from "@/components/ModalDialog";
+import { exportReportToPDF } from "@/lib/pdfExport";
 
 // Type Definitions (Re-using some from validator or defining locally for now if implicit)
 // In validator.ts we have type Severity? Checking previous read..
@@ -35,6 +37,9 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const titleId = useId();
+  const descriptionId = useId();
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!isOpen) return null;
 
@@ -52,64 +57,74 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700">
-        <h3 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">New Project</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Project Name</label>
+    <ModalDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      labelledBy={titleId}
+      describedBy={descriptionId}
+      overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700"
+      initialFocusRef={nameInputRef}
+    >
+      <h3 id={titleId} className="text-xl font-bold mb-2 text-slate-900 dark:text-white">New Project</h3>
+      <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+        Provide the project details below to create a new workspace.
+      </p>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Project Name</label>
+          <input
+            ref={nameInputRef}
+            required
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            value={name} onChange={e => setName(e.target.value)}
+            placeholder="e.g. Gimpo Han River Site A"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+          <input
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            value={description} onChange={e => setDescription(e.target.value)}
+            placeholder="Optional description"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            마스터 안전 계획서 (선택사항)
+          </label>
+          <div className="flex items-center gap-2">
             <input
-              required
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              value={name} onChange={e => setName(e.target.value)}
-              placeholder="e.g. Gimpo Han River Site A"
+              type="file"
+              accept="application/pdf"
+              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
+              onChange={e => setFile(e.target.files?.[0] || null)}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
-            <input
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              value={description} onChange={e => setDescription(e.target.value)}
-              placeholder="Optional description"
-            />
+          <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">
+              💡 이 문서는 무엇인가요?
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-400">
+              프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
+            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
+              ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              마스터 안전 계획서 (선택사항)
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept="application/pdf"
-                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
-                onChange={e => setFile(e.target.files?.[0] || null)}
-              />
-            </div>
-            <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">
-                💡 이 문서는 무엇인가요?
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-400">
-                프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
-              </p>
-              <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
-                ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
-              </p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? "Creating..." : "Create Project"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? "Creating..." : "Create Project"}
+          </button>
+        </div>
+      </form>
+    </ModalDialog>
   );
 }
 
@@ -164,7 +179,10 @@ export default function Page() {
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description: string } | null>(null);
   const [projectSelectorKey, setProjectSelectorKey] = useState(0); // To force refresh
 
-  // Initialize welcome state - default to false to match server
+  // Track data loading states (not blocking, just for UI feedback)
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+
+  // Welcome screen state - non-blocking, just shows in viewer area
   const [showWelcome, setShowWelcome] = useState(false);
 
   // HYDRATION FIX: Load localStorage state in useEffect
@@ -173,18 +191,33 @@ export default function Page() {
     const savedProjectId = localStorage.getItem("current_project_id");
     if (savedProjectId) setCurrentProjectId(savedProjectId);
 
-    // 2. Restore Welcome Screen State
-    const dismissed = localStorage.getItem("welcome_dismissed");
-    const hasProject = localStorage.getItem("current_project_id"); // Checked again for logic consistency
+    // 2. Auto-load last report (Option B - analysis only, like history sidebar)
+    async function autoLoadLastReport() {
+      try {
+        const res = await fetch("/api/history");
+        if (!res.ok) return;
+        const history = await res.json();
+        if (!Array.isArray(history) || history.length === 0) return;
 
-    // Show welcome if not dismissed AND no saved project
-    // Note: If project exists, we definitely don't show welcome (unless explicit override logic)
-    // If no project and not dismissed, show it.
-    if (dismissed !== "true" && !hasProject) {
-      setShowWelcome(true);
+        // Get the most recent report
+        const lastReport = history[0];
+
+        // Load it (analysis only, no file)
+        await loadReportFromHistory(lastReport.id);
+      } catch (e) {
+        // Silently fail - not critical to app startup
+        console.error("Failed to auto-load last report:", e);
+      }
     }
+
+    // Start loading projects (non-blocking)
+    fetchProjects();
+
+    // Auto-load last report (non-blocking)
+    autoLoadLastReport();
   }, []);
 
+  // Refetch projects when selector key changes
   useEffect(() => {
     fetchProjects();
   }, [projectSelectorKey]);
@@ -214,6 +247,7 @@ export default function Page() {
   }, []);
 
   async function fetchProjects() {
+    setIsLoadingProjects(true);
     try {
       const res = await fetch("/api/projects");
       if (res.ok) {
@@ -221,6 +255,8 @@ export default function Page() {
       }
     } catch (e) {
       console.error("Failed to fetch projects");
+    } finally {
+      setIsLoadingProjects(false);
     }
   }
 
@@ -563,12 +599,124 @@ export default function Page() {
     }
   }
 
+  async function exportReportFromHistory(id: string) {
+    setLoading(true);
+    dismissWelcome();
+    let exportData: {
+      fileName: string;
+      projectName?: string;
+      documentType?: string | null;
+      createdAt: string;
+      issues: Array<{
+        severity: string;
+        title: string;
+        message: string;
+        ruleId?: string;
+      }>;
+      summary: {
+        totalIssues: number;
+        criticalCount: number;
+        warningCount: number;
+        infoCount: number;
+      };
+    } | null = null;
+    try {
+      const res = await fetch(`/api/history?id=${id}`);
+      if (!res.ok) throw new Error("Failed to load report");
+      const data = await res.json();
+
+      let issues = JSON.parse(data.issuesJson);
+      issues = issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
+
+      exportData = {
+        fileName: data.fileName,
+        projectName: projects.find(p => p.id === currentProjectId)?.name,
+        documentType: data.documentType ?? null,
+        createdAt: new Date(data.createdAt).toISOString(),
+        issues: issues.map((i: any) => ({
+          severity: i.severity,
+          title: i.title,
+          message: i.message,
+          ruleId: i.ruleId,
+        })),
+        summary: {
+          totalIssues: issues.length,
+          criticalCount: issues.filter((i: any) => i.severity === "error").length,
+          warningCount: issues.filter((i: any) => i.severity === "warn").length,
+          infoCount: issues.filter((i: any) => i.severity === "info").length,
+        },
+      };
+
+      const response = await fetch("/api/export-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(exportData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "report.pdf";
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=["']?([^"';\n]*)["']?/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = decodeURIComponent(filenameMatch[1]);
+        }
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("PDF 리포트를 다시 다운로드했습니다");
+    } catch (error: any) {
+      try {
+        if (!exportData) {
+          throw error;
+        }
+        await exportReportToPDF({
+          fileName: exportData.fileName,
+          projectName: exportData.projectName,
+          documentType: exportData.documentType ?? null,
+          createdAt: new Date(exportData.createdAt),
+          issues: exportData.issues.map(i => ({
+            severity: i.severity,
+            title: i.title,
+            message: i.message,
+            ruleId: i.ruleId,
+          })),
+          summary: {
+            totalIssues: exportData.summary.totalIssues,
+            criticalCount: exportData.summary.criticalCount,
+            warningCount: exportData.summary.warningCount,
+            infoCount: exportData.summary.infoCount,
+          },
+        });
+        toast.success("브라우저에서 PDF를 생성했습니다");
+      } catch (fallbackError: any) {
+        toast.error(`PDF 재내보내기에 실패했습니다: ${fallbackError.message || "알 수 없는 오류"}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleCreateProject({ name, description, file }: { name: string; description: string; file: File | null }) {
     try {
       let contextText = "";
       if (file) {
         // Extract text from Master Plan
-        contextText = await extractPdfText(file);
+        const controller = new AbortController();
+        contextText = await extractPdfText(file, controller.signal);
       }
 
       const res = await fetch("/api/projects", {
@@ -627,7 +775,8 @@ export default function Page() {
     try {
       let contextText = undefined;
       if (data.file) {
-        contextText = await extractPdfText(data.file);
+        const controller = new AbortController();
+        contextText = await extractPdfText(data.file, controller.signal);
       }
 
       const res = await fetch(`/api/projects/${projectId}`, {
@@ -730,13 +879,11 @@ export default function Page() {
 
   function dismissWelcome() {
     setShowWelcome(false);
-    localStorage.setItem("welcome_dismissed", "true");
   }
 
   function showWelcomeScreen() {
+    // Clear current work and show welcome screen
     setShowWelcome(true);
-    localStorage.setItem("welcome_dismissed", "false");
-    // Clear current work when going back to welcome
     handleClearFile();
   }
 
@@ -799,7 +946,7 @@ export default function Page() {
             fileName: "TBM(작업 전 대화)",
             issues: [],
             chat: [
-              { role: "ai" as const, text: r.summary || "(요약 결과가 비어있어요)" },
+              { role: "ai", text: r.summary || "(요약 결과가 비어있어요)" },
               ...(r.transcript ? [{ role: "ai" as const, text: `\n\n[전사본]\n${r.transcript}` }] : []),
             ],
             documentType: "TBM",
@@ -821,9 +968,9 @@ export default function Page() {
         key={projectSelectorKey}
         loading={loading}
         reportExists={!!report}
+        isLoadingProjects={isLoadingProjects}
         onUpload={pickFileDialog}
         onStartTBM={() => {
-          dismissWelcome();
           setShowTBMModal(true);
         }}
         onShowHistory={() => setShowHistory(true)}
@@ -856,17 +1003,20 @@ export default function Page() {
         isOpen={showHistory}
         onClose={() => setShowHistory(false)}
         onSelectReport={loadReportFromHistory}
+        onExportReport={exportReportFromHistory}
       />
 
-      {showWelcome && !file ? (
+      {showWelcome ? (
         <WelcomeScreen
           projects={projects}
+          isLoadingProjects={isLoadingProjects}
           onCreateProject={handleWelcomeCreateProject}
           onSelectProject={handleWelcomeSelectProject}
           onProceedWithoutProject={handleWelcomeProceedWithoutProject}
         />
       ) : (
         <ResizableSplitLayout
+          initialLeftWidthPercent={70}
           left={
             <DocumentViewer
               file={file}
@@ -875,6 +1025,7 @@ export default function Page() {
               currentPage={currentPage}
               onPageChange={setCurrentPage}
               onPickFile={pickFileDialog}
+              onFileSelect={onPickFile}
               onStartTBM={() => {
                 dismissWelcome();
                 setShowTBMModal(true);
@@ -893,6 +1044,7 @@ export default function Page() {
               onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
               currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
               currentFile={file}
+              historicalFileName={historicalFileName}
             />
           }
         />

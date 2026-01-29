@@ -43,6 +43,7 @@ export function Toast({ id, message, variant = "info", duration = 3000, onClose 
             <button
                 onClick={() => onClose(id)}
                 className="p-1 hover:bg-white/20 rounded-full transition-colors"
+                aria-label="알림 닫기"
             >
                 <span className="material-symbols-outlined text-lg">close</span>
             </button>
