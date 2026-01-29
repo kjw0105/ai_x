@@ -399,10 +399,12 @@ export async function exportReportToPDF(data: ExportData) {
     overlay.style.zIndex = '999999';
     overlay.style.background = 'rgba(0, 0, 0, 0.8)';
     overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
+    overlay.style.alignItems = 'flex-start';
     overlay.style.justifyContent = 'center';
     overlay.style.flexDirection = 'column';
     overlay.style.gap = '20px';
+    overlay.style.overflow = 'auto';
+    overlay.style.padding = '40px 20px';
 
     // Loading message
     const loadingMsg = document.createElement('div');
@@ -419,7 +421,7 @@ export async function exportReportToPDF(data: ExportData) {
     // CRITICAL: Element must be visible and properly rendered for html2canvas
     tempDiv.style.position = 'relative'; // Normal flow
     tempDiv.style.width = '210mm'; // A4 width
-    tempDiv.style.maxWidth = '800px'; // Reasonable screen width
+    tempDiv.style.maxWidth = '1200px'; // Wider preview for readability
     tempDiv.style.minHeight = '100%'; // Ensure full height
     tempDiv.style.height = 'auto'; // Auto height for all content
     tempDiv.style.background = 'white'; // Ensure white background

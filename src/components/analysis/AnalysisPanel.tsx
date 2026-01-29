@@ -105,9 +105,10 @@ interface AnalysisPanelProps {
     onModify: () => void;
     currentProjectName?: string;
     riskCalculation?: RiskCalculation; // Stage 3: Risk matrix data
+    historicalFileName?: string;
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile }: AnalysisPanelProps & { currentFile?: File | null }) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName }: AnalysisPanelProps & { currentFile?: File | null }) {
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
@@ -208,19 +209,20 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     };
 
     const handleExportPDF = async () => {
-        if (!currentFile) {
-            toast.warning("먼저 문서를 업로드하세요");
+        if (!currentFile && !historicalFileName) {
+            toast.warning("먼저 문서를 업로드하거나 기록을 선택하세요");
             return;
         }
 
         // DIAGNOSTIC: Log state before export
         console.log('[AnalysisPanel] Export PDF clicked');
-        console.log('[AnalysisPanel] Current file:', currentFile.name);
+        console.log('[AnalysisPanel] Current file:', currentFile?.name ?? historicalFileName);
         console.log('[AnalysisPanel] Issues count:', issues.length);
         console.log('[AnalysisPanel] Project name:', currentProjectName);
 
         const exportData = {
-            fileName: currentFile.name,
+        fileName: currentFile?.name ?? historicalFileName ?? "report",
+         main
             projectName: currentProjectName,
             documentType: null, // Can be enhanced to track document type
             createdAt: new Date().toISOString(), // Convert to ISO string for JSON
@@ -363,7 +365,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </div>
 
                     {/* PDF Export Button */}
-                    {reportExists && currentFile && (
+                    {reportExists && (currentFile || historicalFileName) && (
                         <button
                             onClick={handleExportPDF}
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-bold rounded-lg transition-colors shadow-lg"
