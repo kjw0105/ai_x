@@ -34,6 +34,19 @@ export interface ContradictionAnalysis {
   conflictingRiskLevels: boolean;
 }
 
+function isDocData(data: unknown): data is DocData {
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+
+  if (!("fields" in data)) {
+    return false;
+  }
+
+  const fields = (data as DocData).fields;
+  return Boolean(fields && typeof fields === "object");
+}
+
 /**
  * 프로젝트 내 모든 문서를 분석하여 교차 문서 이슈를 탐지합니다.
  */
@@ -62,12 +75,35 @@ export async function analyzeCrossDocumentIssues(
   }
 
   // 문서 데이터 파싱
-  const parsedReports = reports.map((r) => ({
-    id: r.id,
-    fileName: r.fileName,
-    createdAt: r.createdAt,
-    data: JSON.parse(r.docDataJson) as DocData,
-  }));
+  const parsedReports = reports.flatMap((report) => {
+    try {
+      const data = JSON.parse(report.docDataJson);
+      if (!isDocData(data)) {
+        console.warn(
+          `Skipping report with invalid docDataJson during cross-document analysis: ${report.id}`
+        );
+        return [];
+      }
+      return [
+        {
+          id: report.id,
+          fileName: report.fileName,
+          createdAt: report.createdAt,
+          data,
+        },
+      ];
+    } catch (error) {
+      console.warn(
+        `Skipping report with invalid docDataJson during cross-document analysis: ${report.id}`,
+        error
+      );
+      return [];
+    }
+  });
+
+  if (parsedReports.length < 2) {
+    return issues;
+  }
 
   // 1. 타임라인 분석
   const timelineIssues = analyzeTimeline(parsedReports);
