@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Header from "@/components/Header";
 import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
@@ -16,6 +16,7 @@ import { Issue } from "@/lib/validator"; // Assumed shared type, might need fixi
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
+import { ModalDialog } from "@/components/ModalDialog";
 
 // Type Definitions (Re-using some from validator or defining locally for now if implicit)
 // In validator.ts we have type Severity? Checking previous read..
@@ -34,6 +35,9 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const titleId = useId();
+  const descriptionId = useId();
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!isOpen) return null;
 
@@ -51,64 +55,74 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700">
-        <h3 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">New Project</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Project Name</label>
+    <ModalDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      labelledBy={titleId}
+      describedBy={descriptionId}
+      overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700"
+      initialFocusRef={nameInputRef}
+    >
+      <h3 id={titleId} className="text-xl font-bold mb-2 text-slate-900 dark:text-white">New Project</h3>
+      <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+        Provide the project details below to create a new workspace.
+      </p>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Project Name</label>
+          <input
+            ref={nameInputRef}
+            required
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            value={name} onChange={e => setName(e.target.value)}
+            placeholder="e.g. Gimpo Han River Site A"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+          <input
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            value={description} onChange={e => setDescription(e.target.value)}
+            placeholder="Optional description"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            마스터 안전 계획서 (선택사항)
+          </label>
+          <div className="flex items-center gap-2">
             <input
-              required
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              value={name} onChange={e => setName(e.target.value)}
-              placeholder="e.g. Gimpo Han River Site A"
+              type="file"
+              accept="application/pdf"
+              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
+              onChange={e => setFile(e.target.files?.[0] || null)}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
-            <input
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              value={description} onChange={e => setDescription(e.target.value)}
-              placeholder="Optional description"
-            />
+          <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">
+              💡 이 문서는 무엇인가요?
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-400">
+              프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
+            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
+              ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              마스터 안전 계획서 (선택사항)
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept="application/pdf"
-                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
-                onChange={e => setFile(e.target.files?.[0] || null)}
-              />
-            </div>
-            <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">
-                💡 이 문서는 무엇인가요?
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-400">
-                프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
-              </p>
-              <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
-                ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
-              </p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? "Creating..." : "Create Project"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? "Creating..." : "Create Project"}
+          </button>
+        </div>
+      </form>
+    </ModalDialog>
   );
 }
 
