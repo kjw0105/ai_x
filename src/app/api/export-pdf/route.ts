@@ -385,12 +385,17 @@ export async function POST(req: Request) {
         // Dynamic import of html-pdf-node (ESM-friendly)
         let generatePdf: ((file: { content: string }, options: Record<string, unknown>) => Promise<Buffer>) | null = null;
         try {
-            const require = createRequire(import.meta.url);
-            // Use eval to avoid Next.js bundling the optional dependency at build time.
-            const runtimeRequire = eval("require") as NodeRequire;
-            const htmlPdf =
-                runtimeRequire?.("html-pdf-node") ??
-                require("html-pdf-node");
+const require = createRequire(import.meta.url);
+
+// Use eval to avoid Next.js bundling the optional dependency at build time.
+const runtimeRequire = eval("require") as NodeRequire;
+
+// Load html-pdf-node in a way that works for both CJS and ESM shapes.
+const htmlPdfModule =
+  (runtimeRequire?.("html-pdf-node") ?? require("html-pdf-node")) as any;
+
+const htmlPdf = htmlPdfModule?.default ?? htmlPdfModule;
+ main
             generatePdf =
                 (htmlPdf as any).generatePdf ??
                 (htmlPdf as any).default?.generatePdf ??

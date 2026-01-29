@@ -221,7 +221,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         console.log('[AnalysisPanel] Project name:', currentProjectName);
 
         const exportData = {
-            fileName: currentFile?.name ?? historicalFileName ?? "report",
+        fileName: currentFile?.name ?? historicalFileName ?? "report",
+         main
             projectName: currentProjectName,
             documentType: null, // Can be enhanced to track document type
             createdAt: new Date().toISOString(), // Convert to ISO string for JSON
