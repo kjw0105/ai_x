@@ -109,6 +109,7 @@ interface AnalysisPanelProps {
 export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile }: AnalysisPanelProps & { currentFile?: File | null }) {
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
+    const toast = useToast();
     const [showRiskDetails, setShowRiskDetails] = useState(false);
     const [severityFilters, setSeverityFilters] = useState<Set<string>>(new Set(["error", "warn", "info"]));
 
@@ -116,7 +117,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
 
     // Chat UI (click-to-open)
-   
+
 
     // Chat modal (replaces the disabled bottom input)
     const [showChatModal, setShowChatModal] = useState(false);
@@ -351,33 +352,30 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">필터:</span>
                         <button
                             onClick={() => toggleSeverityFilter("error")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("error")
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("error")
                                     ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
                                     : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
+                                }`}
                         >
                             <span className="material-symbols-outlined text-sm">error</span>
                             <span>심각 ({errorCount})</span>
                         </button>
                         <button
                             onClick={() => toggleSeverityFilter("warn")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("warn")
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("warn")
                                     ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
                                     : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
+                                }`}
                         >
                             <span className="material-symbols-outlined text-sm">warning</span>
                             <span>경고 ({warnCount})</span>
                         </button>
                         <button
                             onClick={() => toggleSeverityFilter("info")}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                severityFilters.has("info")
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("info")
                                     ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
                                     : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
-                            }`}
+                                }`}
                         >
                             <span className="material-symbols-outlined text-sm">info</span>
                             <span>정보 ({infoCount})</span>
