@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 
 export type Project = {
     id: string;
@@ -24,10 +24,11 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
     const [activeIndex, setActiveIndex] = useState(0);
     const triggerRef = useRef<HTMLButtonElement | null>(null);
     const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const previouslyOpenRef = useRef(false);
 
     // Find current project name
     const currentProject = projects.find(p => p.id === currentProjectId);
-    const listboxId = useMemo(() => `project-selector-listbox-${Math.random().toString(36).slice(2)}`, []);
+    const listboxId = useId();
     const selectionOptions = useMemo(
         () => [
             { id: null, name: "일반 검증 (프로젝트 없음)", description: "" },
@@ -66,6 +67,13 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
             activeOption.focus();
         }
     }, [activeIndex, isOpen]);
+
+    useEffect(() => {
+        if (!isOpen && previouslyOpenRef.current) {
+            requestAnimationFrame(() => triggerRef.current?.focus());
+        }
+        previouslyOpenRef.current = isOpen;
+    }, [isOpen]);
 
     async function handleDelete(projectId: string, projectName: string, e: React.MouseEvent) {
         e.stopPropagation();
