@@ -654,7 +654,7 @@ export default function Page() {
             issues: [],
             chat: [
               { role: "ai", text: r.summary || "(요약 결과가 비어있어요)" },
-              ...(r.transcript ? [{ role: "ai", text: `\n\n[전사본]\n${r.transcript}` }] : []),
+              ...(r.transcript ? [{ role: "ai" as const, text: `\n\n[전사본]\n${r.transcript}` }] : []),
             ],
             documentType: "TBM",
           });
