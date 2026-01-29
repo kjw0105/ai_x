@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 export type Project = {
     id: string;
@@ -21,9 +21,28 @@ interface ProjectSelectorProps {
 export function ProjectSelector({ projects, currentProjectId, onProjectChange, onOpenNewProject, onDeleteProject, onEditProject, onShowWelcome }: ProjectSelectorProps) {
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [isOpen, setIsOpen] = useState(false);
+    const [activeIndex, setActiveIndex] = useState(0);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
     // Find current project name
     const currentProject = projects.find(p => p.id === currentProjectId);
+    const listboxId = useMemo(() => `project-selector-listbox-${Math.random().toString(36).slice(2)}`, []);
+    const selectionOptions = useMemo(
+        () => [
+            { id: null, name: "일반 검증 (프로젝트 없음)", description: "" },
+            ...projects.map(project => ({ id: project.id, name: project.name, description: project.description || "" })),
+        ],
+        [projects]
+    );
+
+    const getInitialIndex = () => {
+        if (!currentProjectId) {
+            return 0;
+        }
+        const projectIndex = projects.findIndex(project => project.id === currentProjectId);
+        return projectIndex >= 0 ? projectIndex + 1 : 0;
+    };
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -40,6 +59,14 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isOpen]);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        const activeOption = optionRefs.current[activeIndex];
+        if (activeOption) {
+            activeOption.focus();
+        }
+    }, [activeIndex, isOpen]);
+
     async function handleDelete(projectId: string, projectName: string, e: React.MouseEvent) {
         e.stopPropagation();
 
@@ -53,12 +80,69 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
         }
     }
 
+    const handleSelectProject = (projectId: string | null) => {
+        onProjectChange(projectId);
+        setIsOpen(false);
+        requestAnimationFrame(() => triggerRef.current?.focus());
+    };
+
+    const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
+            event.preventDefault();
+            const nextIndex = getInitialIndex();
+            setActiveIndex(nextIndex);
+            setIsOpen(true);
+        }
+    };
+
+    const handleListboxKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Escape") {
+            event.preventDefault();
+            setIsOpen(false);
+            requestAnimationFrame(() => triggerRef.current?.focus());
+            return;
+        }
+
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setActiveIndex(prevIndex => (prevIndex + 1) % selectionOptions.length);
+            return;
+        }
+
+        if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveIndex(prevIndex => (prevIndex - 1 + selectionOptions.length) % selectionOptions.length);
+            return;
+        }
+
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            const activeOption = selectionOptions[activeIndex];
+            if (activeOption) {
+                handleSelectProject(activeOption.id);
+            }
+        }
+    };
+
     return (
         <div className="flex items-center gap-2" data-project-selector>
             <div className="relative">
                 <button
-                    onClick={() => setIsOpen(!isOpen)}
+                    ref={triggerRef}
+                    onClick={() => {
+                        setIsOpen(prevOpen => {
+                            const nextOpen = !prevOpen;
+                            if (nextOpen) {
+                                setActiveIndex(getInitialIndex());
+                            }
+                            return nextOpen;
+                        });
+                    }}
+                    onKeyDown={handleTriggerKeyDown}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 rounded-md border border-slate-200 dark:border-white/10 transition-colors"
+                    aria-haspopup="listbox"
+                    aria-expanded={isOpen}
+                    aria-controls={listboxId}
                 >
                     <span className="text-slate-500 dark:text-gray-400">프로젝트:</span>
                     <span className="text-slate-900 dark:text-white max-w-[150px] truncate">
@@ -77,74 +161,88 @@ export function ProjectSelector({ projects, currentProjectId, onProjectChange, o
                 {/* Dropdown Menu */}
                 {isOpen && (
                 <div className="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
-                    <div className="max-h-[300px] overflow-y-auto">
+                    <div
+                        id={listboxId}
+                        role="listbox"
+                        aria-label="프로젝트 선택"
+                        className="max-h-[300px] overflow-y-auto"
+                        onKeyDown={handleListboxKeyDown}
+                    >
                         <button
-                            onClick={() => {
-                                onProjectChange(null);
-                                setIsOpen(false);
-                            }}
-                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 ${!currentProjectId ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'}`}
+                            ref={el => { optionRefs.current[0] = el; }}
+                            role="option"
+                            aria-selected={!currentProjectId}
+                            tabIndex={activeIndex === 0 ? 0 : -1}
+                            onClick={() => handleSelectProject(null)}
+                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${!currentProjectId ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'} ${activeIndex === 0 ? 'bg-gray-700/70' : ''}`}
                         >
                             일반 검증 (프로젝트 없음)
                         </button>
 
-                        {projects.map(p => (
-                            <div
-                                key={p.id}
-                                className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 group flex justify-between items-center ${currentProjectId === p.id ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'}`}
-                            >
-                                <button
-                                    onClick={() => {
-                                        onProjectChange(p.id);
-                                        setIsOpen(false);
-                                    }}
-                                    className="flex-1 text-left flex items-center gap-2"
+                        {projects.map((p, index) => {
+                            const optionIndex = index + 1;
+                            const isActive = activeIndex === optionIndex;
+                            return (
+                                <div
+                                    key={p.id}
+                                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 group flex justify-between items-center ${currentProjectId === p.id ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'} ${isActive ? 'bg-gray-700/70' : ''}`}
                                 >
-                                    <span className="truncate block flex-1">
-                                        <span className="font-medium block">{p.name}</span>
-                                        {p.description && <span className="text-xs text-gray-500 truncate block">{p.description}</span>}
-                                    </span>
-                                    {currentProjectId === p.id && (
-                                        <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    )}
-                                </button>
-                                <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                                    {onEditProject && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onEditProject(p);
-                                            }}
-                                            className="p-1 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
-                                            title="프로젝트 수정"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                            </svg>
-                                        </button>
-                                    )}
                                     <button
-                                        onClick={(e) => handleDelete(p.id, p.name, e)}
-                                        disabled={deletingId === p.id}
-                                        className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors disabled:opacity-50"
-                                        title="프로젝트 삭제"
+                                        ref={el => { optionRefs.current[optionIndex] = el; }}
+                                        role="option"
+                                        aria-selected={currentProjectId === p.id}
+                                        tabIndex={isActive ? 0 : -1}
+                                        onClick={() => handleSelectProject(p.id)}
+                                        className="flex-1 text-left flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
                                     >
-                                        {deletingId === p.id ? (
-                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                        ) : (
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        <span className="truncate block flex-1">
+                                            <span className="font-medium block">{p.name}</span>
+                                            {p.description && <span className="text-xs text-gray-500 truncate block">{p.description}</span>}
+                                        </span>
+                                        {currentProjectId === p.id && (
+                                            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                             </svg>
                                         )}
                                     </button>
+                                    <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                                        {onEditProject && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onEditProject(p);
+                                                }}
+                                                className="p-1 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                                                title="프로젝트 수정"
+                                                tabIndex={-1}
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={(e) => handleDelete(p.id, p.name, e)}
+                                            disabled={deletingId === p.id}
+                                            className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors disabled:opacity-50"
+                                            title="프로젝트 삭제"
+                                            tabIndex={-1}
+                                        >
+                                            {deletingId === p.id ? (
+                                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     <div className="border-t border-gray-700 p-2 space-y-2">
