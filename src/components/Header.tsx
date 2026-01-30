@@ -9,8 +9,6 @@ interface HeaderProps {
     loading: boolean;
     reportExists: boolean;
     isLoadingProjects: boolean; // Track if projects are being fetched
-    onUpload: () => void;
-    onStartTBM?: () => void;
     onShowHistory: () => void;
     onShowDashboard?: () => void;
     toggleDark: () => void;
@@ -37,8 +35,6 @@ export default function Header({
     loading,
     reportExists,
     isLoadingProjects,
-    onUpload,
-    onStartTBM,
     onShowHistory,
     onShowDashboard,
     toggleDark,
@@ -141,7 +137,7 @@ export default function Header({
                             onClick={() => setMenuOpen(!menuOpen)}
                             className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold transition-colors"
                             aria-label="더보기 메뉴"
-                            title="더보기 메뉴 - 기록, 대시보드, TBM, 설정"
+                            title="더보기 메뉴 - 기록, 대시보드, 설정"
                         >
                             <span className="material-symbols-outlined text-lg sm:text-xl">more_vert</span>
                         </button>
@@ -179,26 +175,6 @@ export default function Header({
                                     </button>
                                 )}
 
-                                {onStartTBM && !showWelcome && (
-                                    <>
-                                        <div className="h-px bg-slate-200 dark:bg-slate-700 my-2"></div>
-                                        <button
-                                            onClick={() => {
-                                                onStartTBM();
-                                                setMenuOpen(false);
-                                            }}
-                                            disabled={isLoadingProjects}
-                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 text-left text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50"
-                                        >
-                                            <span className="material-symbols-outlined text-xl">mic</span>
-                                            <div>
-                                                <div className="font-bold text-sm">TBM 시작</div>
-                                                <div className="text-xs text-slate-500 dark:text-slate-400">작업 전 대화 녹음</div>
-                                            </div>
-                                        </button>
-                                    </>
-                                )}
-
                                 <div className="h-px bg-slate-200 dark:bg-slate-700 my-2"></div>
 
                                 <button
@@ -216,22 +192,21 @@ export default function Header({
                                     </div>
                                 </button>
 
-                                <button
-                                    onClick={() => {
-                                        toggleDark();
-                                        setMenuOpen(false);
-                                    }}
-                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 text-left text-slate-700 dark:text-slate-200 transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-xl">dark_mode</span>
-                                    <div>
-                                        <div className="font-bold text-sm">다크모드</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">테마 전환</div>
-                                    </div>
-                                </button>
+                                <div className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">
+                                    테마 전환은 우측 상단 버튼을 사용하세요.
+                                </div>
                             </div>
                         )}
                     </div>
+
+                    <button
+                        onClick={toggleDark}
+                        className="p-2 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold transition-colors"
+                        aria-label="다크모드 전환"
+                        title="다크모드 전환"
+                    >
+                        <span className="material-symbols-outlined text-lg sm:text-xl">dark_mode</span>
+                    </button>
 
                     {/* Hide action buttons when welcome screen is visible */}
                     {!showWelcome && (
@@ -253,19 +228,9 @@ export default function Header({
                                 </button>
                             )}
 
-                            <button
-                                onClick={onUpload}
-                                disabled={isLoadingProjects}
-                                className={`px-4 sm:px-5 lg:px-6 py-2.5 sm:py-3 rounded-xl font-black shadow-xl inline-flex items-center gap-2 transition-all duration-200 text-sm sm:text-base hover:scale-105 active:scale-95 ${
-                                    isLoadingProjects
-                                        ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-slate-200 cursor-not-allowed opacity-60'
-                                        : 'bg-gradient-to-r from-primary to-green-600 text-white shadow-green-300 hover:shadow-2xl hover:from-green-600 hover:to-green-700'
-                                }`}
-                                title={isLoadingProjects ? "프로젝트 로딩 중..." : "안전 점검 문서 업로드 - PDF나 이미지 파일을 선택하세요"}
-                            >
-                                <span className="material-symbols-outlined text-xl sm:text-2xl">upload</span>
-                                <span className="font-black">파일 업로드</span>
-                            </button>
+                            <div className="hidden sm:flex items-center text-xs text-slate-500 dark:text-slate-400">
+                                업로드와 TBM은 중앙의 버튼을 사용하세요.
+                            </div>
                         </>
                     )}
                 </div>

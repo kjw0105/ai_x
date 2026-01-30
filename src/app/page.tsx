@@ -1128,10 +1128,6 @@ export default function Page() {
         loading={loading}
         reportExists={!!report}
         isLoadingProjects={isLoadingProjects}
-        onUpload={pickFileDialog}
-        onStartTBM={() => {
-          setShowTBMModal(true);
-        }}
         onShowHistory={() => setShowHistory(true)}
         onShowDashboard={() => setShowDashboard(true)}
         toggleDark={toggleDark}

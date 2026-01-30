@@ -1,7 +1,6 @@
 "use client";
 
-import { Issue } from "@/lib/validator";
-import { RefObject } from "react";
+import { useState } from "react";
 import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
 import { EmptyDocumentState } from "@/components/EmptyDocumentState";
 import { RecentDocuments } from "@/components/RecentDocuments";
@@ -40,6 +39,7 @@ export default function DocumentViewer({
 }: DocumentViewerProps) {
     const issueCount = reportIssues.length;
     // Local state removed, using props
+    const [isZoomOpen, setIsZoomOpen] = useState(false);
 
     const totalPages = pageImages.length;
     const hasNext = currentPage < totalPages - 1;
@@ -99,6 +99,7 @@ export default function DocumentViewer({
                     <EmptyDocumentState
                         onUploadClick={onPickFile}
                         onFileSelect={onFileSelect}
+                        onStartTBM={onStartTBM}
                     />
                 )}
 
@@ -135,7 +136,7 @@ export default function DocumentViewer({
                 )}
 
                 {totalPages > 0 && (
-                    <div className="relative w-full max-w-[1200px] mb-8">
+                    <div className="relative w-full max-w-[860px] mb-8">
                         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden pdf-page-shadow relative group">
                             <div key={currentPage} className="absolute top-0 left-0 bg-slate-800/80 text-white text-xs px-2 py-1 rounded-br-lg z-10 font-mono">
                                 PAGE {currentPage + 1} / {totalPages}
@@ -167,12 +168,60 @@ export default function DocumentViewer({
                             <img
                                 src={pageImages[currentPage]}
                                 alt={`Page ${currentPage + 1}`}
-                                className="w-full h-auto block select-none pointer-events-none"
+                                className="w-full h-auto block select-none cursor-zoom-in"
+                                onClick={() => setIsZoomOpen(true)}
+                                title="클릭하여 확대 보기"
                             />
                         </div>
                     </div>
                 )}
             </div>
+
+            {totalPages > 0 && isZoomOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-6 pt-10"
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={() => setIsZoomOpen(false)}
+                >
+                    <button
+                        type="button"
+                        onClick={() => setIsZoomOpen(false)}
+                        className="absolute top-4 right-4 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-lg size-10 flex items-center justify-center"
+                        aria-label="확대 보기 닫기"
+                        title="닫기"
+                    >
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                    <div
+                        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden border border-slate-200 dark:border-slate-700"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                                <span className="material-symbols-outlined text-base">zoom_in</span>
+                                확대 보기
+                            </div>
+                            <button
+                                onClick={() => setIsZoomOpen(false)}
+                                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-300"
+                                aria-label="확대 보기 닫기"
+                                title="닫기"
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                        <div className="overflow-auto max-h-[calc(85vh-56px)] bg-slate-100 dark:bg-slate-950 p-4">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src={pageImages[currentPage]}
+                                alt={`Zoomed page ${currentPage + 1}`}
+                                className="w-full h-auto block"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
