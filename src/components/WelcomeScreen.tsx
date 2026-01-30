@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 
 export type Project = {
     id: string;
@@ -14,6 +14,7 @@ interface WelcomeScreenProps {
     onCreateProject: () => void;
     onSelectProject: (projectId: string) => void;
     onProceedWithoutProject: () => void;
+    onDeleteProject: (projectId: string) => void;
 }
 
 export function WelcomeScreen({
@@ -21,8 +22,25 @@ export function WelcomeScreen({
     isLoadingProjects,
     onCreateProject,
     onSelectProject,
-    onProceedWithoutProject
+    onProceedWithoutProject,
+    onDeleteProject
 }: WelcomeScreenProps) {
+    const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+
+    const handleDeleteClick = async (projectId: string, projectName: string, e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent project selection
+
+        if (!confirm(`"${projectName}" 프로젝트를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 프로젝트의 모든 검증 기록이 삭제됩니다.`)) {
+            return;
+        }
+
+        setDeletingProjectId(projectId);
+        try {
+            await onDeleteProject(projectId);
+        } finally {
+            setDeletingProjectId(null);
+        }
+    };
     return (
         <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 p-6">
             <div className="max-w-4xl w-full">
@@ -128,27 +146,56 @@ export function WelcomeScreen({
 
                             {/* Actual Project List */}
                             {!isLoadingProjects && projects.slice(0, 6).map(project => (
-                                <button
+                                <div
                                     key={project.id}
-                                    onClick={() => onSelectProject(project.id)}
-                                    className="text-left p-4 rounded-xl bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 transition-colors group"
+                                    className="relative text-left rounded-xl bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 transition-colors group overflow-hidden"
                                 >
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="font-semibold text-slate-900 dark:text-white truncate group-hover:text-blue-500 transition-colors">
-                                                {project.name}
-                                            </h4>
-                                            {project.description && (
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-1">
-                                                    {project.description}
-                                                </p>
-                                            )}
+                                    <button
+                                        onClick={() => onSelectProject(project.id)}
+                                        className="w-full text-left p-4 pr-20"
+                                        disabled={deletingProjectId === project.id}
+                                    >
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="font-semibold text-slate-900 dark:text-white truncate group-hover:text-blue-500 transition-colors">
+                                                    {project.name}
+                                                </h4>
+                                                {project.description && (
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-1">
+                                                        {project.description}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
+                                    </button>
+
+                                    {/* Action Buttons Container - Right Side */}
+                                    <div className="absolute top-0 right-0 h-full flex items-center gap-1 pr-2">
+                                        {/* Delete Button */}
+                                        <button
+                                            onClick={(e) => handleDeleteClick(project.id, project.name, e)}
+                                            disabled={deletingProjectId === project.id}
+                                            className="p-2 rounded-lg bg-slate-200/50 dark:bg-slate-600/50 hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50"
+                                            title="프로젝트 삭제"
+                                        >
+                                            {deletingProjectId === project.id ? (
+                                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            )}
+                                        </button>
+
+                                        {/* Arrow Icon - Always visible */}
                                         <svg className="w-5 h-5 text-slate-400 group-hover:text-blue-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                         </svg>
                                     </div>
-                                </button>
+                                </div>
                             ))}
                         </div>
                         {projects.length > 6 && (

@@ -1,0 +1,2 @@
+﻿src/app/page.tsx(568,3): error TS1472: 'catch' or 'finally' expected.
+src/app/page.tsx(1289,1): error TS1005: '}' expected.

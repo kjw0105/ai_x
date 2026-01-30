@@ -12,7 +12,9 @@ interface ProgressBarProps {
 }
 
 export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
+    // Support fractional steps for smoother progress (e.g., 2.5 for 50% through step 2)
     const progress = ((currentStep + 1) / steps.length) * 100;
+    const currentStepIndex = Math.floor(currentStep);
 
     return (
         <div className="w-full max-w-2xl mx-auto p-6">
@@ -29,8 +31,8 @@ export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
             {/* Steps */}
             <div className="flex justify-between items-center">
                 {steps.map((step, index) => {
-                    const isActive = index === currentStep;
-                    const isCompleted = index < currentStep;
+                    const isActive = index === currentStepIndex;
+                    const isCompleted = index < currentStepIndex;
 
                     return (
                         <div
