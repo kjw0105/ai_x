@@ -1,5 +1,9 @@
+"use client";
+
 import { ProjectSelector } from "./ProjectSelector";
 import { Breadcrumbs } from "./Breadcrumbs";
+import { useState, useRef, useEffect } from "react";
+import { useToast } from "@/contexts/ToastContext";
 
 interface HeaderProps {
     loading: boolean;
@@ -23,6 +27,10 @@ interface HeaderProps {
 
     // Breadcrumbs Props
     currentFileName?: string;
+
+    // Temp Master Doc Props
+    hasTempMasterDoc?: boolean;
+    onOpenTempMasterDoc?: () => void;
 }
 
 export default function Header({
@@ -42,53 +50,82 @@ export default function Header({
     onDeleteProject,
     onEditProject,
     onShowWelcome,
-    currentFileName
+    currentFileName,
+    hasTempMasterDoc,
+    onOpenTempMasterDoc
 }: HeaderProps) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const toast = useToast();
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setMenuOpen(false);
+            }
+        }
+        if (menuOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+            return () => document.removeEventListener("mousedown", handleClickOutside);
+        }
+    }, [menuOpen]);
+
     // Build breadcrumbs
     const currentProject = projects.find(p => p.id === currentProjectId);
     const breadcrumbItems = [
         { label: "홈", onClick: onShowWelcome },
-        ...(currentProject ? [{ label: currentProject.name }] : []),
+        ...(currentProject ? [{
+            label: currentProject.name,
+            badge: currentProject.contextText && currentProject.contextText.trim().length > 0
+                ? { text: "마스터", color: "blue" as const, tooltip: "마스터 안전 계획서 등록됨" }
+                : { text: "없음", color: "gray" as const, tooltip: "마스터 안전 계획서 미등록" }
+        }] : []),
         ...(currentFileName ? [{ label: currentFileName }] : []),
     ];
 
     return (
         <header className="flex flex-col border-b border-solid border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark shrink-0 z-20 shadow-sm">
-            <div className="flex items-center justify-between whitespace-nowrap px-6 py-4">
-                <div className="flex items-center gap-6">
+            <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-2 lg:py-3 gap-2 flex-wrap">
+                <div className="flex items-center gap-2 sm:gap-6 flex-shrink-0">
                     <button
                         type="button"
                         onClick={onShowWelcome}
                         disabled={!onShowWelcome}
-                        className="flex items-center gap-3 text-slate-800 dark:text-white cursor-pointer rounded-xl px-2 py-1 -mx-2 -my-1 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:shadow-none"
+                        className="flex items-center gap-1.5 sm:gap-2 text-slate-800 dark:text-white cursor-pointer rounded-lg px-1 sm:px-1.5 py-1 -mx-1 sm:-mx-1.5 -my-1 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:shadow-none"
                         aria-label="Go to welcome screen"
                         title="Go to welcome screen"
                     >
-                        <div className="size-12 flex items-center justify-center bg-primary rounded-xl text-white shadow-lg shadow-primary/30">
-                            <span className="material-symbols-outlined text-3xl">safety_check</span>
+                        <div className="size-8 sm:size-9 lg:size-10 flex items-center justify-center bg-primary rounded-lg text-white shadow-md shadow-primary/20">
+                            <span className="material-symbols-outlined text-xl sm:text-2xl">safety_check</span>
                         </div>
-                        <div>
-                            <h2 className="text-2xl font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+                        <div className="hidden sm:block">
+                            <h2 className="text-base sm:text-lg lg:text-xl font-black leading-tight tracking-tight text-slate-900 dark:text-white">
                                 스마트 안전지킴이
                             </h2>
-                            <p className="text-xs text-slate-500 font-bold">경상남도 중소기업 지원 시스템</p>
+                            <p className="text-[10px] lg:text-xs text-slate-500 font-bold">경상남도 중소기업 지원 시스템</p>
                         </div>
                     </button>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <ProjectSelector
-                        projects={projects}
-                        currentProjectId={currentProjectId}
-                        isLoadingProjects={isLoadingProjects}
-                        onProjectChange={onProjectChange}
-                        onOpenNewProject={onOpenNewProject}
-                        onDeleteProject={onDeleteProject}
-                        onEditProject={onEditProject}
-                        onShowWelcome={onShowWelcome}
-                    />
+                <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 flex-wrap justify-end flex-1">
+                    <div title="프로젝트 선택 - 관련 안전 문서를 그룹으로 관리하세요">
+                        <ProjectSelector
+                            projects={projects}
+                            currentProjectId={currentProjectId}
+                            isLoadingProjects={isLoadingProjects}
+                            onProjectChange={onProjectChange}
+                            onOpenNewProject={onOpenNewProject}
+                            onDeleteProject={onDeleteProject}
+                            onEditProject={onEditProject}
+                            onShowWelcome={onShowWelcome}
+                        />
+                    </div>
 
-                    <div className="hidden md:flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-full px-4 py-2">
+                    <div
+                        className="hidden md:flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-full px-4 py-2"
+                        title={loading ? "문서를 분석하고 있습니다" : reportExists ? "분석이 완료되었습니다" : "문서를 업로드하면 분석이 시작됩니다"}
+                    >
                         <span
                             className={`size-2 rounded-full ${loading ? "bg-yellow-400 animate-pulse" : reportExists ? "bg-green-500" : "bg-slate-400"
                                 }`}
@@ -98,68 +135,136 @@ export default function Header({
                         </span>
                     </div>
 
-                    {onShowDashboard && currentProjectId && (
-                    <button
-                        onClick={onShowDashboard}
-                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold"
-                        aria-label="프로젝트 대시보드 열기"
-                        title="프로젝트 대시보드"
-                    >
-                        <span className="material-symbols-outlined">dashboard</span>
-                    </button>
-                    )}
+                    {/* Overflow Menu */}
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            onClick={() => setMenuOpen(!menuOpen)}
+                            className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold transition-colors"
+                            aria-label="더보기 메뉴"
+                            title="더보기 메뉴 - 기록, 대시보드, TBM, 설정"
+                        >
+                            <span className="material-symbols-outlined text-lg sm:text-xl">more_vert</span>
+                        </button>
 
+                        {/* Dropdown Menu */}
+                        {menuOpen && (
+                            <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                <button
+                                    onClick={() => {
+                                        onShowHistory();
+                                        setMenuOpen(false);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 text-left text-slate-700 dark:text-slate-200 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-xl">history</span>
+                                    <div>
+                                        <div className="font-bold text-sm">기록 보기</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">과거 검증 결과</div>
+                                    </div>
+                                </button>
 
+                                {onShowDashboard && currentProjectId && (
+                                    <button
+                                        onClick={() => {
+                                            onShowDashboard();
+                                            setMenuOpen(false);
+                                        }}
+                                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 text-left text-slate-700 dark:text-slate-200 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-xl">dashboard</span>
+                                        <div>
+                                            <div className="font-bold text-sm">프로젝트 대시보드</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">통계 및 인사이트</div>
+                                        </div>
+                                    </button>
+                                )}
 
-                <button
-                    onClick={onShowHistory}
-                    className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold"
-                    aria-label="기록 보기"
-                    title="기록 보기"
-                >
-                    <span className="material-symbols-outlined">history</span>
-                </button>
+                                {onStartTBM && !showWelcome && (
+                                    <>
+                                        <div className="h-px bg-slate-200 dark:bg-slate-700 my-2"></div>
+                                        <button
+                                            onClick={() => {
+                                                onStartTBM();
+                                                setMenuOpen(false);
+                                            }}
+                                            disabled={isLoadingProjects}
+                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 text-left text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50"
+                                        >
+                                            <span className="material-symbols-outlined text-xl">mic</span>
+                                            <div>
+                                                <div className="font-bold text-sm">TBM 시작</div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400">작업 전 대화 녹음</div>
+                                            </div>
+                                        </button>
+                                    </>
+                                )}
 
-                <button
-                    onClick={toggleDark}
-                    className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold"
-                    aria-label="다크모드 토글"
-                    title="다크모드 토글"
-                >
-                    <span className="material-symbols-outlined">dark_mode</span>
-                </button>
+                                <div className="h-px bg-slate-200 dark:bg-slate-700 my-2"></div>
+
+                                <button
+                                    onClick={() => {
+                                        localStorage.removeItem("skip_document_type_selector");
+                                        setMenuOpen(false);
+                                        toast?.success("문서 종류 선택이 다시 활성화되었습니다");
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 text-left text-slate-700 dark:text-slate-200 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-xl">category</span>
+                                    <div>
+                                        <div className="font-bold text-sm">문서 종류 선택 재활성화</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">업로드 시 종류 선택 창 표시</div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        toggleDark();
+                                        setMenuOpen(false);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 text-left text-slate-700 dark:text-slate-200 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-xl">dark_mode</span>
+                                    <div>
+                                        <div className="font-bold text-sm">다크모드</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">테마 전환</div>
+                                    </div>
+                                </button>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Hide action buttons when welcome screen is visible */}
                     {!showWelcome && (
                         <>
-                            {onStartTBM && (
+                            {/* Temp Master Doc Button - Show only when no project selected */}
+                            {!currentProjectId && onOpenTempMasterDoc && (
                                 <button
-                                    onClick={onStartTBM}
+                                    onClick={onOpenTempMasterDoc}
                                     disabled={isLoadingProjects}
-                                    className={`px-4 py-2 rounded-xl font-black border shadow-sm inline-flex items-center gap-2 transition-colors ${
-                                        isLoadingProjects
-                                            ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 cursor-not-allowed opacity-60'
+                                    className={`px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl font-black border shadow-sm inline-flex items-center gap-1 sm:gap-2 transition-colors text-xs sm:text-sm ${
+                                        hasTempMasterDoc
+                                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-200 dark:hover:bg-blue-900/50'
                                             : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
-                                    }`}
-                                    title={isLoadingProjects ? "프로젝트 로딩 중..." : "TBM(작업 전 대화) 녹음"}
+                                    } ${isLoadingProjects ? 'cursor-not-allowed opacity-60' : ''}`}
+                                    title={hasTempMasterDoc ? "임시 마스터 문서 활성화됨 - 이 문서를 검증 기준으로 사용합니다" : "마스터 안전 계획서 업로드 - AI가 이 기준을 참고하여 문서를 검증합니다"}
                                 >
-                                    <span className="material-symbols-outlined">mic</span>
-                                    TBM 시작
+                                    <span className="material-symbols-outlined text-base sm:text-xl">{hasTempMasterDoc ? 'check_circle' : 'description'}</span>
+                                    <span className="hidden sm:inline">임시 마스터</span>
                                 </button>
                             )}
 
                             <button
                                 onClick={onUpload}
                                 disabled={isLoadingProjects}
-                                className={`px-4 py-2 rounded-xl font-black shadow-lg inline-flex items-center gap-2 transition-colors ${
+                                className={`px-4 sm:px-5 lg:px-6 py-2.5 sm:py-3 rounded-xl font-black shadow-xl inline-flex items-center gap-2 transition-all duration-200 text-sm sm:text-base hover:scale-105 active:scale-95 ${
                                     isLoadingProjects
                                         ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-slate-200 cursor-not-allowed opacity-60'
-                                        : 'bg-primary text-white shadow-green-200 hover:bg-green-600'
+                                        : 'bg-gradient-to-r from-primary to-green-600 text-white shadow-green-300 hover:shadow-2xl hover:from-green-600 hover:to-green-700'
                                 }`}
-                                title={isLoadingProjects ? "프로젝트 로딩 중..." : "파일 업로드"}
+                                title={isLoadingProjects ? "프로젝트 로딩 중..." : "안전 점검 문서 업로드 - PDF나 이미지 파일을 선택하세요"}
                             >
-                                <span className="material-symbols-outlined">upload</span>
-                                파일 업로드
+                                <span className="material-symbols-outlined text-xl sm:text-2xl">upload</span>
+                                <span className="font-black">파일 업로드</span>
                             </button>
                         </>
                     )}
@@ -168,7 +273,7 @@ export default function Header({
 
             {/* Breadcrumbs - Only show when not on welcome screen and has multiple items */}
             {!showWelcome && breadcrumbItems.length > 1 && (
-                <div className="px-6 pb-3">
+                <div className="px-3 sm:px-4 lg:px-6 pb-2 sm:pb-3">
                     <Breadcrumbs items={breadcrumbItems} />
                 </div>
             )}

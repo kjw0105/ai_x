@@ -70,9 +70,13 @@ export function EmptyDocumentState({ onUploadClick, onFileSelect }: EmptyDocumen
                             ? "파일을 드롭하여 검증 시작"
                             : "파일을 드래그하거나 클릭하여 업로드"}
                     </p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
                         PDF 또는 이미지 파일 (JPG, PNG)
                     </p>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold">
+                        <span className="material-symbols-outlined text-sm">category</span>
+                        문서 종류 선택 가능
+                    </div>
                 </div>
 
                 {/* Hint */}

@@ -4,6 +4,7 @@ import { Issue } from "@/lib/validator";
 import { RefObject } from "react";
 import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
 import { EmptyDocumentState } from "@/components/EmptyDocumentState";
+import { RecentDocuments } from "@/components/RecentDocuments";
 
 interface DocumentViewerProps {
     file: File | null;
@@ -17,6 +18,9 @@ interface DocumentViewerProps {
     onClearFile?: () => void;
     historicalFileName?: string; // When viewing history without file
     documentType?: string | null; // Document type for badge
+    currentProjectId?: string | null;
+    currentReportId?: string;
+    onLoadDocument?: (id: string) => void;
 }
 export default function DocumentViewer({
     file,
@@ -29,7 +33,10 @@ export default function DocumentViewer({
     onStartTBM,
     onClearFile,
     historicalFileName,
-    documentType
+    documentType,
+    currentProjectId,
+    currentReportId,
+    onLoadDocument
 }: DocumentViewerProps) {
     const issueCount = reportIssues.length;
     // Local state removed, using props
@@ -76,31 +83,16 @@ export default function DocumentViewer({
                         </span>
                     )}
                 </div>
-
-                {totalPages > 1 && (
-                    <div className="hidden xl:flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
-                        <button
-                            onClick={handlePrev}
-                            disabled={!hasPrev}
-                            className="p-1 hover:bg-white dark:hover:bg-slate-600 rounded disabled:opacity-30 transition-colors"
-                            aria-label="이전 페이지"
-                        >
-                            <span className="material-symbols-outlined text-base">chevron_left</span>
-                        </button>
-                        <span className="text-xs font-bold font-mono px-2 text-slate-600 dark:text-slate-300">
-                            {currentPage + 1} / {totalPages}
-                        </span>
-                        <button
-                            onClick={handleNext}
-                            disabled={!hasNext}
-                            className="p-1 hover:bg-white dark:hover:bg-slate-600 rounded disabled:opacity-30 transition-colors"
-                            aria-label="다음 페이지"
-                        >
-                            <span className="material-symbols-outlined text-base">chevron_right</span>
-                        </button>
-                    </div>
-                )}
             </div>
+
+            {onLoadDocument && (
+                <RecentDocuments
+                    currentProjectId={currentProjectId ?? null}
+                    currentReportId={currentReportId}
+                    onSelectDocument={onLoadDocument}
+                    maxItems={4}
+                />
+            )}
 
             <div className="flex-1 overflow-auto p-8 flex justify-center items-start bg-slate-300/30">
                 {!file && !historicalFileName && (
@@ -125,20 +117,27 @@ export default function DocumentViewer({
                                 원본 문서 이미지는 보존되지 않습니다. 오른쪽 패널에서 검증 결과를 확인하실 수 있습니다.
                             </p>
                         </div>
-                        <button
-                            onClick={onPickFile}
-                            className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2"
-                        >
-                            <span className="material-symbols-outlined">add_a_photo</span>
-                            새 파일 업로드
-                        </button>
+                        <div className="space-y-3">
+                            <button
+                                onClick={onPickFile}
+                                className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2 hover:bg-green-600 transition-colors"
+                                title="문서 종류를 선택하고 파일을 업로드합니다"
+                            >
+                                <span className="material-symbols-outlined">add_a_photo</span>
+                                새 파일 업로드
+                            </button>
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold">
+                                <span className="material-symbols-outlined text-sm">category</span>
+                                문서 종류 선택 가능
+                            </div>
+                        </div>
                     </div>
                 )}
 
                 {totalPages > 0 && (
                     <div className="relative w-full max-w-[1200px] mb-8">
                         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden pdf-page-shadow relative group">
-                            <div className="absolute top-0 left-0 bg-slate-800/80 text-white text-xs px-2 py-1 rounded-br-lg z-10 font-mono">
+                            <div key={currentPage} className="absolute top-0 left-0 bg-slate-800/80 text-white text-xs px-2 py-1 rounded-br-lg z-10 font-mono">
                                 PAGE {currentPage + 1} / {totalPages}
                             </div>
 
@@ -164,6 +163,7 @@ export default function DocumentViewer({
                                 </>
                             )}
 
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={pageImages[currentPage]}
                                 alt={`Page ${currentPage + 1}`}

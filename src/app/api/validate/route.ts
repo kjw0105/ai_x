@@ -11,6 +11,7 @@ import { validateAgainstStructuredPlan } from "@/lib/structuredValidation";
 import type { MasterSafetyPlan, StructuredValidationIssue } from "@/lib/masterPlanSchema";
 import { calculateRiskLevel, riskCalculationToIssues } from "@/lib/riskMatrix";
 import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } from "@/lib/crossDocumentAnalysis";
+import { parseDocExtraction } from "@/lib/docSchema";
 
 type Provider = "openai" | "claude" | "auto";
 
@@ -94,6 +95,10 @@ function safeJsonParse(text: string) {
   }
 }
 
+function sanitizeDocData(raw: unknown) {
+  return parseDocExtraction(raw);
+}
+
 async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null; contextText?: string }) {
   let sysPrompt = buildSystemPrompt();
 
@@ -163,7 +168,7 @@ async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null
 
 export async function POST(req: Request) {
   try {
-    const { provider, fileName, pdfText, pageImages, projectId, documentType } = await req.json();
+    const { provider, fileName, pdfText, pageImages, projectId, documentType, tempContextText } = await req.json();
 
     // VALIDATION: Check if document has sufficient content
     const hasText = pdfText && pdfText.trim().length >= 50;
@@ -188,7 +193,7 @@ export async function POST(req: Request) {
 
     const p: Provider = (provider ?? "auto") as Provider;
 
-    // Fetch Project Context if projectId is present
+    // Fetch Project Context if projectId is present, or use temporary context
     let contextText = "";
     let masterPlan: MasterSafetyPlan | null = null;
     let projectIsStructured = false;
@@ -212,6 +217,9 @@ export async function POST(req: Request) {
           }
         }
       }
+    } else if (tempContextText) {
+      // Use temporary master doc context for non-project validation
+      contextText = tempContextText;
     }
 
     // auto: 스캔(텍스트 거의 없음)이면 비전 강한 쪽(둘 중 아무거나)로
@@ -240,18 +248,28 @@ export async function POST(req: Request) {
 
     // 3. Validation Logic (Code-based)
     // LLM 결과(extraction)에 대해 규칙 검사를 수행한다.
-    const extracted = result as DocData;
+    const sanitized = sanitizeDocData(result);
+    if ("error" in sanitized) {
+      return NextResponse.json(
+        {
+          error: sanitized.error
+        },
+        { status: 400 }
+      );
+    }
+
+    const extracted = sanitized.data;
 
     // VALIDATION: Check if document is safety-related
     // If docType is "unknown" and no safety-related fields are found, reject the document
     const isSafetyDocument =
       extracted.docType !== "unknown" ||
-      extracted.fields?.점검일자 ||
-      extracted.fields?.현장명 ||
-      extracted.fields?.작업내용 ||
+      (extracted.fields?.점검일자 ?? false) ||
+      (extracted.fields?.현장명 ?? false) ||
+      (extracted.fields?.작업내용 ?? false) ||
       (extracted.signature?.담당 && extracted.signature.담당 !== "unknown") ||
       (extracted.signature?.소장 && extracted.signature.소장 !== "unknown") ||
-      (extracted.checklist && extracted.checklist.length > 0);
+      (extracted.checklist?.length ?? 0) > 0;
 
     if (!isSafetyDocument) {
       return NextResponse.json(
@@ -293,20 +311,7 @@ export async function POST(req: Request) {
       // Non-critical, continue without risk analysis
     }
 
-    // --- DB SAVE ---
-    // Save the result to the database for history (including Stage 4 fields)
-    const savedReport = await prisma.report.create({
-      data: {
-        fileName: fileName ?? "Untitled",
-        docDataJson: JSON.stringify(extracted),
-        issuesJson: JSON.stringify(validationIssues),
-        projectId: projectId ?? null,
-        documentType: documentType ?? null,
-        // Stage 4: Save inspector name and checklist for pattern analysis
-        inspectorName: extracted.inspectorName ?? null,
-        checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
-      }
-    });
+    const reportId = crypto.randomUUID();
 
     // Stage 4: Pattern Analysis - Check for suspicious patterns
     let patternIssues: typeof validationIssues = [];
@@ -327,7 +332,7 @@ export async function POST(req: Request) {
     let crossDocIssues: typeof validationIssues = [];
     if (projectId) {
       try {
-        const crossIssues = await analyzeCrossDocumentIssues(projectId, savedReport.id);
+        const crossIssues = await analyzeCrossDocumentIssues(projectId, reportId);
         crossDocIssues = crossDocumentIssuesToValidationIssues(crossIssues);
       } catch (e) {
         console.warn("Cross-document analysis failed:", e);
@@ -340,6 +345,25 @@ export async function POST(req: Request) {
       ...issue,
       id: crypto.randomUUID()
     }));
+    // --- DB SAVE ---
+    // Save the result to the database for history (including Stage 4 fields)
+    const extractedChat = Array.isArray((extracted as { chat?: unknown }).chat)
+      ? JSON.stringify((extracted as { chat?: unknown[] }).chat)
+      : null;
+    const savedReport = await prisma.report.create({
+      data: {
+        id: reportId,
+        fileName: fileName ?? "Untitled",
+        docDataJson: JSON.stringify(extracted),
+        issuesJson: JSON.stringify(allIssues),
+        chatJson: extractedChat,
+        projectId: projectId ?? null,
+        documentType: documentType ?? null,
+        // Stage 4: Save inspector name and checklist for pattern analysis
+        inspectorName: extracted.inspectorName ?? null,
+        checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
+      }
+    });
 
     // Stage 5: Risk Signals - Format output with non-judgmental language
     const riskSignals = allIssues
