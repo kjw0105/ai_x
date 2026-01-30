@@ -1223,7 +1223,7 @@ export default function Page() {
                 <DocumentViewer
                   file={file}
                   pageImages={pageImages}
-                  reportIssues={report?.issues ?? []}
+                  reportIssues={[]}
                   currentPage={currentPage}
                   onPageChange={setCurrentPage}
                   onPickFile={pickFileDialog}
@@ -1234,7 +1234,7 @@ export default function Page() {
                   }}
                   onClearFile={handleClearFile}
                   historicalFileName={historicalFileName}
-                  documentType={report?.documentType}
+                  documentType={null}
                   currentProjectId={currentProjectId}
                   currentReportId={currentReportId}
                   onLoadDocument={loadReportFromHistory}
