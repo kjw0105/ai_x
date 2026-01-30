@@ -17,20 +17,6 @@ function getIssueStage(ruleId?: string): string {
     return "stage1-2";
 }
 
-function severityBorder(sev: string, ruleId?: string) {
-    const stage = getIssueStage(ruleId);
-    // Stage 3 systems get distinct styling
-    if (stage === "stage3-structured") return "border-l-blue-500";
-    if (stage === "stage3-risk") return "border-l-purple-500";
-    if (stage === "stage3-cross") return "border-l-cyan-500";
-    // Stage 4: Pattern warnings
-    if (stage === "stage4") return "border-l-purple-500";
-    // Stage 1-2: Traditional
-    if (sev === "error") return "border-l-red-500";
-    if (sev === "warn") return "border-l-orange-500";
-    return "border-l-slate-400";
-}
-
 function severityColor(sev: string, ruleId?: string) {
     const stage = getIssueStage(ruleId);
     if (stage === "stage3-structured") return "text-blue-600";
@@ -114,6 +100,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const toast = useToast();
     const [showRiskDetails, setShowRiskDetails] = useState(false);
     const [isExportingPDF, setIsExportingPDF] = useState(false);
+    const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
 
     // Smart severity filter: Only show buttons for severities that exist in issues
     const availableSeverities = useMemo(() => {
@@ -538,16 +525,21 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                     {group.title}
                                 </span>
                             </div>
-                            {group.issues.map((issue, i) => (
-                                <IssueCard
-                                    key={issue.id}
-                                    issue={issue}
-                                    idx={i}
-                                    onConfirm={() => handleConfirm(issue.id)}
-                                    onFix={() => handleFix(issue)}
-                                    isProcessing={processingIssueId === issue.id}
-                                />
-                            ))}
+                            <div className="flex flex-wrap items-center justify-center gap-3">
+                                {group.issues.map((issue, i) => (
+                                    <button
+                                        key={issue.id}
+                                        onClick={() => setSelectedIssue(issue)}
+                                        className={`size-12 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center transition-transform hover:scale-105 ${avatarBgColor(issue.ruleId)}`}
+                                        title={`${issue.title} (클릭하여 상세 보기)`}
+                                        aria-label={`${issue.title} 상세 보기`}
+                                    >
+                                        <span className={`material-symbols-outlined text-2xl ${avatarColor(issue.ruleId)}`}>
+                                            {severityIcon(issue.severity, issue.ruleId)}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     )
                 ))}
@@ -627,78 +619,72 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 </div>
             )}
 
+            {selectedIssue && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className={`size-12 rounded-full flex items-center justify-center ${avatarBgColor(selectedIssue.ruleId)}`}>
+                                    <span className={`material-symbols-outlined text-2xl ${avatarColor(selectedIssue.ruleId)}`}>
+                                        {severityIcon(selectedIssue.severity, selectedIssue.ruleId)}
+                                    </span>
+                                </div>
+                                <div>
+                                    <h3 className={`text-lg font-black ${severityColor(selectedIssue.severity, selectedIssue.ruleId)}`}>
+                                        {selectedIssue.title}
+                                    </h3>
+                                    {selectedIssue.confidence !== undefined && (
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            신뢰도 {selectedIssue.confidence}%
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setSelectedIssue(null)}
+                                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"
+                                aria-label="문제 상세 닫기"
+                                title="닫기"
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-line mb-6">
+                            {selectedIssue.message}
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={() => {
+                                    handleConfirm(selectedIssue.id);
+                                    setSelectedIssue(null);
+                                }}
+                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
+                            >
+                                확인했어
+                            </button>
+                            <button
+                                onClick={() => handleFix(selectedIssue)}
+                                disabled={processingIssueId === selectedIssue.id}
+                                className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {processingIssueId === selectedIssue.id ? (
+                                    <>
+                                        <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+                                        생성 중...
+                                    </>
+                                ) : (
+                                    "수정해줘"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Chat Modal */}
             <ChatModal open={showChatModal} onClose={() => setShowChatModal(false)} />
         </div >
-    );
-}
-
-// Updated IssueCard to accept handlers
-function IssueCard({ issue, idx, onConfirm, onFix, isProcessing }: { issue: Issue; idx: number; onConfirm: () => void; onFix: () => void; isProcessing: boolean }) {
-    const safeId = issue.id || `issue-${idx}`;
-    return (
-        <div
-            key={safeId}
-            className="chat-message flex gap-3 mb-4"
-            style={{ animationDelay: `${0.2 + idx * 0.2}s` }}
-        >
-            <div className={`size-10 rounded-full flex items-center justify-center shrink-0 shadow-sm mt-1 ${avatarBgColor(issue.ruleId)}`}>
-                <span className={`material-symbols-outlined text-xl ${avatarColor(issue.ruleId)}`}>
-                    {severityIcon(issue.severity, issue.ruleId)}
-                </span>
-            </div>
-
-            <div className="flex flex-col gap-1 max-w-[85%]">
-                <div
-                    className={`bg-white dark:bg-surface-dark p-4 rounded-2xl rounded-tl-none shadow-sm border-l-4 ${severityBorder(
-                        issue.severity, issue.ruleId
-                    )} text-slate-800 dark:text-white`}
-                >
-                    <div className="flex items-center justify-between mb-2">
-                        <h4
-                            className={`font-black text-lg flex items-center gap-2 ${severityColor(
-                                issue.severity, issue.ruleId
-                            )}`}
-                        >
-                            <span className="material-symbols-outlined">
-                                {severityIcon(issue.severity, issue.ruleId)}
-                            </span>
-                            {issue.title}
-                        </h4>
-
-                        {issue.confidence !== undefined && (
-                            <span className="text-xs font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full text-slate-500">
-                                신뢰도 {issue.confidence}%
-                            </span>
-                        )}
-                    </div>
-
-                    <p className="text-[16px] leading-relaxed mb-4 whitespace-pre-line">{issue.message}</p>
-
-                    <div className="grid grid-cols-2 gap-2">
-                        <button
-                            onClick={onConfirm}
-                            className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
-                        >
-                            확인했어
-                        </button>
-                        <button
-                            onClick={onFix}
-                            disabled={isProcessing}
-                            className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {isProcessing ? (
-                                <>
-                                    <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                    생성 중...
-                                </>
-                            ) : (
-                                "수정해줘"
-                            )}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
     );
 }

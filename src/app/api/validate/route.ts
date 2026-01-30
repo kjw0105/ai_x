@@ -289,6 +289,42 @@ export async function POST(req: Request) {
     }
 
     const validationIssues = validateDocument(extracted);
+    const documentTypeMap: Record<string, DocData["docType"]> = {
+      SAFETY_CHECKLIST: "산업안전 점검표",
+      RISK_ASSESSMENT: "위험성 평가 보고서",
+      PRE_WORK_CHECKLIST: "작업 전 안전점검표",
+      TBM: "TBM",
+      OTHER: "unknown",
+    };
+    const selectedDocType = documentTypeMap[documentType as keyof typeof documentTypeMap];
+    const mismatchIssues: ValidationIssue[] = [];
+
+    if (documentType) {
+      if (selectedDocType === "unknown") {
+        if (extracted.docType !== "unknown") {
+          mismatchIssues.push({
+            severity: "warn",
+            title: "문서 유형 선택이 실제 내용과 다릅니다",
+            message: `선택하신 문서 유형은 "기타 문서"이지만, AI 분석 결과는 "${extracted.docType}"로 인식되었습니다. 올바른 유형을 선택했는지 확인해주세요.`,
+            ruleId: "user_doc_type_mismatch",
+          });
+        }
+      } else if (selectedDocType && extracted.docType !== "unknown" && extracted.docType !== selectedDocType) {
+        mismatchIssues.push({
+          severity: "warn",
+          title: "문서 유형 선택이 실제 내용과 다릅니다",
+          message: `선택하신 문서 유형은 "${selectedDocType}"이지만, AI 분석 결과는 "${extracted.docType}"로 인식되었습니다. 문서 유형을 다시 선택해주세요.`,
+          ruleId: "user_doc_type_mismatch",
+        });
+      } else if (selectedDocType && extracted.docType === "unknown") {
+        mismatchIssues.push({
+          severity: "info",
+          title: "문서 유형 확인이 필요합니다",
+          message: "선택하신 문서 유형이 있지만 문서 내용에서 유형을 확정하기 어렵습니다. 문서가 올바른지 확인해주세요.",
+          ruleId: "user_doc_type_uncertain",
+        });
+      }
+    }
 
     // Stage 3: Structured Master Plan Validation
     let structuredIssues: StructuredValidationIssue[] = [];
@@ -341,7 +377,7 @@ export async function POST(req: Request) {
     }
 
     // Merge all issues: validation + structured + risk + pattern + cross-document analysis
-    const allIssues = [...validationIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues].map(issue => ({
+    const allIssues = [...validationIssues, ...mismatchIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues].map(issue => ({
       ...issue,
       id: crypto.randomUUID()
     }));
