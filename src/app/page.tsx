@@ -400,6 +400,8 @@ export default function Page() {
     const startTime = Date.now();
     const minDisplayTime = 800; // Minimum 800ms to make progress visible
 
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
+
     try {
       let text = "";
       let images: string[] = [];
@@ -442,6 +444,9 @@ export default function Page() {
       setShowProgress(true);
       setValidationStep(0);
 
+      // Small delay to show first step
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       // Step 2: Analyzing
       setValidationStep(1);
       // Token Opt: First + Last
@@ -453,8 +458,21 @@ export default function Page() {
         }
       }
 
-      // Step 3: Validating
+      // Small delay before validation
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Step 3: Validating with simulated progress
       setValidationStep(2);
+
+      // Start simulated progress that gradually increases during API call
+      let progressValue = 2.0;
+      progressInterval = setInterval(() => {
+        progressValue += 0.05; // Increment by 5% of a step
+        if (progressValue < 2.9) { // Stop at 90% of step 2
+          setValidationStep(progressValue);
+        }
+      }, 500); // Update every 500ms
+
       const res = await fetch("/api/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -468,6 +486,9 @@ export default function Page() {
         }),
         signal // Pass AbortSignal to fetch
       });
+
+      // Clear the interval once API responds
+      clearInterval(progressInterval);
 
       // Check if request was aborted after fetch
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -519,6 +540,9 @@ export default function Page() {
         documentType: documentType
       });
     } catch (e: any) {
+      // Clear progress interval on error
+      if (progressInterval) clearInterval(progressInterval);
+
       // Silently ignore aborted requests - they're expected when user picks a new file
       if (e?.name === "AbortError") {
         return;
@@ -555,17 +579,9 @@ export default function Page() {
     setReport(null);
     setHistoricalFileName(undefined); // Clear historical flag
 
-    // Check if user wants to skip document type selector
-    const skipSelector = typeof window !== "undefined" && localStorage.getItem("skip_document_type_selector") === "true";
-
-    if (skipSelector) {
-      // Skip selector and validate immediately
-      await runValidation(f, null);
-    } else {
-      // Show document type selector before validation
-      setPendingFile(f);
-      setShowDocTypeSelector(true);
-    }
+    // Always show document type selector
+    setPendingFile(f);
+    setShowDocTypeSelector(true);
   }
 
   async function handleDocTypeSelect(type: DocumentType) {
@@ -577,7 +593,7 @@ export default function Page() {
     }
   }
 
-  function handleDocTypeSkip() {
+  function handleDocTypeAutoDetect() {
     setShowDocTypeSelector(false);
     if (pendingFile) {
       runValidation(pendingFile, null);
@@ -784,9 +800,11 @@ export default function Page() {
         throw new Error(error.error || "Failed to delete project");
       }
 
-      // If we deleted the current project, reset to null
+      // If we deleted the current project, reset to welcome screen
       if (currentProjectId === projectId) {
         setCurrentProjectId(null);
+        setShowWelcome(true);
+        handleClearFile(); // Clear any document state
       }
 
       // Immediately remove the project from the list
@@ -1069,7 +1087,7 @@ export default function Page() {
         isOpen={showDocTypeSelector}
         fileName={pendingFile?.name ?? ""}
         onSelect={handleDocTypeSelect}
-        onSkip={handleDocTypeSkip}
+        onAutoDetect={handleDocTypeAutoDetect}
       />
 
       <TBMRecorderModal
@@ -1157,14 +1175,51 @@ export default function Page() {
           onCreateProject={handleWelcomeCreateProject}
           onSelectProject={handleWelcomeSelectProject}
           onProceedWithoutProject={handleWelcomeProceedWithoutProject}
+          onDeleteProject={handleDeleteProject}
         />
       ) : (
         <>
-          {/* Desktop: Three-Column Layout */}
-          <div className="hidden lg:flex flex-1 overflow-hidden">
-            <ThreeColumnLayout
-              left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
-              center={
+          {/* Desktop: Conditional Layout */}
+          <div className="hidden lg:flex flex-1 overflow-hidden w-full">
+            {/* Show three-column layout only when there's content */}
+            {(file || report) ? (
+              <ThreeColumnLayout
+                left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
+                center={
+                  <DocumentViewer
+                    file={file}
+                    pageImages={pageImages}
+                    reportIssues={report?.issues ?? []}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                    onPickFile={pickFileDialog}
+                    onFileSelect={onPickFile}
+                    onStartTBM={() => {
+                      dismissWelcome();
+                      setShowTBMModal(true);
+                    }}
+                    onClearFile={handleClearFile}
+                    historicalFileName={historicalFileName}
+                    documentType={report?.documentType}
+                    currentProjectId={currentProjectId}
+                    currentReportId={currentReportId}
+                    onLoadDocument={loadReportFromHistory}
+                  />
+                }
+                right={
+                  <ChatPanel
+                    messages={report?.chat ?? []}
+                    loading={loading}
+                    currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+                    currentFile={file}
+                    historicalFileName={historicalFileName}
+                    issues={report?.issues ?? []}
+                  />
+                }
+              />
+            ) : (
+              // No document: Show only DocumentViewer at full width
+              <div className="flex-1 overflow-hidden">
                 <DocumentViewer
                   file={file}
                   pageImages={pageImages}
@@ -1184,9 +1239,8 @@ export default function Page() {
                   currentReportId={currentReportId}
                   onLoadDocument={loadReportFromHistory}
                 />
-              }
-              right={<ChatPanel messages={report?.chat ?? []} loading={loading} />}
-            />
+              </div>
+            )}
           </div>
 
           {/* Mobile/Tablet: Resizable Two-Column Layout */}

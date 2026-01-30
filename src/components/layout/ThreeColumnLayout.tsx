@@ -29,7 +29,7 @@ export function ThreeColumnLayout({ left, center, right }: ThreeColumnLayoutProp
   const widths = getWidths();
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full w-full overflow-hidden">
       {/* Left Column - Issues */}
       <div
         className={`border-r border-slate-200 dark:border-slate-700 transition-all duration-300 ${
