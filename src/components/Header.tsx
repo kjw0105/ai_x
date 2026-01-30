@@ -232,9 +232,35 @@ export default function Header({
                                 </button>
                             )}
 
-                            <div className="hidden sm:flex items-center text-xs text-slate-500 dark:text-slate-400">
-                                업로드와 TBM은 중앙의 버튼을 사용하세요.
-                            </div>
+                            {onStartTBM && (
+                                <button
+                                    onClick={onStartTBM}
+                                    disabled={isLoadingProjects}
+                                    className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-black border shadow-sm inline-flex items-center gap-2 transition-all duration-200 text-xs sm:text-sm ${
+                                        isLoadingProjects
+                                            ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-600 cursor-not-allowed opacity-60'
+                                            : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                                    }`}
+                                    title="TBM 시작 - 작업 전 대화 녹음"
+                                >
+                                    <span className="material-symbols-outlined text-base sm:text-xl">mic</span>
+                                    <span className="hidden sm:inline">TBM 시작</span>
+                                </button>
+                            )}
+
+                            <button
+                                onClick={onUpload}
+                                disabled={isLoadingProjects}
+                                className={`px-4 sm:px-5 lg:px-6 py-2.5 sm:py-3 rounded-xl font-black shadow-xl inline-flex items-center gap-2 transition-all duration-200 text-sm sm:text-base hover:scale-105 active:scale-95 ${
+                                    isLoadingProjects
+                                        ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-slate-200 cursor-not-allowed opacity-60'
+                                        : 'bg-gradient-to-r from-primary to-green-600 text-white shadow-green-300 hover:shadow-2xl hover:from-green-600 hover:to-green-700'
+                                }`}
+                                title={isLoadingProjects ? "프로젝트 로딩 중..." : "안전 점검 문서 업로드 - PDF나 이미지 파일을 선택하세요"}
+                            >
+                                <span className="material-symbols-outlined text-xl sm:text-2xl">upload</span>
+                                <span className="font-black">파일 업로드</span>
+                            </button>
                         </>
                     )}
                 </div>

@@ -97,7 +97,6 @@ export default function DocumentViewer({
             <div className="flex-1 overflow-auto p-8 flex justify-center items-start bg-slate-300/30">
                 {!file && !historicalFileName && (
                     <EmptyDocumentState
-                        onUploadClick={onPickFile}
                         onFileSelect={onFileSelect}
                         onStartTBM={onStartTBM}
                     />
@@ -178,25 +177,8 @@ export default function DocumentViewer({
             </div>
 
             {totalPages > 0 && isZoomOpen && (
-                <div
-                    className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-6 pt-10"
-                    role="dialog"
-                    aria-modal="true"
-                    onClick={() => setIsZoomOpen(false)}
-                >
-                    <button
-                        type="button"
-                        onClick={() => setIsZoomOpen(false)}
-                        className="absolute top-4 right-4 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-lg size-10 flex items-center justify-center"
-                        aria-label="확대 보기 닫기"
-                        title="닫기"
-                    >
-                        <span className="material-symbols-outlined">close</span>
-                    </button>
-                    <div
-                        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden border border-slate-200 dark:border-slate-700"
-                        onClick={(event) => event.stopPropagation()}
-                    >
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" role="dialog" aria-modal="true">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden border border-slate-200 dark:border-slate-700">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
                             <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
                                 <span className="material-symbols-outlined text-base">zoom_in</span>
