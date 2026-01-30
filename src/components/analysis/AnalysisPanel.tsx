@@ -626,6 +626,14 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             )}
 
             {selectedIssue && (
+                <div
+                    className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-10"
+                    onClick={() => setSelectedIssue(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700"
+                        onClick={(event) => event.stopPropagation()}
+                    >
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700">
                         <div className="flex items-start justify-between gap-4 mb-4">

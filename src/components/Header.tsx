@@ -9,8 +9,6 @@ interface HeaderProps {
     loading: boolean;
     reportExists: boolean;
     isLoadingProjects: boolean; // Track if projects are being fetched
-    onUpload: () => void;
-    onStartTBM?: () => void;
     onShowHistory: () => void;
     onShowDashboard?: () => void;
     toggleDark: () => void;
@@ -37,8 +35,6 @@ export default function Header({
     loading,
     reportExists,
     isLoadingProjects,
-    onUpload,
-    onStartTBM,
     onShowHistory,
     onShowDashboard,
     toggleDark,
@@ -232,6 +228,9 @@ export default function Header({
                                 </button>
                             )}
 
+                            <div className="hidden sm:flex items-center text-xs text-slate-500 dark:text-slate-400">
+                                업로드와 TBM은 중앙의 버튼을 사용하세요.
+                            </div>
                             {onStartTBM && (
                                 <button
                                     onClick={onStartTBM}

@@ -7,7 +7,12 @@ interface EmptyDocumentStateProps {
     onStartTBM?: () => void;
 }
 
-export function EmptyDocumentState({ onFileSelect }: EmptyDocumentStateProps) {
+export function EmptyDocumentState({ 
+  onUploadClick, 
+  onFileSelect, 
+  onStartTBM 
+}: EmptyDocumentStateProps) {
+  const [isDragging, setIsDragging] = useState(false); main
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -79,6 +84,26 @@ export function EmptyDocumentState({ onFileSelect }: EmptyDocumentStateProps) {
                 </div>
 
                 {/* Hint */}
+                <div className="flex flex-col items-center gap-3 w-full">
+                    <button
+                        onClick={onUploadClick}
+                        className="w-full px-5 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center justify-center gap-2 hover:bg-green-600 transition-colors"
+                        title="문서 업로드"
+                    >
+                        <span className="material-symbols-outlined">upload</span>
+                        파일 업로드
+                    </button>
+                    {onStartTBM && (
+                        <button
+                            onClick={onStartTBM}
+                            className="w-full px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold inline-flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                            title="TBM 시작"
+                        >
+                            <span className="material-symbols-outlined">mic</span>
+                            TBM 시작
+                        </button>
+                    )}
+                </div>
                 {!isDragging && (
                     <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
                         <span className="material-symbols-outlined text-sm">info</span>
