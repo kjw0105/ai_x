@@ -3,12 +3,16 @@
 import { useState } from "react";
 
 interface EmptyDocumentStateProps {
-    onUploadClick: () => void;
     onFileSelect: (file: File) => void;
     onStartTBM?: () => void;
 }
 
-export function EmptyDocumentState({ onUploadClick, onFileSelect, onStartTBM }: EmptyDocumentStateProps) {
+export function EmptyDocumentState({ 
+  onUploadClick, 
+  onFileSelect, 
+  onStartTBM 
+}: EmptyDocumentStateProps) {
+  const [isDragging, setIsDragging] = useState(false); main
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -100,6 +104,12 @@ export function EmptyDocumentState({ onUploadClick, onFileSelect, onStartTBM }: 
                         </button>
                     )}
                 </div>
+                {!isDragging && (
+                    <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                        <span className="material-symbols-outlined text-sm">info</span>
+                        <span>상단의 &quot;파일 업로드&quot; 버튼으로 업로드하세요</span>
+                    </div>
+                )}
             </div>
         </div>
     );
