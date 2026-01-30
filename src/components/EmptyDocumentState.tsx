@@ -4,6 +4,7 @@ import { useState } from "react";
 
 interface EmptyDocumentStateProps {
     onFileSelect: (file: File) => void;
+    onStartTBM?: () => void;
 }
 
 export function EmptyDocumentState({ onFileSelect }: EmptyDocumentStateProps) {

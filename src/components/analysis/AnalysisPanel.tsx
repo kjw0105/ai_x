@@ -595,8 +595,14 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
 
             {/* Suggestion Modal */}
             {suggestion && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg">
+                <div
+                    className="absolute inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-10"
+                    onClick={() => setSuggestion(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg"
+                        onClick={(event) => event.stopPropagation()}
+                    >
                         <h3 className="text-xl font-bold mb-4 dark:text-white">{suggestion.title}</h3>
                         <div className="bg-slate-100 dark:bg-slate-900 p-4 rounded-xl font-mono text-sm overflow-auto max-h-[300px] mb-4 text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
                             {suggestion.text}

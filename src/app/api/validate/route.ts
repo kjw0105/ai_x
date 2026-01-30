@@ -193,6 +193,31 @@ export async function POST(req: Request) {
 
     const p: Provider = (provider ?? "auto") as Provider;
 
+    const normalizedText = (pdfText ?? "").replace(/\s+/g, " ").trim();
+    const looksLikeGeneratedReport =
+      normalizedText.includes("검증 요약") ||
+      normalizedText.includes("AI 분석") ||
+      normalizedText.includes("AI 안전도우미") ||
+      normalizedText.includes("스마트 안전지킴이") ||
+      normalizedText.includes("검증 결과");
+
+    if (looksLikeGeneratedReport) {
+      return NextResponse.json(
+        {
+          error: "검증 결과 리포트는 업로드 대상이 아닙니다",
+          fileName: fileName ?? "Untitled",
+          issues: [],
+          chat: [
+            {
+              role: "ai",
+              text: "이 파일은 검증 결과 리포트로 보입니다. 원본 안전 점검 문서를 업로드해주세요."
+            }
+          ]
+        },
+        { status: 400 }
+      );
+    }
+
     // Fetch Project Context if projectId is present, or use temporary context
     let contextText = "";
     let masterPlan: MasterSafetyPlan | null = null;

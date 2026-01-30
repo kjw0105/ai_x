@@ -98,6 +98,7 @@ export default function DocumentViewer({
                 {!file && !historicalFileName && (
                     <EmptyDocumentState
                         onFileSelect={onFileSelect}
+                        onStartTBM={onStartTBM}
                     />
                 )}
 
