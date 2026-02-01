@@ -3,7 +3,6 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
 import { validateDocument, type DocData, type ValidationIssue } from "@/lib/validator";
 import { prisma } from "@/lib/db";
 import { analyzeInspectorPatterns, patternWarningsToIssues } from "@/lib/patternAnalysis";
@@ -22,11 +21,11 @@ function getOpenAI() {
   return new OpenAI({ apiKey });
 }
 
-// Helper to safely get Anthropic client
-function getAnthropic() {
+// Helper to safely get Anthropic API key
+function getAnthropicApiKey() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-  return new Anthropic({ apiKey });
+  return apiKey;
 }
 
 function buildSystemPrompt() {
@@ -150,11 +149,26 @@ async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null
     }
   }
 
-  const msg = await getAnthropic().messages.create({
-    model: "claude-sonnet-4-5-20250929", // 너 계정에서 가능한 모델로 바꿔도 됨
-    max_tokens: 1500,
-    messages: [{ role: "user", content }],
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": getAnthropicApiKey(),
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5-20250929", // 너 계정에서 가능한 모델로 바꿔도 됨
+      max_tokens: 1500,
+      messages: [{ role: "user", content }],
+    }),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic API error: ${response.status} ${errorText}`);
+  }
+
+  const msg = await response.json();
 
   // Claude 응답은 content 배열로 오니까 text만 합치기
   const outText =
