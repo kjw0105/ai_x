@@ -23,6 +23,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
 import { ModalDialog } from "@/components/ModalDialog";
 import { exportReportToPDF } from "@/lib/pdfExport";
+import { UploadTrigger } from "@/components/UploadTrigger";
 
 // Type Definitions (Re-using some from validator or defining locally for now if implicit)
 // In validator.ts we have type Severity? Checking previous read..
@@ -133,7 +134,6 @@ function NewProjectModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClo
 }
 
 export default function Page() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const validationAbortController = useRef<AbortController | null>(null);
   const toast = useToast();
 
@@ -316,28 +316,6 @@ export default function Page() {
 
   function toggleDark() {
     document.documentElement.classList.toggle("dark");
-  }
-
-  function pickFileDialog() {
-    fileInputRef.current?.click();
-  }
-
-  function isSupportedUpload(file: File) {
-    return file.type === "application/pdf" || file.type.startsWith("image/");
-  }
-
-  function handleFileSelected(file: File) {
-    if (!isSupportedUpload(file)) {
-      toast.error("PDF 또는 이미지 파일만 업로드할 수 있습니다");
-      return;
-    }
-
-    if (file.size === 0) {
-      toast.error("빈 파일입니다. 내용이 있는 문서를 업로드해주세요");
-      return;
-    }
-
-    onPickFile(file);
   }
 
   function startTBM() {
@@ -1124,39 +1102,34 @@ export default function Page() {
           });
         }}
       />
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="application/pdf,image/*"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleFileSelected(f);
-          if (e.target) e.target.value = "";
-        }}
-      />
-
-      <Header
-        key={projectSelectorKey}
-        loading={loading}
-        reportExists={!!report}
-        isLoadingProjects={isLoadingProjects}
-        onShowHistory={() => setShowHistory(true)}
-        onShowDashboard={() => setShowDashboard(true)}
-        toggleDark={toggleDark}
-        showWelcome={showWelcome}
-        projects={projects}
-        currentProjectId={currentProjectId}
-        onProjectChange={setCurrentProjectId}
-        onOpenNewProject={() => setIsProjectModalOpen(true)}
-        onDeleteProject={handleDeleteProject}
-        onEditProject={handleOpenEditProject}
-        onShowWelcome={showWelcomeScreen}
-        currentFileName={file?.name}
-        hasTempMasterDoc={!!tempMasterDoc}
-        onOpenTempMasterDoc={() => setShowTempMasterModal(true)}
-        onUpload={pickFileDialog}
-      />
+      <UploadTrigger
+        isUploading={loading}
+        onFileSelected={onPickFile}
+        onError={(message) => toast.error(message)}
+      >
+        {({ openFileDialog, handleSelectedFile, isUploading }) => (
+          <>
+            <Header
+              key={projectSelectorKey}
+              loading={loading}
+              reportExists={!!report}
+              isLoadingProjects={isLoadingProjects}
+              onShowHistory={() => setShowHistory(true)}
+              onShowDashboard={() => setShowDashboard(true)}
+              toggleDark={toggleDark}
+              showWelcome={showWelcome}
+              projects={projects}
+              currentProjectId={currentProjectId}
+              onProjectChange={setCurrentProjectId}
+              onOpenNewProject={() => setIsProjectModalOpen(true)}
+              onDeleteProject={handleDeleteProject}
+              onEditProject={handleOpenEditProject}
+              onShowWelcome={showWelcomeScreen}
+              currentFileName={file?.name}
+              hasTempMasterDoc={!!tempMasterDoc}
+              onOpenTempMasterDoc={() => setShowTempMasterModal(true)}
+              onUpload={openFileDialog}
+            />
 
       {/* Progress Modal */}
       {showProgress && (
@@ -1189,27 +1162,91 @@ export default function Page() {
         />
       ) : (
         <>
-          {/* Desktop: Conditional Layout */}
-          <div className="hidden lg:flex flex-1 overflow-hidden w-full">
-            {/* Show three-column layout only when there's content */}
-            {(file || report) ? (
-              <ThreeColumnLayout
-                left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
-                center={
+            {/* Desktop: Conditional Layout */}
+            <div className="hidden lg:flex flex-1 overflow-hidden w-full">
+              {/* Show three-column layout only when there's content */}
+              {(file || report) ? (
+                <ThreeColumnLayout
+                  left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
+                  center={
                     <DocumentViewer
                       file={file}
                       pageImages={pageImages}
                       reportIssues={report?.issues ?? []}
                       currentPage={currentPage}
                       onPageChange={setCurrentPage}
-                      onPickFile={pickFileDialog}
-                      onFileSelect={handleFileSelected}
-                      isUploading={loading}
+                      onPickFile={openFileDialog}
+                      onFileSelect={handleSelectedFile}
+                      isUploading={isUploading}
                       onStartTBM={() => {
                         dismissWelcome();
                         setShowTBMModal(true);
                       }}
                       onClearFile={handleClearFile}
+                      historicalFileName={historicalFileName}
+                      documentType={report?.documentType}
+                      currentProjectId={currentProjectId}
+                      currentReportId={currentReportId}
+                      onLoadDocument={loadReportFromHistory}
+                    />
+                  }
+                  right={
+                    <ChatPanel
+                      messages={report?.chat ?? []}
+                      loading={loading}
+                      currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
+                      currentFile={file}
+                      historicalFileName={historicalFileName}
+                      issues={report?.issues ?? []}
+                    />
+                  }
+                />
+              ) : (
+                // No document: Show only DocumentViewer at full width
+                <div className="flex-1 overflow-hidden">
+                  <DocumentViewer
+                    file={file}
+                    pageImages={pageImages}
+                    reportIssues={[]}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                    onPickFile={openFileDialog}
+                    onFileSelect={handleSelectedFile}
+                    isUploading={isUploading}
+                    onStartTBM={() => {
+                      dismissWelcome();
+                      setShowTBMModal(true);
+                    }}
+                    onClearFile={handleClearFile}
+                    historicalFileName={historicalFileName}
+                    documentType={null}
+                    currentProjectId={currentProjectId}
+                    currentReportId={currentReportId}
+                    onLoadDocument={loadReportFromHistory}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Mobile/Tablet: Resizable Two-Column Layout */}
+            <div className="flex lg:hidden flex-1 overflow-hidden">
+              <ResizableSplitLayout
+                initialLeftWidthPercent={70}
+                left={
+                  <DocumentViewer
+                    file={file}
+                    pageImages={pageImages}
+                    reportIssues={report?.issues ?? []}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                    onPickFile={openFileDialog}
+                    onFileSelect={handleSelectedFile}
+                    isUploading={isUploading}
+                    onStartTBM={() => {
+                      dismissWelcome();
+                      setShowTBMModal(true);
+                    }}
+                    onClearFile={handleClearFile}
                     historicalFileName={historicalFileName}
                     documentType={report?.documentType}
                     currentProjectId={currentProjectId}
@@ -1218,85 +1255,24 @@ export default function Page() {
                   />
                 }
                 right={
-                  <ChatPanel
-                    messages={report?.chat ?? []}
+                  <AnalysisPanel
                     loading={loading}
+                    issues={report?.issues ?? []}
+                    chatMessages={report?.chat ?? []}
+                    onReupload={openFileDialog}
+                    onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
                     currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
                     currentFile={file}
                     historicalFileName={historicalFileName}
-                    issues={report?.issues ?? []}
                   />
                 }
               />
-            ) : (
-              // No document: Show only DocumentViewer at full width
-              <div className="flex-1 overflow-hidden">
-                  <DocumentViewer
-                    file={file}
-                    pageImages={pageImages}
-                    reportIssues={[]}
-                    currentPage={currentPage}
-                    onPageChange={setCurrentPage}
-                    onPickFile={pickFileDialog}
-                    onFileSelect={handleFileSelected}
-                    isUploading={loading}
-                    onStartTBM={() => {
-                      dismissWelcome();
-                      setShowTBMModal(true);
-                    }}
-                    onClearFile={handleClearFile}
-                  historicalFileName={historicalFileName}
-                  documentType={null}
-                  currentProjectId={currentProjectId}
-                  currentReportId={currentReportId}
-                  onLoadDocument={loadReportFromHistory}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Mobile/Tablet: Resizable Two-Column Layout */}
-          <div className="flex lg:hidden flex-1 overflow-hidden">
-            <ResizableSplitLayout
-              initialLeftWidthPercent={70}
-              left={
-                <DocumentViewer
-                  file={file}
-                  pageImages={pageImages}
-                  reportIssues={report?.issues ?? []}
-                  currentPage={currentPage}
-                  onPageChange={setCurrentPage}
-                  onPickFile={pickFileDialog}
-                  onFileSelect={handleFileSelected}
-                  isUploading={loading}
-                  onStartTBM={() => {
-                    dismissWelcome();
-                    setShowTBMModal(true);
-                  }}
-                  onClearFile={handleClearFile}
-                  historicalFileName={historicalFileName}
-                  documentType={report?.documentType}
-                  currentProjectId={currentProjectId}
-                  currentReportId={currentReportId}
-                  onLoadDocument={loadReportFromHistory}
-                />
-              }
-              right={
-                <AnalysisPanel
-                  loading={loading}
-                  issues={report?.issues ?? []}
-                  chatMessages={report?.chat ?? []}
-                  onReupload={pickFileDialog}
-                  onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-                  currentProjectName={projects.find(p => p.id === currentProjectId)?.name}
-                  currentFile={file}
-                  historicalFileName={historicalFileName}
-                />
-              }
-            />
-          </div>
-        </>
-      )}
+            </div>
+          </>
+        )}
+          </>
+        )}
+      </UploadTrigger>
     </div>
   );
 }
