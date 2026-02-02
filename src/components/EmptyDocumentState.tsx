@@ -3,16 +3,18 @@
 import { useState } from "react";
 
 interface EmptyDocumentStateProps {
+    onUploadClick: () => void;
     onFileSelect: (file: File) => void;
     onStartTBM?: () => void;
+    isUploading?: boolean;
 }
 
 export function EmptyDocumentState({ 
   onUploadClick, 
   onFileSelect, 
-  onStartTBM 
+  onStartTBM,
+  isUploading = false
 }: EmptyDocumentStateProps) {
-  const [isDragging, setIsDragging] = useState(false); main
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -29,13 +31,9 @@ export function EmptyDocumentState({
         e.preventDefault();
         setIsDragging(false);
 
-        const files = Array.from(e.dataTransfer.files);
-        const validFile = files.find(f =>
-            f.type === "application/pdf" || f.type.startsWith("image/")
-        );
-
-        if (validFile) {
-            onFileSelect(validFile);
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            onFileSelect(file);
         }
     };
 
@@ -87,11 +85,21 @@ export function EmptyDocumentState({
                 <div className="flex flex-col items-center gap-3 w-full">
                     <button
                         onClick={onUploadClick}
-                        className="w-full px-5 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center justify-center gap-2 hover:bg-green-600 transition-colors"
+                        disabled={isUploading}
+                        className="w-full px-5 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center justify-center gap-2 hover:bg-green-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         title="문서 업로드"
                     >
-                        <span className="material-symbols-outlined">upload</span>
-                        파일 업로드
+                        {isUploading ? (
+                            <>
+                                <span className="material-symbols-outlined animate-spin">refresh</span>
+                                업로드 중...
+                            </>
+                        ) : (
+                            <>
+                                <span className="material-symbols-outlined">upload</span>
+                                파일 업로드
+                            </>
+                        )}
                     </button>
                     {onStartTBM && (
                         <button

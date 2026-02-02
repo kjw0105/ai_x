@@ -29,6 +29,7 @@ interface HeaderProps {
     // Temp Master Doc Props
     hasTempMasterDoc?: boolean;
     onOpenTempMasterDoc?: () => void;
+    onUpload: () => void;
 }
 
 export default function Header({
@@ -48,7 +49,8 @@ export default function Header({
     onShowWelcome,
     currentFileName,
     hasTempMasterDoc,
-    onOpenTempMasterDoc
+    onOpenTempMasterDoc,
+    onUpload
 }: HeaderProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -249,16 +251,25 @@ export default function Header({
 
                             <button
                                 onClick={onUpload}
-                                disabled={isLoadingProjects}
+                                disabled={isLoadingProjects || loading}
                                 className={`px-4 sm:px-5 lg:px-6 py-2.5 sm:py-3 rounded-xl font-black shadow-xl inline-flex items-center gap-2 transition-all duration-200 text-sm sm:text-base hover:scale-105 active:scale-95 ${
-                                    isLoadingProjects
+                                    isLoadingProjects || loading
                                         ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-slate-200 cursor-not-allowed opacity-60'
                                         : 'bg-gradient-to-r from-primary to-green-600 text-white shadow-green-300 hover:shadow-2xl hover:from-green-600 hover:to-green-700'
                                 }`}
-                                title={isLoadingProjects ? "프로젝트 로딩 중..." : "안전 점검 문서 업로드 - PDF나 이미지 파일을 선택하세요"}
+                                title={isLoadingProjects ? "프로젝트 로딩 중..." : loading ? "업로드 처리 중..." : "안전 점검 문서 업로드 - PDF나 이미지 파일을 선택하세요"}
                             >
-                                <span className="material-symbols-outlined text-xl sm:text-2xl">upload</span>
-                                <span className="font-black">파일 업로드</span>
+                                {loading ? (
+                                    <>
+                                        <span className="material-symbols-outlined text-xl sm:text-2xl animate-spin">refresh</span>
+                                        <span className="font-black">업로드 중...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="material-symbols-outlined text-xl sm:text-2xl">upload</span>
+                                        <span className="font-black">파일 업로드</span>
+                                    </>
+                                )}
                             </button>
                         </>
                     )}

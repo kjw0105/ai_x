@@ -322,6 +322,24 @@ export default function Page() {
     fileInputRef.current?.click();
   }
 
+  function isSupportedUpload(file: File) {
+    return file.type === "application/pdf" || file.type.startsWith("image/");
+  }
+
+  function handleFileSelected(file: File) {
+    if (!isSupportedUpload(file)) {
+      toast.error("PDF 또는 이미지 파일만 업로드할 수 있습니다");
+      return;
+    }
+
+    if (file.size === 0) {
+      toast.error("빈 파일입니다. 내용이 있는 문서를 업로드해주세요");
+      return;
+    }
+
+    onPickFile(file);
+  }
+
   function startTBM() {
     // TBM은 업로드 검증과 별개 흐름
     dismissWelcome();
@@ -568,12 +586,6 @@ export default function Page() {
 
   async function onPickFile(f: File) {
     dismissWelcome(); // Dismiss welcome screen when file is uploaded
-
-    // Basic client-side validation: Check for zero-byte files
-    if (f.size === 0) {
-      toast.error("빈 파일입니다. 내용이 있는 문서를 업로드해주세요");
-      return;
-    }
 
     setFile(f);
     setReport(null);
@@ -1119,7 +1131,8 @@ export default function Page() {
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) void onPickFile(f);
+          if (f) handleFileSelected(f);
+          if (e.target) e.target.value = "";
         }}
       />
 
@@ -1142,6 +1155,7 @@ export default function Page() {
         currentFileName={file?.name}
         hasTempMasterDoc={!!tempMasterDoc}
         onOpenTempMasterDoc={() => setShowTempMasterModal(true)}
+        onUpload={pickFileDialog}
       />
 
       {/* Progress Modal */}
@@ -1182,19 +1196,20 @@ export default function Page() {
               <ThreeColumnLayout
                 left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
                 center={
-                  <DocumentViewer
-                    file={file}
-                    pageImages={pageImages}
-                    reportIssues={report?.issues ?? []}
-                    currentPage={currentPage}
-                    onPageChange={setCurrentPage}
-                    onPickFile={pickFileDialog}
-                    onFileSelect={onPickFile}
-                    onStartTBM={() => {
-                      dismissWelcome();
-                      setShowTBMModal(true);
-                    }}
-                    onClearFile={handleClearFile}
+                    <DocumentViewer
+                      file={file}
+                      pageImages={pageImages}
+                      reportIssues={report?.issues ?? []}
+                      currentPage={currentPage}
+                      onPageChange={setCurrentPage}
+                      onPickFile={pickFileDialog}
+                      onFileSelect={handleFileSelected}
+                      isUploading={loading}
+                      onStartTBM={() => {
+                        dismissWelcome();
+                        setShowTBMModal(true);
+                      }}
+                      onClearFile={handleClearFile}
                     historicalFileName={historicalFileName}
                     documentType={report?.documentType}
                     currentProjectId={currentProjectId}
@@ -1216,19 +1231,20 @@ export default function Page() {
             ) : (
               // No document: Show only DocumentViewer at full width
               <div className="flex-1 overflow-hidden">
-                <DocumentViewer
-                  file={file}
-                  pageImages={pageImages}
-                  reportIssues={[]}
-                  currentPage={currentPage}
-                  onPageChange={setCurrentPage}
-                  onPickFile={pickFileDialog}
-                  onFileSelect={onPickFile}
-                  onStartTBM={() => {
-                    dismissWelcome();
-                    setShowTBMModal(true);
-                  }}
-                  onClearFile={handleClearFile}
+                  <DocumentViewer
+                    file={file}
+                    pageImages={pageImages}
+                    reportIssues={[]}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                    onPickFile={pickFileDialog}
+                    onFileSelect={handleFileSelected}
+                    isUploading={loading}
+                    onStartTBM={() => {
+                      dismissWelcome();
+                      setShowTBMModal(true);
+                    }}
+                    onClearFile={handleClearFile}
                   historicalFileName={historicalFileName}
                   documentType={null}
                   currentProjectId={currentProjectId}
@@ -1251,7 +1267,8 @@ export default function Page() {
                   currentPage={currentPage}
                   onPageChange={setCurrentPage}
                   onPickFile={pickFileDialog}
-                  onFileSelect={onPickFile}
+                  onFileSelect={handleFileSelected}
+                  isUploading={loading}
                   onStartTBM={() => {
                     dismissWelcome();
                     setShowTBMModal(true);

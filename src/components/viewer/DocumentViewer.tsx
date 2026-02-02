@@ -17,6 +17,7 @@ interface DocumentViewerProps {
     onClearFile?: () => void;
     historicalFileName?: string; // When viewing history without file
     documentType?: string | null; // Document type for badge
+    isUploading?: boolean;
     currentProjectId?: string | null;
     currentReportId?: string;
     onLoadDocument?: (id: string) => void;
@@ -33,6 +34,7 @@ export default function DocumentViewer({
     onClearFile,
     historicalFileName,
     documentType,
+    isUploading = false,
     currentProjectId,
     currentReportId,
     onLoadDocument
@@ -97,7 +99,9 @@ export default function DocumentViewer({
             <div className="flex-1 overflow-auto p-8 flex justify-center items-start bg-slate-300/30">
                 {!file && !historicalFileName && (
                     <EmptyDocumentState
+                        onUploadClick={onPickFile}
                         onFileSelect={onFileSelect}
+                        isUploading={isUploading}
                         onStartTBM={onStartTBM}
                     />
                 )}
@@ -120,11 +124,21 @@ export default function DocumentViewer({
                         <div className="space-y-3">
                             <button
                                 onClick={onPickFile}
+                                disabled={isUploading}
                                 className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2 hover:bg-green-600 transition-colors"
                                 title="문서 종류를 선택하고 파일을 업로드합니다"
                             >
-                                <span className="material-symbols-outlined">add_a_photo</span>
-                                새 파일 업로드
+                                {isUploading ? (
+                                    <>
+                                        <span className="material-symbols-outlined animate-spin">refresh</span>
+                                        업로드 중...
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="material-symbols-outlined">add_a_photo</span>
+                                        새 파일 업로드
+                                    </>
+                                )}
                             </button>
                             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold">
                                 <span className="material-symbols-outlined text-sm">category</span>
