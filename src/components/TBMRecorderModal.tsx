@@ -24,6 +24,7 @@ export default function TBMRecorderModal({ isOpen, projectId, onClose, onComplet
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const mimeTypeRef = useRef<string>("");
 
   const canStart = useMemo(() => isOpen && !isRecording && !isUploading, [isOpen, isRecording, isUploading]);
   const canStop = useMemo(() => isOpen && isRecording && !isUploading, [isOpen, isRecording, isUploading]);
@@ -35,6 +36,7 @@ export default function TBMRecorderModal({ isOpen, projectId, onClose, onComplet
     setResult(null);
     setAudioUrl(null);
     chunksRef.current = [];
+    mimeTypeRef.current = "";
 
     return () => {
       // Cleanup any active stream
@@ -53,16 +55,26 @@ export default function TBMRecorderModal({ isOpen, projectId, onClose, onComplet
     setResult(null);
     setAudioUrl(null);
     chunksRef.current = [];
+    mimeTypeRef.current = "";
 
     try {
+      if (typeof MediaRecorder === "undefined") {
+        setPermissionError("현재 브라우저에서는 녹음을 지원하지 않습니다. 다른 브라우저에서 다시 시도해 주세요.");
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "";
+      const preferredMimeTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/aac",
+        "audio/mpeg",
+      ];
+      const mimeType = preferredMimeTypes.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+      mimeTypeRef.current = mimeType;
 
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
@@ -73,10 +85,10 @@ export default function TBMRecorderModal({ isOpen, projectId, onClose, onComplet
 
       recorder.onstop = async () => {
         try {
-          const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+          const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeTypeRef.current || "audio/webm" });
           const url = URL.createObjectURL(blob);
           setAudioUrl(url);
-          await uploadAndAnalyze(blob);
+          await uploadAndAnalyze(blob, recorder.mimeType || mimeTypeRef.current);
         } catch (e: any) {
           setPermissionError(e?.message ?? "녹음 파일 처리 중 오류가 발생했습니다.");
         }
@@ -100,12 +112,22 @@ export default function TBMRecorderModal({ isOpen, projectId, onClose, onComplet
     setIsRecording(false);
   }
 
-  async function uploadAndAnalyze(blob: Blob) {
+  function getExtensionForMimeType(type?: string | null) {
+    if (!type) return "webm";
+    if (type.includes("mp4")) return "mp4";
+    if (type.includes("aac")) return "aac";
+    if (type.includes("mpeg")) return "mp3";
+    if (type.includes("webm")) return "webm";
+    return "webm";
+  }
+
+  async function uploadAndAnalyze(blob: Blob, mimeType?: string | null) {
     setIsUploading(true);
     setPermissionError(null);
     try {
       const fd = new FormData();
-      fd.append("audio", blob, `tbm_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.webm`);
+      const extension = getExtensionForMimeType(mimeType);
+      fd.append("audio", blob, `tbm_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${extension}`);
       if (projectId) fd.append("projectId", projectId);
 
       const res = await fetch("/api/tbm", { method: "POST", body: fd });
