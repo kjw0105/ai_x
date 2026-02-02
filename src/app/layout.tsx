@@ -17,18 +17,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko" className="light">
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        {/* iOS safe-area까지 고려 */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+        />
         <link
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className={`${manrope.className} bg-background-light dark:bg-background-dark text-slate-800 dark:text-white font-display overflow-hidden h-screen flex flex-col`}>
-        <Providers>
-          {children}
-        </Providers>
-      </body>
+
+      {/* ✅ 스크롤 막지 말기 */}
+      <body
+  className={[
+    manrope.className,
+    "bg-background-light dark:bg-background-dark text-slate-800 dark:text-white font-display",
+    "min-h-[100dvh] overflow-x-hidden",
+  ].join(" ")}
+>
+  <Providers>{children}</Providers>
+</body>
     </html>
   );
 }
-

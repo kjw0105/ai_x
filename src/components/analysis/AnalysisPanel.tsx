@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { createPortal } from "react-dom";
+import { useState, useMemo } from "react";
+
 import { useToast } from "@/contexts/ToastContext";
 import { ChatModal } from "../ChatModal";
 import { exportReportToPDF } from "@/lib/pdfExport";
@@ -92,9 +92,10 @@ interface AnalysisPanelProps {
     currentProjectName?: string;
     riskCalculation?: RiskCalculation; // Stage 3: Risk matrix data
     historicalFileName?: string;
+    currentFile?: File | null;
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName }: AnalysisPanelProps & { currentFile?: File | null }) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName }: AnalysisPanelProps) {
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
@@ -626,79 +627,79 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             )}
 
             {selectedIssue && (
-                <div
-                    className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-10"
-                    onClick={() => setSelectedIssue(null)}
-                >
-                    <div
-                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700">
-                        <div className="flex items-start justify-between gap-4 mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className={`size-12 rounded-full flex items-center justify-center ${avatarBgColor(selectedIssue.ruleId)}`}>
-                                    <span className={`material-symbols-outlined text-2xl ${avatarColor(selectedIssue.ruleId)}`}>
-                                        {severityIcon(selectedIssue.severity, selectedIssue.ruleId)}
-                                    </span>
-                                </div>
-                                <div>
-                                    <h3 className={`text-lg font-black ${severityColor(selectedIssue.severity, selectedIssue.ruleId)}`}>
-                                        {selectedIssue.title}
-                                    </h3>
-                                    {selectedIssue.confidence !== undefined && (
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            신뢰도 {selectedIssue.confidence}%
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setSelectedIssue(null)}
-                                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"
-                                aria-label="문제 상세 닫기"
-                                title="닫기"
-                            >
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-
-                        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-line mb-6">
-                            {selectedIssue.message}
-                        </p>
-
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={() => {
-                                    handleConfirm(selectedIssue.id);
-                                    setSelectedIssue(null);
-                                }}
-                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
-                            >
-                                확인했어
-                            </button>
-                            <button
-                                onClick={() => handleFix(selectedIssue)}
-                                disabled={processingIssueId === selectedIssue.id}
-                                className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {processingIssueId === selectedIssue.id ? (
-                                    <>
-                                        <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                        생성 중...
-                                    </>
-                                ) : (
-                                    "수정해줘"
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+  <div
+    className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-10"
+    onClick={() => setSelectedIssue(null)}
+  >
+    <div
+      className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex items-center gap-3">
+          <div className={`size-12 rounded-full flex items-center justify-center ${avatarBgColor(selectedIssue.ruleId)}`}>
+            <span className={`material-symbols-outlined text-2xl ${avatarColor(selectedIssue.ruleId)}`}>
+              {severityIcon(selectedIssue.severity, selectedIssue.ruleId)}
+            </span>
+          </div>
+          <div>
+            <h3 className={`text-lg font-black ${severityColor(selectedIssue.severity, selectedIssue.ruleId)}`}>
+              {selectedIssue.title}
+            </h3>
+            {selectedIssue.confidence !== undefined && (
+              <p className="text-xs text-slate-400 mt-1">
+                신뢰도 {selectedIssue.confidence}%
+              </p>
             )}
+          </div>
+        </div>
+
+        <button
+          onClick={() => setSelectedIssue(null)}
+          className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"
+          aria-label="문제 상세 닫기"
+          title="닫기"
+        >
+          <span className="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-line mb-6">
+        {selectedIssue.message}
+      </p>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => {
+            handleConfirm(selectedIssue.id);
+            setSelectedIssue(null);
+          }}
+          className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
+        >
+          확인했어
+        </button>
+
+        <button
+          onClick={() => handleFix(selectedIssue)}
+          disabled={processingIssueId === selectedIssue.id}
+          className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {processingIssueId === selectedIssue.id ? (
+            <>
+              <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+              생성 중...
+            </>
+          ) : (
+            "수정해줘"
+          )}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
             {/* Chat Modal */}
             <ChatModal open={showChatModal} onClose={() => setShowChatModal(false)} />
         </div >
     );
-}
+};

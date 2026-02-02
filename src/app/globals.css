@@ -31,3 +31,22 @@
 .material-symbols-outlined {
   font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
 }
+html, body {
+  height: auto;
+  min-height: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+/* globals.css */
+
+/* 기본은 그대로 두고 */
+html { -webkit-text-size-adjust: 100%; }
+
+/* 모바일(세로/일반) */
+@media (max-width: 640px) {
+  html { font-size: 14px; } /* 기본 16px -> 14px */
+}
+
+/* 모바일 가로(높이 낮아서 더 답답할 때) */
+@media (max-height: 430px) and (orientation: landscape) {
+  html { font-size: 13px; }
+}
