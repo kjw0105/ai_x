@@ -40,6 +40,7 @@ export default function DocumentViewer({
 }: DocumentViewerProps) {
   const issueCount = reportIssues.length;
   const [isZoomOpen, setIsZoomOpen] = useState(false);
+  const fileDisplayName = file?.name ?? historicalFileName ?? "파일을 업로드하세요";
 
   const totalPages = pageImages.length;
   const hasNext = currentPage < totalPages - 1;
@@ -55,7 +56,7 @@ export default function DocumentViewer({
           <span className="material-symbols-outlined text-slate-400">description</span>
 
           <span className="text-lg font-bold text-slate-800 dark:text-white truncate max-w-[200px] xl:max-w-[400px]">
-            {file?.name ?? historicalFileName ?? "파일을 업로드하세요"}
+            {fileDisplayName}
           </span>
 
           {documentType && <DocumentTypeBadge type={documentType} size="sm" />}

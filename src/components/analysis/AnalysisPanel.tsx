@@ -123,6 +123,12 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const [showChatModal, setShowChatModal] = useState(false);
 
     const reportExists = issues.length > 0 || chatMessages.length > 0;
+    const statusLabel = loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중";
+    const exportButtonClassName = `flex items-center gap-2 px-4 py-2 font-bold rounded-lg transition-colors shadow-lg ${
+        isExportingPDF
+            ? "bg-slate-400 dark:bg-slate-600 text-white cursor-not-allowed"
+            : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white"
+    }`;
 
     // Filter hidden issues and by severity
     const visibleIssues = issues.filter(i =>
@@ -347,10 +353,12 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </div>
 
                     <div>
-                        <h2 className="text-xl font-black text-slate-900 dark:text-white mb-1">AI 안전도우미</h2>
+                        <h2 className="text-xl font-black text-slate-900 dark:text-white mb-1">
+                            AI 안전도우미
+                        </h2>
                         <div className="flex items-center gap-2">
                             <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20" suppressHydrationWarning>
-                                {loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중"}
+                                {statusLabel}
                             </span>
                             {currentProjectName && (
                                 <span className="inline-flex items-center rounded-md bg-blue-100 dark:bg-blue-900/30 px-3 py-1 text-sm font-bold text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-700/10 border border-blue-200 dark:border-blue-800">
@@ -366,11 +374,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         <button
                             onClick={handleExportPDF}
                             disabled={isExportingPDF}
-                            className={`flex items-center gap-2 px-4 py-2 font-bold rounded-lg transition-colors shadow-lg ${
-                                isExportingPDF
-                                    ? 'bg-slate-400 dark:bg-slate-600 text-white cursor-not-allowed'
-                                    : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white'
-                            }`}
+                            className={exportButtonClassName}
                             title={isExportingPDF ? "PDF 생성 중..." : "PDF로 보고서 내보내기"}
                         >
                             {isExportingPDF ? (
