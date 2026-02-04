@@ -20,20 +20,26 @@ function buildTBMSystemPrompt() {
 사용자가 녹음한 대화를 전사한 텍스트를 바탕으로 아래 형식으로 요약해라.
 한국어로, 현장 실무자가 바로 쓸 수 있게 간결하고 구조적으로.
 
-요약 포맷:
-1) 오늘 작업 개요
-2) 주요 위험요인 (최대 5개)
-3) 예방/통제 조치 (위험요인과 1:1로 매칭되면 좋음)
-4) PPE/장비 체크
-5) 역할/담당 및 연락 체계
-6) 결정사항/액션아이템 (담당자/기한이 언급되면 포함)
-7) 누락/불명확한 부분 (확인 필요 사항)
+반드시 JSON으로만 출력해라. (설명/코드블록 금지)
+
+스키마:
+{
+  "work_overview": "string",
+  "risks": ["string", "... (최대 5)"],
+  "controls": ["string", "... (risks와 가능한 1:1 대응)"],
+  "ppe": ["string", "..."],
+  "roles_contact": ["string", "..."],
+  "action_items": [{"task":"string","owner":"string|null","due":"string|null"}],
+  "unclear_points": ["string", "..."],
+  "cautions": ["string", "... (최대 5)"]
+}
 
 주의:
-- 사실에 근거해 작성하고, 추측은 "추정"으로 표시.
+- 사실에 근거해 작성하고, 추측은 문장에 "추정" 포함.
 - 개인 비난/판단 금지.
 `.trim();
 }
+
 
 function normalizeAudioFile(file: File) {
   const type = (file.type || "").toLowerCase();
@@ -104,18 +110,48 @@ export async function POST(req: Request) {
     console.log("[TBM] step=summarize start");
     const contextLine = projectId ? `\n\n[PROJECT_ID]\n${projectId}` : "";
     const summaryRes = await client.responses.create({
-      model: "gpt-4o-mini",
-      input: [
-        { role: "system", content: buildTBMSystemPrompt() },
-        {
-          role: "user",
-          content: `다음은 TBM 녹음 전사본이다. 이를 요약해라.\n\n[TRANSCRIPT]\n${transcript}${contextLine}`,
-        },
-      ],
-    });
-    console.log("[TBM] step=summarize done");
+  model: "gpt-4o-mini",
+  input: [
+    { role: "system", content: buildTBMSystemPrompt() },
+    {
+      role: "user",
+      content: `다음은 TBM 녹음 전사본이다. 이를 요약해라.\n\n[TRANSCRIPT]\n${transcript}${contextLine}`,
+    },
+  ],
+});
 
-    const summary = safeText((summaryRes as any).output_text);
+const raw = safeText((summaryRes as any).output_text);
+
+let parsed: any = null;
+try {
+  parsed = JSON.parse(raw);
+} catch {
+  // fallback: 파싱 실패 시 raw 그대로 사용
+}
+
+const summary =
+  parsed
+    ? [
+        `1) 오늘 작업 개요\n- ${parsed.work_overview ?? ""}`,
+        `\n2) 주요 위험요인\n${(parsed.risks ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+        `\n3) 예방/통제 조치\n${(parsed.controls ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+        `\n4) PPE/장비 체크\n${(parsed.ppe ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+        `\n5) 역할/담당 및 연락 체계\n${(parsed.roles_contact ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+        `\n6) 결정사항/액션아이템\n${(parsed.action_items ?? []).map((it: any) =>
+          `- ${it.task} (담당: ${it.owner ?? "미상"}, 기한: ${it.due ?? "미상"})`
+        ).join("\n")}`,
+        `\n7) 누락/불명확한 부분\n${(parsed.unclear_points ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+        `\n8) 주의사항\n${(parsed.cautions ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+      ].join("\n")
+    : raw;
+
+const cautions = parsed?.cautions ?? [];
+
+return NextResponse.json({
+  transcript,
+  summary,
+  cautions,
+});
 
     return NextResponse.json({ transcript, summary });
   } catch (e: any) {

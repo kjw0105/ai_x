@@ -19,7 +19,7 @@ export default function TBMResultModal({ open, data, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl rounded-xl bg-white p-6 shadow-xl"
+        className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -32,7 +32,7 @@ export default function TBMResultModal({ open, data, onClose }: Props) {
           </button>
         </div>
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-4 overflow-y-auto pr-2">
           <section>
             <h3 className="font-medium">요약</h3>
             <div className="mt-2 whitespace-pre-wrap rounded-md bg-gray-50 p-3 text-sm">
