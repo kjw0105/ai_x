@@ -53,26 +53,42 @@ export function ChatPanel({
   }, [chatMessages, messages]);
 
   const handleSend = async () => {
-    const text = input.trim();
-    if (!text || isSending) return;
+  const text = input.trim();
+  if (!text || isSending) return;
 
-    setIsSending(true);
-    setInput("");
+  setIsSending(true);
+  setInput("");
 
-    // Add user message
-    setChatMessages(prev => [...prev, { role: "user", text }]);
+  // 1) 사용자 메시지 즉시 표시
+  setChatMessages((prev) => [...prev, { role: "user", text }]);
 
-    // Simulate AI response (replace with actual API call later)
-    await new Promise(r => setTimeout(r, 500));
-    setChatMessages(prev => [
+  // 2) 서버로 보낼 "전체 대화" 구성
+  const payloadMessages = [...messages, ...chatMessages, { role: "user" as const, text }];
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: payloadMessages.map((m) => ({ role: m.role, text: m.text })),
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+    // 3) AI 응답 추가
+    setChatMessages((prev) => [...prev, { role: "ai", text: data.reply }]);
+  } catch (e: any) {
+    toast?.error(e?.message || "채팅 실패");
+    setChatMessages((prev) => [
       ...prev,
-      {
-        role: "ai",
-        text: "채팅 기능은 현재 준비 중입니다. 곧 실제 AI 응답을 제공할 예정입니다.",
-      },
+      { role: "ai", text: "오류가 발생했어요. 잠시 후 다시 시도해 주세요." },
     ]);
+  } finally {
     setIsSending(false);
-  };
+  }
+};
 
   const handleExportPDF = async () => {
     if (!currentFile && !historicalFileName) {
