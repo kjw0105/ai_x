@@ -20,6 +20,9 @@ interface ChatPanelProps {
   documentType?: string | null;   // ✅ 추가
   tbmSummary?: string;            // ✅ 추가
   tbmTranscript?: string;         // ✅ 추가
+
+  // ✅ MCP: Report context for tool calling
+  reportContext?: any;
 }
 
 
@@ -34,6 +37,7 @@ export function ChatPanel({
   documentType,     // ✅
   tbmSummary = "",
   tbmTranscript = "",    // ✅
+  reportContext,    // ✅ MCP
 }: ChatPanelProps) {
 
 
@@ -71,6 +75,7 @@ export function ChatPanel({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: payloadMessages.map((m) => ({ role: m.role, text: m.text })),
+        reportContext: reportContext || null, // ✅ MCP: Pass document context for tools
       }),
     });
 

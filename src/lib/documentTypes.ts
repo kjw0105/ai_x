@@ -27,6 +27,13 @@ export const DOCUMENT_TYPES = {
         icon: "assignment_turned_in",
         color: "purple",
     },
+    SITE_PHOTO: {
+        value: "SITE_PHOTO",
+        label: "현장 사진",
+        shortLabel: "현장사진",
+        icon: "photo_camera",
+        color: "cyan",
+    },
     OTHER: {
         value: "OTHER",
         label: "기타 문서",
@@ -50,6 +57,7 @@ export const getDocumentTypeColor = (type: string | null | undefined) => {
         green: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800",
         orange: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border-orange-200 dark:border-orange-800",
         purple: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+        cyan: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
         gray: "bg-slate-100 text-slate-700 dark:bg-slate-700/30 dark:text-slate-300 border-slate-200 dark:border-slate-600",
     };
     return colorMap[info.color as keyof typeof colorMap];

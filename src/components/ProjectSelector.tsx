@@ -92,7 +92,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
         setDeletingId(projectToDelete.id);
         try {
             await onDeleteProject(projectToDelete.id);
-            toast.success(`"${projectToDelete.name}" 프로젝트가 삭제되었습니다`);
+            // Toast handled in parent (page.tsx)
         } catch (error) {
             console.error("Failed to delete project:", error);
             toast.error("프로젝트 삭제에 실패했습니다");
@@ -169,12 +169,12 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                     aria-expanded={isOpen}
                     aria-controls={listboxId}
                 >
-                    <span className="text-slate-500 dark:text-gray-400">프로젝트:</span>
+                    <span className="text-slate-500 dark:text-slate-400">프로젝트:</span>
                     <span className="text-slate-900 dark:text-white max-w-[150px] truncate">
                         {currentProject ? currentProject.name : "일반 검증 (프로젝트 없음)"}
                     </span>
                     <svg
-                        className={`w-4 h-4 text-slate-500 dark:text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -185,7 +185,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
 
                 {/* Dropdown Menu */}
                 {isOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+                    <div className="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl overflow-hidden z-50">
                         <div
                             id={listboxId}
                             role="listbox"
@@ -199,7 +199,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                                 aria-selected={!currentProjectId}
                                 tabIndex={activeIndex === 0 ? 0 : -1}
                                 onClick={() => handleSelectProject(null)}
-                                className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${!currentProjectId ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'} ${activeIndex === 0 ? 'bg-gray-700/70' : ''}`}
+                                className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${!currentProjectId ? 'text-blue-500 dark:text-blue-400 bg-slate-100 dark:bg-slate-700/50' : 'text-slate-700 dark:text-slate-300'} ${activeIndex === 0 ? 'bg-slate-50 dark:bg-slate-700/70' : ''}`}
                             >
                                 일반 검증 (프로젝트 없음)
                             </button>
@@ -209,8 +209,8 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                                 <>
                                     {[1, 2, 3].map(i => (
                                         <div key={i} className="w-full px-4 py-3 animate-pulse">
-                                            <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
-                                            <div className="h-3 bg-gray-700/50 rounded w-1/2"></div>
+                                            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4 mb-2"></div>
+                                            <div className="h-3 bg-slate-100 dark:bg-slate-700/50 rounded w-1/2"></div>
                                         </div>
                                     ))}
                                 </>
@@ -223,7 +223,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                                 return (
                                     <div
                                         key={p.id}
-                                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 group flex justify-between items-center ${currentProjectId === p.id ? 'text-blue-400 bg-gray-700/50' : 'text-gray-300'} ${isActive ? 'bg-gray-700/70' : ''}`}
+                                        className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 group flex justify-between items-center ${currentProjectId === p.id ? 'text-blue-500 dark:text-blue-400 bg-slate-100 dark:bg-slate-700/50' : 'text-slate-700 dark:text-slate-300'} ${isActive ? 'bg-slate-50 dark:bg-slate-700/70' : ''}`}
                                     >
                                         <button
                                             ref={el => { optionRefs.current[optionIndex] = el; }}
@@ -235,7 +235,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                                         >
                                             <span className="truncate block flex-1">
                                                 <span className="font-medium block">{p.name}</span>
-                                                {p.description && <span className="text-xs text-gray-500 truncate block">{p.description}</span>}
+                                                {p.description && <span className="text-xs text-slate-500 dark:text-slate-400 truncate block">{p.description}</span>}
                                             </span>
                                             {currentProjectId === p.id && (
                                                 <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -250,7 +250,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                                                         e.stopPropagation();
                                                         onEditProject(p);
                                                     }}
-                                                    className="p-1 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                                                    className="p-1 text-slate-400 dark:text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 rounded transition-colors"
                                                     title="프로젝트 수정"
                                                     tabIndex={-1}
                                                 >
@@ -262,7 +262,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                                             <button
                                                 onClick={(e) => handleDelete(p.id, p.name, e)}
                                                 disabled={deletingId === p.id}
-                                                className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors disabled:opacity-50"
+                                                className="p-1 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 dark:hover:bg-red-400/10 rounded transition-colors disabled:opacity-50"
                                                 title="프로젝트 삭제"
                                                 tabIndex={-1}
                                             >
@@ -283,7 +283,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                             })}
                         </div>
 
-                        <div className="border-t border-gray-700 p-2 space-y-2">
+                        <div className="border-t border-slate-200 dark:border-slate-700 p-2 space-y-2">
                             {onShowWelcome && (
                                 <button
                                     onClick={() => {
@@ -322,7 +322,7 @@ export function ProjectSelector({ projects, currentProjectId, isLoadingProjects,
                     onClick={cancelDelete}
                 >
                     <div
-                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md"
+                        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center gap-3 mb-4">

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 
 export type Project = {
     id: string;
@@ -27,23 +28,31 @@ export function WelcomeScreen({
 }: WelcomeScreenProps) {
     const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
-    const handleDeleteClick = async (projectId: string, projectName: string, e: React.MouseEvent) => {
+    const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+
+    const handleDeleteClick = (projectId: string, projectName: string, description: string, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent project selection
+        setProjectToDelete({ id: projectId, name: projectName, description });
+    };
 
-        if (!confirm(`"${projectName}" 프로젝트를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 프로젝트의 모든 검증 기록이 삭제됩니다.`)) {
-            return;
-        }
+    const confirmDelete = async () => {
+        if (!projectToDelete) return;
 
-        setDeletingProjectId(projectId);
+        setDeletingProjectId(projectToDelete.id);
         try {
-            await onDeleteProject(projectId);
+            await onDeleteProject(projectToDelete.id);
         } finally {
             setDeletingProjectId(null);
+            setProjectToDelete(null);
         }
     };
+
+    const cancelDelete = () => {
+        setProjectToDelete(null);
+    };
     return (
-        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 p-6">
-            <div className="max-w-4xl w-full">
+        <div className="flex-1 flex items-start sm:items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 p-6 overflow-y-auto">
+            <div className="max-w-4xl w-full my-auto">
                 {/* Header */}
                 <div className="text-center mb-12">
                     <div className="inline-flex items-center justify-center size-20 bg-primary rounded-2xl text-white shadow-2xl shadow-primary/30 mb-6">
@@ -144,7 +153,7 @@ export function WelcomeScreen({
                                 </>
                             )}
 
-                            {/* Actual Project List */}
+                            {/* Actual Project List - Show first 6 projects */}
                             {!isLoadingProjects && projects.slice(0, 6).map(project => (
                                 <div
                                     key={project.id}
@@ -173,7 +182,7 @@ export function WelcomeScreen({
                                     <div className="absolute top-0 right-0 h-full flex items-center gap-1 pr-2">
                                         {/* Delete Button */}
                                         <button
-                                            onClick={(e) => handleDeleteClick(project.id, project.name, e)}
+                                            onClick={(e) => handleDeleteClick(project.id, project.name, project.description, e)}
                                             disabled={deletingProjectId === project.id}
                                             className="p-2 rounded-lg bg-slate-200/50 dark:bg-slate-600/50 hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50"
                                             title="프로젝트 삭제"
@@ -213,6 +222,61 @@ export function WelcomeScreen({
                     </p>
                 </div>
             </div>
+            {/* Confirmation Modal - Using Portal */}
+            {projectToDelete && typeof window !== 'undefined' && createPortal(
+                <div
+                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+                    onClick={cancelDelete}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+                                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">프로젝트 삭제</h3>
+                        </div>
+
+                        <p className="text-slate-700 dark:text-slate-300 mb-2">
+                            정말로 <span className="font-bold text-slate-900 dark:text-white">&quot;{projectToDelete.name}&quot;</span> 프로젝트를 삭제하시겠습니까?
+                        </p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                            연결된 리포트는 보존되지만 프로젝트 컨텍스트와의 연결이 해제됩니다.
+                        </p>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={cancelDelete}
+                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-slate-800 dark:text-white font-bold transition-colors"
+                            >
+                                취소
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                disabled={deletingProjectId === projectToDelete.id}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {deletingProjectId === projectToDelete.id ? (
+                                    <>
+                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        삭제 중...
+                                    </>
+                                ) : (
+                                    "삭제"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 }

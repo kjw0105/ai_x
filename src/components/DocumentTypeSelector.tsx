@@ -42,6 +42,7 @@ export function DocumentTypeSelector({ isOpen, fileName, onSelect, onAutoDetect 
                             green: "border-green-500 bg-green-50 dark:bg-green-900/20",
                             orange: "border-orange-500 bg-orange-50 dark:bg-orange-900/20",
                             purple: "border-purple-500 bg-purple-50 dark:bg-purple-900/20",
+                            cyan: "border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20",
                             gray: "border-slate-400 bg-slate-50 dark:bg-slate-700/20",
                         };
 

@@ -21,11 +21,16 @@ import { ErrorDialog } from "@/components/ErrorDialog";
 import { ErrorMessages, type ErrorDetails, formatErrorMessage } from "@/lib/errorMessages";
 import { optimizeImage } from "@/lib/imageOptimizer";
 import { get, set, del } from "idb-keyval";
+import { calculateRiskLevel, riskCalculationToIssues } from "@/lib/riskMatrix";
+import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } from "@/lib/crossDocumentAnalysis";
+import { parseDocExtraction } from "@/lib/docSchema";
+import { TEMPLATE_METADATA, TEMPLATES } from "@/lib/masterPlanTemplates";
 import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
 import { ModalDialog } from "@/components/ModalDialog";
 import { exportReportToPDF } from "@/lib/pdfExport";
 import TBMResultModal from "@/components/TBMResultModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 type Report = {
   fileName: string;
@@ -34,21 +39,22 @@ type Report = {
   documentType?: string | null;
 
   // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
+  // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
   tbmSummary?: string;
   tbmTranscript?: string;
 };
 
-function NewProjectModal({
-  isOpen,
-  onClose,
-  onCreate,
-}: {
+interface ModalDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (data: any) => Promise<void>;
-}) {
+  // eslint-disable-next-line
+  onCreate: (data: { name: string; description: string; file: File | null; templateId?: string }) => Promise<void>;
+}
+
+function NewProjectModal({ isOpen, onClose, onCreate }: ModalDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("general_construction");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const titleId = useId();
@@ -62,11 +68,12 @@ function NewProjectModal({
     e.preventDefault();
     setLoading(true);
     try {
-      await onCreate({ name, description, file });
+      await onCreate({ name, description, file, templateId: selectedTemplateId });
       onClose();
       setName("");
       setDescription("");
       setFile(null);
+      setSelectedTemplateId("general_construction");
     } catch (err) {
       console.error("Failed to create project:", err);
     } finally {
@@ -81,81 +88,193 @@ function NewProjectModal({
       labelledBy={titleId}
       describedBy={descriptionId}
       overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700"
+      className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-4xl border border-slate-200 dark:border-slate-700"
       initialFocusRef={nameInputRef}
     >
-      <h3 id={titleId} className="text-xl font-bold mb-2 text-slate-900 dark:text-white">
-        New Project
-      </h3>
-      <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-300 mb-4">
-        Provide the project details below to create a new workspace.
-      </p>
+      <div className="mb-6">
+        <h3 id={titleId} className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+          새 프로젝트 생성
+        </h3>
+        <p id={descriptionId} className="text-slate-600 dark:text-slate-300">
+          안전 검증을 위한 새로운 프로젝트를 설정합니다. 현장 특성에 맞는 안전 기준을 선택하세요.
+        </p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-            Project Name
-          </label>
-          <input
-            ref={nameInputRef}
-            required
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Gimpo Han River Site A"
-          />
-        </div>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          {/* Left Column: Project Details */}
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                프로젝트 정보
+              </label>
+              <div className="space-y-4">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 font-medium text-lg"
+                  placeholder="프로젝트 이름 입력"
+                />
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                  placeholder="프로젝트 설명 (선택사항)"
+                />
+              </div>
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-            Description
-          </label>
-          <input
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional description"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-            마스터 안전 계획서 (선택사항)
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="file"
-              accept="application/pdf"
-              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-            />
+            <div>
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                마스터 안전 계획서 (PDF) <span className="text-slate-400 font-normal">- 선택사항</span>
+              </label>
+              <div className={`p-4 rounded-xl border border-dashed transition-colors ${file
+                ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500"
+                : "bg-slate-50 dark:bg-slate-700/50 border-slate-300 dark:border-slate-600 hover:border-blue-500"
+                }`}>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="flex flex-col items-center justify-center text-center">
+                    {file ? (
+                      <>
+                        <span className="material-symbols-outlined text-3xl text-blue-500 mb-2">assignment_turned_in</span>
+                        <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{file.name}</span>
+                        <span className="text-xs text-blue-500 mt-1">클릭하여 변경</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setFile(null);
+                          }}
+                          className="absolute top-1 right-1 p-1.5 text-blue-400 hover:text-red-500 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full transition-colors z-10"
+                          title="파일 제거"
+                        >
+                          <span className="material-symbols-outlined text-lg">close</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-3xl text-slate-400 mb-2">upload_file</span>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">PDF 파일 업로드</span>
+                        <span className="text-xs text-slate-400 mt-1">여기를 클릭하거나 파일을 드래그하세요</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">💡 이 문서는 무엇인가요?</p>
-            <p className="text-xs text-blue-700 dark:text-blue-400">
-              프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
-            </p>
-            <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
-              ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
-            </p>
+          {/* Right Column: Site Type Selection */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">
+              현장 유형 및 안전 기준
+            </label>
+
+            {/* Template Grid */}
+            <div className={`grid grid-cols-2 gap-3 transition-opacity ${file ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+              {TEMPLATE_METADATA.map((t) => {
+                const isSelected = selectedTemplateId === t.id && !file;
+                let icon = "construction";
+                if (t.id === "high_rise") icon = "location_city";
+                if (t.id === "infrastructure") icon = "engineering";
+                if (t.id === "interior_renovation") icon = "design_services";
+
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTemplateId(t.id);
+                      setFile(null); // Deselect file if clicking a template
+                    }}
+                    className={`relative flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all text-center group h-32 ${isSelected
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-500 shadow-sm"
+                      : "border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-slate-500 bg-white dark:bg-slate-800"
+                      }`}
+                  >
+                    <div className={`p-2 rounded-lg mb-2 transition-colors ${isSelected
+                      ? "bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200"
+                      : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-600"
+                      }`}>
+                      <span className="material-symbols-outlined text-3xl">{icon}</span>
+                    </div>
+
+                    <div className="font-bold text-slate-900 dark:text-white leading-tight text-sm">
+                      {t.name.split('(')[0].trim()}
+                    </div>
+
+                    {isSelected && (
+                      <div className="absolute top-2 right-2 text-blue-500">
+                        <span className="material-symbols-outlined text-lg">check_circle</span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected Template Description Box */}
+            {!file && (
+              <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600 text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-bold block mb-1 text-slate-900 dark:text-white">
+                  {TEMPLATE_METADATA.find(t => t.id === selectedTemplateId)?.name}
+                </span>
+                {TEMPLATE_METADATA.find(t => t.id === selectedTemplateId)?.description}
+              </div>
+            )}
+
+            {/* PDF Upload Override Message */}
+            {file && (
+              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200 flex items-start gap-2 animate-in fade-in slide-in-from-top-1">
+                <span className="material-symbols-outlined text-lg shrink-0">upload_file</span>
+                <div>
+                  <span className="font-bold block mb-0.5">PDF 마스터 플랜 사용 중</span>
+                  업로드된 "{file.name}" 문서를 기준으로 안전 검증을 수행합니다. 템플릿 선택은 무시됩니다.
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setFile(null);
+                    }}
+                    className="block mt-1.5 text-blue-600 underline hover:text-blue-800 font-bold"
+                  >
+                    업로드 취소하고 템플릿 사용하기
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-700">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+            className="px-6 py-3 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
           >
-            Cancel
+            취소
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98]"
           >
-            {loading ? "Creating..." : "Create Project"}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="material-symbols-outlined animate-spin text-lg">sync</span>
+                생성 중...
+              </span>
+            ) : "프로젝트 생성"}
           </button>
         </div>
       </form>
@@ -217,6 +336,10 @@ export default function Page() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   const [showWelcome, setShowWelcome] = useState(true);
+
+  // Confirmation dialog states
+  const [confirmClearFile, setConfirmClearFile] = useState(false);
+  const [confirmProjectSwitch, setConfirmProjectSwitch] = useState<{ projectId: string | null } | null>(null);
 
   useEffect(() => setCurrentPage(0), [file, pageImages]);
 
@@ -734,6 +857,13 @@ export default function Page() {
       setImageQuality(null);
     }
 
+    // Auto-start validation for images (Photo Audit)
+    if (f.type.startsWith("image/")) {
+      setFile(f);
+      await runValidation(f, "SITE_PHOTO");
+      return;
+    }
+
     setPendingFile(f);
     setShowDocTypeSelector(true);
   }
@@ -994,10 +1124,12 @@ export default function Page() {
     name,
     description,
     file,
+    templateId,
   }: {
     name: string;
     description: string;
     file: File | null;
+    templateId?: string;
   }) {
     try {
       let contextText = "";
@@ -1006,16 +1138,31 @@ export default function Page() {
         contextText = await extractPdfText(file, controller.signal);
       }
 
+      let masterPlanJson: string | null = null;
+      let isStructured = false;
+
+      if (templateId && TEMPLATES[templateId]) {
+        // Use the selected template
+        masterPlanJson = JSON.stringify(TEMPLATES[templateId]);
+        isStructured = true;
+      }
+
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, contextText }),
+        body: JSON.stringify({
+          name,
+          description,
+          contextText,
+          masterPlanJson,
+          isStructured
+        }),
       });
 
       if (!res.ok) throw new Error("Failed");
 
       const newProject = await res.json();
-      setProjects((prev) => [...prev, newProject]);
+      setProjects((prev) => [newProject, ...prev]);
       setCurrentProjectId(newProject.id);
       dismissWelcome();
     } catch (error) {
@@ -1032,6 +1179,9 @@ export default function Page() {
         throw new Error(error.error || "Failed to delete project");
       }
 
+      const projectToDelete = projects.find((p) => p.id === projectId);
+      const projectName = projectToDelete ? projectToDelete.name : "프로젝트";
+
       if (currentProjectId === projectId) {
         setCurrentProjectId(null);
         setShowWelcome(true);
@@ -1039,7 +1189,7 @@ export default function Page() {
       }
 
       setProjects((prev) => prev.filter((p) => p.id !== projectId));
-      toast.success("프로젝트가 삭제되었습니다");
+      toast.success(`"${projectName}" 프로젝트가 삭제되었습니다`);
     } catch (error) {
       showError(ErrorMessages.PROJECT_DELETE_FAILED());
       throw error;
@@ -1169,6 +1319,15 @@ export default function Page() {
   }, [currentPage, currentProjectId]);
 
   function handleClearFile() {
+    // Show confirmation if file exists
+    if (file) {
+      setConfirmClearFile(true);
+      return;
+    }
+    performClearFile();
+  }
+
+  function performClearFile() {
     clearDocumentState();
     del(getProjectKey("file"));
     del(getProjectKey("images"));
@@ -1191,8 +1350,24 @@ export default function Page() {
     setCurrentProjectId(null);
   }
 
+  function handleProjectChange(projectId: string | null) {
+    // Show confirmation if switching projects with unsaved work
+    if (file && projectId !== currentProjectId) {
+      setConfirmProjectSwitch({ projectId });
+      return;
+    }
+    performProjectChange(projectId);
+  }
+
+  function performProjectChange(projectId: string | null) {
+    if (showWelcome) {
+      dismissWelcome();
+    }
+    setCurrentProjectId(projectId);
+  }
+
   return (
-    <div className="flex flex-col min-h-dvh bg-slate-50 dark:bg-gray-900 relative">
+    <div className="flex flex-col h-dvh bg-slate-50 dark:bg-gray-900 relative overflow-hidden">
       <NewProjectModal
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}
@@ -1268,6 +1443,33 @@ export default function Page() {
 
       <TBMResultModal open={tbmResultOpen} data={tbmResult} onClose={() => setTbmResultOpen(false)} />
 
+      <ConfirmDialog
+        isOpen={confirmClearFile}
+        onClose={() => setConfirmClearFile(false)}
+        onConfirm={performClearFile}
+        title="파일 삭제 확인"
+        message={`현재 업로드된 파일 "${file?.name}"을(를) 삭제하시겠습니까?\n\n검증 결과와 분석 내용이 모두 사라집니다.`}
+        confirmText="삭제"
+        cancelText="취소"
+        variant="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={!!confirmProjectSwitch}
+        onClose={() => setConfirmProjectSwitch(null)}
+        onConfirm={() => {
+          if (confirmProjectSwitch) {
+            performProjectChange(confirmProjectSwitch.projectId);
+            setConfirmProjectSwitch(null);
+          }
+        }}
+        title="프로젝트 전환 확인"
+        message={`현재 작업 중인 파일이 있습니다.\n프로젝트를 전환하시겠습니까?\n\n현재 파일: ${file?.name}\n\n프로젝트를 전환하면 현재 작업 내용이 저장되지 않을 수 있습니다.`}
+        confirmText="전환"
+        cancelText="취소"
+        variant="warning"
+      />
+
       <Header
         key={projectSelectorKey}
         loading={loading}
@@ -1279,7 +1481,7 @@ export default function Page() {
         showWelcome={showWelcome}
         projects={projects}
         currentProjectId={currentProjectId}
-        onProjectChange={setCurrentProjectId}
+        onProjectChange={handleProjectChange}
         onOpenNewProject={() => setIsProjectModalOpen(true)}
         onDeleteProject={handleDeleteProject}
         onEditProject={handleOpenEditProject}
@@ -1357,6 +1559,15 @@ export default function Page() {
                     tbmSummary={report?.tbmSummary ?? ""}
                     tbmTranscript={report?.tbmTranscript ?? ""}
                     documentType={report?.documentType ?? null}
+                    reportContext={report ? {
+                      docType: (report as any).docType,
+                      fields: (report as any).fields,
+                      signature: (report as any).signature,
+                      inspectorName: (report as any).inspectorName,
+                      riskLevel: (report as any).riskLevel,
+                      checklist: (report as any).checklist,
+                      issues: report.issues,
+                    } : null}
                   />
 
 
@@ -1424,6 +1635,8 @@ export default function Page() {
                   historicalFileName={historicalFileName}
                   tbmSummary={report?.tbmSummary || ""}
                   tbmTranscript={report?.tbmTranscript || ""}
+                  validationStep={validationStep}
+                  showProgress={showProgress}
                 />
               }
             />
@@ -1452,6 +1665,17 @@ export default function Page() {
           onRetry={errorDialog.onRetry}
         />
       )}
+      {/* Project Dashboard Modal */}
+      <ProjectDashboard
+        isOpen={showDashboard}
+        onClose={() => setShowDashboard(false)}
+        projectId={currentProjectId}
+        projectName={projects.find((p) => p.id === currentProjectId)?.name}
+        onOpenNewProject={() => {
+          setShowDashboard(false);
+          setIsProjectModalOpen(true);
+        }}
+      />
     </div>
   );
 }

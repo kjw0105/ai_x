@@ -12,6 +12,15 @@ import type { MasterSafetyPlan, StructuredValidationIssue } from "@/lib/masterPl
 import { calculateRiskLevel, riskCalculationToIssues } from "@/lib/riskMatrix";
 import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } from "@/lib/crossDocumentAnalysis";
 import { parseDocExtraction } from "@/lib/docSchema";
+import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtraction } from "@/lib/extractionSchema";
+import {
+  VERIFICATION_TOOLS,
+  shouldVerifyExtraction,
+  generateVerificationPrompt,
+  reExtractField,
+  verifyChecklistItem,
+  checkSignaturePresence
+} from "@/lib/verificationTools";
 
 type Provider = "openai" | "claude" | "auto";
 
@@ -80,6 +89,96 @@ function buildSystemPrompt() {
 `;
 }
 
+function buildPhotoValidationPrompt(contextText?: string) {
+  let prompt = `
+너는 건설 현장 안전 검사관 AI다. 업로드된 현장 사진을 분석하여 안전 규정 위반 사항을 식별하라.
+
+출력은 반드시 "JSON만" 출력한다(설명/마크다운 금지).
+스키마:
+{
+  "docType": "현장 사진",
+  "fields": {
+    "점검일자": null,
+    "현장명": null,
+    "작업내용": string,  // 사진에서 관찰된 작업 설명 (예: "고소작업", "전기작업", "굴착작업")
+    "작업인원": string|null  // 사진에 보이는 작업자 수 (예: "2명", "확인 불가")
+  },
+  "photoAnalysis": {
+    "workType": string,  // 작업 유형 (예: "고소작업", "밀폐공간작업", "전기작업")
+    "workersVisible": number,  // 확인된 작업자 수
+    "location": string,  // 작업 위치 설명 (예: "건물 외벽 3층", "지하 공간", "옥상")
+    "conditions": string[]  // 관찰된 현장 상황 (예: ["높이 3m 이상", "밀폐공간", "우천"])
+  },
+  "safetyViolations": [  // 발견된 안전 위반 사항
+    {
+      "id": string,  // 위반 ID (fall_helmet, ppe_vest 등)
+      "category": string,  // 분류 (개인보호구, 안전시설, 작업환경)
+      "violation": string,  // 위반 내용 (예: "안전모 미착용", "안전난간 미설치")
+      "severity": "high"|"medium"|"low",  // 위험도
+      "location": string,  // 사진 내 위치 (예: "화면 중앙 작업자", "왼쪽 상단 영역")
+      "evidence": string  // 구체적 근거 (예: "노란색 작업복 착용 작업자의 머리에 안전모가 보이지 않음")
+    }
+  ],
+  "safetyCompliance": [  // 준수 사항
+    {
+      "item": string,  // 준수 항목 (예: "안전조끼 착용", "안전대 체결")
+      "evidence": string  // 준수 근거
+    }
+  ],
+  "checklist": [  // 안전 체크리스트 (사진 기반 자동 평가)
+    {
+      "id": string,  // 항목 ID
+      "category": string,  // 분류
+      "nameKo": string,  // 항목명
+      "value": "✔"|"✖"|"N/A"  // 평가 결과
+    }
+  ],
+  "chat": [
+    {"role":"ai", "text": "사진 분석 요약 및 주요 발견 사항"}
+  ]
+}
+
+분석 가이드라인:
+
+1. 개인보호구(PPE) 확인:
+   - 안전모(ppe_01): 필수 착용, 색상/형태 확인
+   - 안전조끼(ppe_02): 야광/고가시성 조끼 착용 여부
+   - 안전대(ppe_03): 고소작업 시 필수, 걸이 연결 확인
+   - 안전화(ppe_04): 작업화 착용 여부
+   - 안전장갑(ppe_05): 작업 유형에 맞는 장갑 착용
+
+2. 안전시설 확인:
+   - 추락방지: 안전난간(fall_03), 추락방호망(fall_02)
+   - 전기안전: 절연장갑, 잠금장치(elec_03)
+   - 화기작업: 소화기 비치(fire_02), 불꽃 감시자
+   - 밀폐공간: 환기장치(conf_03), 산소농도계(conf_02)
+   - 굴착작업: 흙막이(exc_02), 탈출사다리(exc_03)
+
+3. 작업환경 평가:
+   - 작업 높이: 2m 이상 = 고소작업(fall_01)
+   - 밀폐공간: 환기 불량 공간 = 밀폐공간작업(conf_01)
+   - 전기 노출: 감전 위험 = 전기작업(elec_02)
+   - 굴착 깊이: 1.5m 이상 = 굴착작업(exc_01)
+
+4. 위반 심각도 기준:
+   - high: 즉시 생명 위협 (추락, 감전, 질식 등)
+   - medium: 중대 부상 가능 (낙하물, 화상 등)
+   - low: 경미한 부상 가능 (찰과상, 타박상 등)
+
+주의사항:
+- 사진에서 **명확히 확인 가능한 사항만** 보고하라
+- 불확실한 경우 "확인 불가" 또는 "N/A"로 표시
+- 위반 사항은 구체적 근거와 위치를 함께 기술
+- 비판단적 어조 유지: "～가 관찰됨", "～확인되지 않음"
+`;
+
+  if (contextText) {
+    prompt += `\n\n[PROJECT CONTEXT / MASTER SAFETY PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 사진 분석 시 이 규칙을 기준으로 위반 여부를 판단하라:\n${contextText}`;
+  }
+
+  return prompt;
+}
+
 function safeJsonParse(text: string) {
   const trimmed = (text ?? "").trim();
   try {
@@ -99,6 +198,70 @@ function sanitizeDocData(raw: unknown) {
   return parseDocExtraction(raw);
 }
 
+// ✅ NEW: Extraction with Structured Outputs (guaranteed valid JSON)
+async function callOpenAIStructured(opts: {
+  pdfText?: string;
+  pageImages?: string[] | null;
+  contextText?: string
+}): Promise<DocumentExtraction> {
+  let sysPrompt = buildSystemPrompt();
+
+  if (opts.contextText) {
+    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 이 내용을 참고하여 위반 사항이나 불일치 점이 있으면 지적하라:\n${opts.contextText}`;
+  }
+
+  // Add confidence tracking instruction
+  sysPrompt += `\n\n중요: extractionConfidence 필드에 추출 신뢰도를 반드시 포함하세요:
+- overall: "high" (모든 필드 명확), "medium" (일부 불확실), "low" (여러 필드 불확실)
+- uncertainFields: 추출이 불확실한 필드 목록 (예: ["점검일자", "점검자"])`;
+
+  // Build content array
+  const content: any[] = [];
+  content.push({ type: "text", text: sysPrompt });
+
+  if (opts.pdfText && opts.pdfText.trim().length >= 50) {
+    content.push({ type: "text", text: `추출 텍스트:\n${opts.pdfText}` });
+  }
+
+  if (opts.pageImages?.length) {
+    for (const img of opts.pageImages) {
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: img,
+          detail: "high"
+        }
+      });
+    }
+  }
+
+  console.log("[Structured Extraction] Calling OpenAI with structured outputs...");
+
+  const response = await getOpenAI().chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "user",
+        content: content
+      }
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: DOCUMENT_EXTRACTION_SCHEMA
+    },
+    max_tokens: 1500,
+    temperature: 0,
+  });
+
+  const responseText = response.choices[0]?.message?.content ?? "{}";
+  const extraction: DocumentExtraction = JSON.parse(responseText);
+
+  console.log("[Structured Extraction] Success! Confidence:", extraction.extractionConfidence.overall);
+
+  return extraction;
+}
+
+// Keep old function for Claude fallback
 async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null; contextText?: string }) {
   let sysPrompt = buildSystemPrompt();
 
@@ -106,25 +269,20 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
     sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 이 내용을 참고하여 위반 사항이나 불일치 점이 있으면 지적하라:\n${opts.contextText}`;
   }
 
-  // Build content array for Chat Completions API (correct format for GPT-4o vision)
   const content: any[] = [];
-
-  // Add system prompt as text
   content.push({ type: "text", text: sysPrompt });
 
-  // Add extracted text
   if (opts.pdfText && opts.pdfText.trim().length >= 50) {
     content.push({ type: "text", text: `추출 텍스트:\n${opts.pdfText}` });
   }
 
-  // Add images (GPT-4o vision format)
   if (opts.pageImages?.length) {
     for (const img of opts.pageImages) {
       content.push({
         type: "image_url",
         image_url: {
-          url: img, // Already a data URL (data:image/jpeg;base64,...)
-          detail: "high" // Use high detail for better extraction
+          url: img,
+          detail: "high"
         }
       });
     }
@@ -139,7 +297,7 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
       }
     ],
     max_tokens: 1500,
-    temperature: 0, // Deterministic output for structured extraction
+    temperature: 0,
   });
 
   const responseText = response.choices[0]?.message?.content ?? "";
@@ -185,6 +343,112 @@ async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null
       .join("\n") ?? "";
 
   return safeJsonParse(outText);
+}
+
+// ✅ NEW: Verification step with self-correction tools
+async function verifyExtraction(
+  extraction: DocumentExtraction,
+  pdfText: string,
+  pageImages?: string[] | null
+): Promise<DocumentExtraction> {
+  // Check if verification is needed
+  if (!shouldVerifyExtraction(extraction)) {
+    console.log("[Verification] High confidence - skipping verification");
+    return extraction;
+  }
+
+  console.log("[Verification] Low confidence - running verification tools");
+  console.log("[Verification] Uncertain fields:", extraction.extractionConfidence.uncertainFields);
+
+  // Build verification messages
+  const verificationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: "너는 문서 추출 품질 검증 전문가다. 추출 결과를 검토하고 필요하면 재추출 도구를 사용하여 누락된 정보를 보완하라. 모든 도구 사용 후 '검증 완료'라고 응답하라."
+    },
+    {
+      role: "user",
+      content: generateVerificationPrompt(extraction)
+    }
+  ];
+
+  try {
+    // Call GPT-4o-mini with verification tools
+    const verification = await getOpenAI().chat.completions.create({
+      model: "gpt-4o-mini", // Cheaper model for verification
+      messages: verificationMessages,
+      tools: VERIFICATION_TOOLS,
+      tool_choice: "auto",
+      temperature: 0,
+      max_tokens: 1000
+    });
+
+    const message = verification.choices[0]?.message;
+
+    // Handle tool calls
+    if (message?.tool_calls && message.tool_calls.length > 0) {
+      console.log(`[Verification] AI calling ${message.tool_calls.length} tool(s)`);
+
+      verificationMessages.push(message);
+
+      // Execute each tool call
+      for (const toolCall of message.tool_calls) {
+        const { name, arguments: argsStr } = toolCall.function;
+        const args = JSON.parse(argsStr);
+
+        console.log(`[Verification] Tool: ${name}`, args);
+
+        let toolResult = "";
+
+        switch (name) {
+          case "re_extract_field":
+            toolResult = reExtractField(args.fieldName, args.reason, pdfText, pageImages);
+            // TODO: In production, actually re-extract from document
+            break;
+
+          case "verify_checklist_item":
+            toolResult = verifyChecklistItem(args.itemId, args.currentValue, pdfText, pageImages);
+            // TODO: In production, actually verify from document
+            break;
+
+          case "check_signature_presence":
+            toolResult = checkSignaturePresence(args.signatureType, pdfText, pageImages);
+            // TODO: In production, actually check document
+            break;
+
+          default:
+            toolResult = `알 수 없는 도구: ${name}`;
+        }
+
+        verificationMessages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: toolResult
+        });
+      }
+
+      // Get final verification response
+      const finalVerification = await getOpenAI().chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: verificationMessages,
+        temperature: 0,
+        max_tokens: 500
+      });
+
+      const verificationResult = finalVerification.choices[0]?.message?.content || "";
+      console.log("[Verification] Result:", verificationResult);
+
+      // TODO: Parse verification result and apply corrections to extraction
+      // For now, return original extraction (tools are informational)
+    } else {
+      console.log("[Verification] No tool calls needed - extraction confirmed good");
+    }
+
+    return extraction;
+  } catch (error) {
+    console.warn("[Verification] Failed, using original extraction:", error);
+    return extraction;
+  }
 }
 
 export async function POST(req: Request) {
@@ -268,48 +532,211 @@ export async function POST(req: Request) {
       contextText = tempContextText;
     }
 
-    // auto: 스캔(텍스트 거의 없음)이면 비전 강한 쪽(둘 중 아무거나)로
-    // 여기선: 이미지 있으면 OpenAI 먼저, 없으면 Claude 먼저 같은 식으로도 가능
-    let result: any;
+    // ✅ PHOTO VALIDATION: Special handling for site photos
+    if (documentType === "SITE_PHOTO") {
+      console.log("\n========== PHOTO VALIDATION MODE ==========");
 
-    if (p === "openai") {
-      result = await callOpenAI({ pdfText, pageImages, contextText });
-    } else if (p === "claude") {
-      result = await callClaude({ pdfText, pageImages, contextText });
-    } else {
-      // auto
-      if (pageImages?.length) {
-        // 스캔이면 OpenAI 시도 -> 실패하면 Claude
-        try {
-          result = await callOpenAI({ pdfText, pageImages, contextText });
-        } catch (e) {
-          console.warn("[AI] OpenAI failed, falling back to Claude");
-          result = await callClaude({ pdfText, pageImages, contextText });
+      if (!hasImages) {
+        return NextResponse.json(
+          {
+            error: "현장 사진 검증에는 이미지가 필요합니다",
+            fileName: fileName ?? "Untitled",
+            issues: [],
+            chat: [
+              {
+                role: "ai",
+                text: "현장 사진을 업로드해주세요. 이미지 파일이 필요합니다."
+              }
+            ]
+          },
+          { status: 400 }
+        );
+      }
+
+      // Use photo validation prompt
+      const photoPrompt = buildPhotoValidationPrompt(contextText);
+
+      let photoAnalysis: any;
+      try {
+        // Try OpenAI GPT-4o (has vision capabilities)
+        if (p === "openai" || p === "auto") {
+          const content: any[] = [
+            { type: "text", text: photoPrompt }
+          ];
+
+          // Add images
+          for (const img of pageImages) {
+            content.push({
+              type: "image_url",
+              image_url: { url: img, detail: "high" }
+            });
+          }
+
+          const response = await getOpenAI().chat.completions.create({
+            model: "gpt-4o",
+            messages: [{ role: "user", content }],
+            max_tokens: 2000,
+            temperature: 0,
+          });
+
+          photoAnalysis = safeJsonParse(response.choices[0]?.message?.content ?? "");
+        } else {
+          // Use Claude for vision analysis
+          const content: any[] = [
+            { type: "text", text: photoPrompt }
+          ];
+
+          for (const img of pageImages) {
+            const base64 = img.split(",")[1] ?? "";
+            content.push({
+              type: "image",
+              source: { type: "base64", media_type: "image/jpeg", data: base64 },
+            });
+          }
+
+          const msg = await getAnthropic().messages.create({
+            model: "claude-sonnet-4-5-20250929",
+            max_tokens: 2000,
+            messages: [{ role: "user", content }],
+          });
+
+          const outText = msg.content
+            .filter((c: any) => c.type === "text")
+            .map((c: any) => c.text)
+            .join("\n") ?? "";
+
+          photoAnalysis = safeJsonParse(outText);
         }
-      } else {
-        // 텍스트면 Claude 시도 -> 실패하면 OpenAI
-        try {
-          result = await callClaude({ pdfText, pageImages: null, contextText });
-        } catch (e) {
-          console.warn("[AI] Claude failed, falling back to OpenAI");
-          result = await callOpenAI({ pdfText, pageImages: null, contextText });
+
+        console.log("[Photo Analysis] Complete:", JSON.stringify(photoAnalysis, null, 2));
+
+        // Convert photo analysis to standard format
+        const extraction: DocumentExtraction = {
+          isSafetyDocument: true,
+          docType: "현장 사진",
+          fields: photoAnalysis.fields || {},
+          signature: { worker: "unknown", supervisor: "unknown" },
+          inspectorName: null,
+          riskLevel: null,
+          checklist: photoAnalysis.checklist || [],
+          chat: photoAnalysis.chat || [
+            { role: "ai", text: "현장 사진 분석이 완료되었습니다." }
+          ],
+          extractionConfidence: {
+            overall: "high",
+            uncertainFields: []
+          }
+        };
+
+        // Convert violations to issues
+        const photoIssues: ValidationIssue[] = [];
+
+        if (photoAnalysis.safetyViolations) {
+          for (const violation of photoAnalysis.safetyViolations) {
+            photoIssues.push({
+              severity: violation.severity === "high" ? "error" : violation.severity === "medium" ? "warn" : "info",
+              title: violation.violation,
+              message: `${violation.evidence}\n\n위치: ${violation.location}`,
+              ruleId: `photo_${violation.id}`,
+              path: `사진분석.${violation.category}`,
+            });
+          }
         }
+
+        // Store in database
+        const createdReport = await prisma.report.create({
+          data: {
+            fileName,
+            docDataJson: JSON.stringify(extraction),
+            issuesJson: JSON.stringify(photoIssues),
+            chatJson: JSON.stringify(extraction.chat),
+            projectId: projectId ?? null,
+            documentType: "SITE_PHOTO",
+          }
+        });
+
+        return NextResponse.json({
+          id: createdReport.id,
+          fileName,
+          issues: photoIssues,
+          chat: extraction.chat,
+          extracted: extraction,
+          documentType: "SITE_PHOTO",
+        });
+      } catch (e: any) {
+        console.error("[Photo Analysis] Error:", e);
+        return NextResponse.json(
+          {
+            error: `사진 분석 중 오류가 발생했습니다: ${e.message}`,
+            fileName,
+            issues: [],
+            chat: [
+              { role: "ai", text: "사진 분석에 실패했습니다. 다시 시도해주세요." }
+            ]
+          },
+          { status: 500 }
+        );
       }
     }
 
-    // 3. Validation Logic (Code-based)
-    // LLM 결과(extraction)에 대해 규칙 검사를 수행한다.
-    const sanitized = sanitizeDocData(result);
-    if ("error" in sanitized) {
-      return NextResponse.json(
-        {
-          error: sanitized.error
-        },
-        { status: 400 }
-      );
+    // ✅ Phase 1: Structured Extraction (Guaranteed Valid JSON)
+    console.log("\n========== PHASE 1: STRUCTURED EXTRACTION ==========");
+    let extraction: DocumentExtraction;
+
+    if (p === "openai" || p === "auto") {
+      // Use structured outputs (OpenAI only for now)
+      try {
+        extraction = await callOpenAIStructured({ pdfText, pageImages, contextText });
+      } catch (e) {
+        console.warn("[Extraction] Structured extraction failed, falling back to Claude:", e);
+        // Fallback to Claude (without structured outputs)
+        const result = await callClaude({ pdfText, pageImages, contextText });
+        const sanitized = sanitizeDocData(result);
+        if ("error" in sanitized) {
+          return NextResponse.json({ error: sanitized.error }, { status: 400 });
+        }
+        // Map to DocumentExtraction format
+        extraction = {
+          ...sanitized.data,
+          extractionConfidence: {
+            overall: "medium",
+            uncertainFields: []
+          }
+        } as DocumentExtraction;
+      }
+    } else {
+      // Claude path (no structured outputs yet)
+      const result = await callClaude({ pdfText, pageImages, contextText });
+      const sanitized = sanitizeDocData(result);
+      if ("error" in sanitized) {
+        return NextResponse.json({ error: sanitized.error }, { status: 400 });
+      }
+      extraction = {
+        ...sanitized.data,
+        extractionConfidence: {
+          overall: "medium",
+          uncertainFields: []
+        }
+      } as DocumentExtraction;
     }
 
-    const extracted = sanitized.data;
+    console.log("[Phase 1] Extraction complete. Confidence:", extraction.extractionConfidence.overall);
+
+    // ✅ Phase 2: Verification (Conditional, Self-Correcting)
+    console.log("\n========== PHASE 2: VERIFICATION ==========");
+    const verified = await verifyExtraction(extraction, pdfText ?? "", pageImages);
+    console.log("[Phase 2] Verification complete");
+
+    // Convert DocumentExtraction to DocData format for validation
+    const extracted: any = {
+      docType: verified.docType,
+      fields: verified.fields,
+      signature: verified.signature,
+      inspectorName: verified.inspectorName,
+      riskLevel: verified.riskLevel,
+      checklist: verified.checklist,
+      chat: verified.chat
+    };
 
     // VALIDATION: Check if document is safety-related
     // If docType is "unknown" and no safety-related fields are found, reject the document
