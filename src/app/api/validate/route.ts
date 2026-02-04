@@ -533,6 +533,9 @@ export async function POST(req: Request) {
     }
 
     // ✅ PHOTO VALIDATION: Special handling for site photos
+    console.log("[Route] Document type received:", documentType);
+    console.log("[Route] Is SITE_PHOTO?", documentType === "SITE_PHOTO");
+
     if (documentType === "SITE_PHOTO") {
       console.log("\n========== PHOTO VALIDATION MODE ==========");
 
@@ -665,13 +668,22 @@ export async function POST(req: Request) {
         });
       } catch (e: any) {
         console.error("[Photo Analysis] Error:", e);
+        console.error("[Photo Analysis] Error details:", {
+          message: e.message,
+          stack: e.stack,
+          documentType,
+          hasImages,
+        });
         return NextResponse.json(
           {
             error: `사진 분석 중 오류가 발생했습니다: ${e.message}`,
             fileName,
             issues: [],
             chat: [
-              { role: "ai", text: "사진 분석에 실패했습니다. 다시 시도해주세요." }
+              {
+                role: "ai",
+                text: `사진 분석에 실패했습니다.\n\n오류: ${e.message}\n\n참고: 스캔된 문서 이미지를 업로드하시는 경우, 문서 종류 선택 시 "현장 사진"이 아닌 실제 문서 유형(예: "산업안전 점검표")을 선택해주세요.`
+              }
             ]
           },
           { status: 500 }

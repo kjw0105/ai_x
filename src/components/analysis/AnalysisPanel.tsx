@@ -87,6 +87,12 @@ interface RiskCalculation {
     recommendation?: string;
 }
 
+interface ValidationStage {
+    id: string;
+    label: string;
+    icon: string;
+}
+
 interface AnalysisPanelProps {
     loading: boolean;
     issues: Issue[];
@@ -102,9 +108,20 @@ interface AnalysisPanelProps {
     documentType?: string | null;
     validationStep?: number;
     showProgress?: boolean;
+    validationSteps?: ValidationStage[]; // Dynamic stages
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps }: AnalysisPanelProps) {
+    // Default to 5-stage document validation if not provided
+    const defaultSteps: ValidationStage[] = [
+        { id: "stage1", label: "형식 검증", icon: "description" },
+        { id: "stage2", label: "논리 검증", icon: "rule" },
+        { id: "stage3", label: "교차 분석", icon: "compare_arrows" },
+        { id: "stage4", label: "패턴 감지", icon: "analytics" },
+        { id: "stage5", label: "위험 평가", icon: "shield" },
+    ];
+    const steps = validationSteps || defaultSteps;
+    const totalSteps = steps.length;
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
@@ -517,7 +534,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                 AI 정밀 분석 중...
                             </h3>
                             <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">
-                                {Math.round((validationStep / 5) * 100)}%
+                                {Math.round((validationStep / totalSteps) * 100)}%
                             </span>
                         </div>
 
@@ -525,19 +542,14 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         <div className="relative">
                             <div className="absolute left-2.5 top-0 bottom-0 w-0.5 bg-slate-100 dark:bg-slate-700" />
                             <div className="space-y-4 relative">
-                                {[
-                                    { step: 1, label: "형식 검증" },
-                                    { step: 2, label: "논리 검증" },
-                                    { step: 3, label: "교차 분석" },
-                                    { step: 4, label: "패턴 감지" },
-                                    { step: 5, label: "위험 평가" },
-                                ].map((s) => {
-                                    const isCompleted = validationStep > s.step;
-                                    const isCurrent = validationStep === s.step;
-                                    const isPending = validationStep < s.step;
+                                {steps.map((s, idx) => {
+                                    const stepNumber = idx + 1;
+                                    const isCompleted = validationStep > stepNumber;
+                                    const isCurrent = Math.floor(validationStep) === stepNumber;
+                                    const isPending = validationStep < stepNumber;
 
                                     return (
-                                        <div key={s.step} className="flex items-center gap-3">
+                                        <div key={s.id} className="flex items-center gap-3">
                                             <div className={`relative z-10 flex items-center justify-center size-5 rounded-full border-2 transition-colors ${isCompleted ? "bg-green-500 border-green-500" :
                                                 isCurrent ? "bg-white border-blue-500" :
                                                     "bg-white border-slate-200 dark:border-slate-600 dark:bg-slate-800"

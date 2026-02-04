@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
 import { EmptyDocumentState } from "@/components/EmptyDocumentState";
 import { RecentDocuments } from "@/components/RecentDocuments";
-import { ImageQualityCard, type ImageQuality } from "@/components/ImageQualityCard";
+import type { ImageQuality } from "@/components/ImageQualityCard";
 
 interface DocumentViewerProps {
   file: File | null;
@@ -72,6 +72,14 @@ export default function DocumentViewer({
           </span>
 
           {documentType && <DocumentTypeBadge type={documentType} size="sm" />}
+
+          {/* Image Quality Badge - Minimal */}
+          {imageQuality && file && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-semibold shrink-0 border border-green-200 dark:border-green-800">
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+              품질 확인
+            </span>
+          )}
 
           {historicalFileName && !file && (
             <span className="px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold shrink-0">
@@ -227,13 +235,6 @@ export default function DocumentViewer({
                 문서 종류 선택 가능
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Image Quality Feedback */}
-        {imageQuality && file && (
-          <div className="w-full max-w-[860px] mb-6">
-            <ImageQualityCard quality={imageQuality} fileName={file.name} />
           </div>
         )}
 

@@ -13,7 +13,8 @@ interface ProgressBarProps {
 
 export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
     // Support fractional steps for smoother progress (e.g., 2.5 for 50% through step 2)
-    const progress = ((currentStep + 1) / steps.length) * 100;
+    // Add 1 to currentStep because steps are 0-indexed but progress should show completion
+    const progress = Math.min(((currentStep + 1) / steps.length) * 100, 100);
     const currentStepIndex = Math.floor(currentStep);
     const currentStepData = steps[currentStepIndex];
 
@@ -24,7 +25,7 @@ export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-2">
                         <span className="material-symbols-outlined text-lg animate-pulse">{currentStepData.icon}</span>
-                        <span className="text-sm font-bold">Stage {currentStepIndex + 1}/5</span>
+                        <span className="text-sm font-bold">Stage {currentStepIndex + 1}/{steps.length}</span>
                     </div>
                     <h4 className="text-xl font-black text-slate-900 dark:text-white">
                         {currentStepData.label}
@@ -42,11 +43,20 @@ export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
                 </div>
             </div>
 
-            {/* Steps */}
-            <div className="grid grid-cols-5 gap-2">
+            {/* Steps - Dynamic grid based on step count */}
+            <div className={`grid ${
+                steps.length === 3
+                    ? 'grid-cols-3 gap-8 max-w-xl mx-auto'
+                    : steps.length === 5
+                    ? 'grid-cols-5 gap-2'
+                    : 'grid-cols-4 gap-4'
+            }`}>
                 {steps.map((step, index) => {
                     const isActive = index === currentStepIndex;
                     const isCompleted = index < currentStepIndex;
+                    // Larger icons for 3-stage layout
+                    const iconSize = steps.length === 3 ? 'size-16' : 'size-14';
+                    const iconTextSize = steps.length === 3 ? 'text-3xl' : 'text-2xl';
 
                     return (
                         <div
@@ -56,7 +66,7 @@ export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
                             }`}
                         >
                             <div
-                                className={`size-14 rounded-full flex items-center justify-center border-3 transition-all relative ${
+                                className={`${iconSize} rounded-full flex items-center justify-center border-3 transition-all relative ${
                                     isCompleted
                                         ? "bg-green-500 border-green-500 text-white shadow-lg shadow-green-500/50"
                                         : isActive
@@ -70,9 +80,9 @@ export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
                                 </div>
 
                                 {isCompleted ? (
-                                    <span className="material-symbols-outlined text-2xl">check</span>
+                                    <span className={`material-symbols-outlined ${iconTextSize}`}>check</span>
                                 ) : (
-                                    <span className="material-symbols-outlined text-2xl">{step.icon}</span>
+                                    <span className={`material-symbols-outlined ${iconTextSize}`}>{step.icon}</span>
                                 )}
                             </div>
                             <span

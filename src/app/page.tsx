@@ -318,14 +318,26 @@ export default function Page() {
   const [showProgress, setShowProgress] = useState(false);
   const [imageQuality, setImageQuality] = useState<ImageQuality | null>(null);
   const [errorDialog, setErrorDialog] = useState<{ error: ErrorDetails; onRetry?: () => void } | null>(null);
+  const [activeValidationType, setActiveValidationType] = useState<"document" | "photo">("document");
 
-  const validationSteps = [
+  // Document validation stages (5 stages)
+  const documentValidationSteps = [
     { id: "stage1", label: "형식 검증", icon: "description" },
     { id: "stage2", label: "논리 검증", icon: "rule" },
     { id: "stage3", label: "교차 분석", icon: "compare_arrows" },
     { id: "stage4", label: "패턴 감지", icon: "analytics" },
     { id: "stage5", label: "위험 평가", icon: "shield" },
   ];
+
+  // Photo validation stages (3 stages - faster and more relevant)
+  const photoValidationSteps = [
+    { id: "stage1", label: "이미지 분석", icon: "photo_camera" },
+    { id: "stage2", label: "안전 검증", icon: "verified_user" },
+    { id: "stage3", label: "결과 생성", icon: "check_circle" },
+  ];
+
+  // Use appropriate stages based on validation type
+  const validationSteps = activeValidationType === "photo" ? photoValidationSteps : documentValidationSteps;
 
   const [projects, setProjects] = useState<any[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
@@ -547,6 +559,10 @@ export default function Page() {
     validationAbortController.current = controller;
     const signal = controller.signal;
 
+    // Set validation type based on document type
+    const isPhotoValidation = documentType === "SITE_PHOTO";
+    setActiveValidationType(isPhotoValidation ? "photo" : "document");
+
     setLoading(true);
     setShowProgress(true);
     setValidationStep(0);
@@ -626,37 +642,58 @@ export default function Page() {
         return;
       }
 
-      // Stage 1: 형식 검증 (Format validation)
-      await new Promise((r) => setTimeout(r, 200));
-      setValidationStep(1);
-      console.log("[Validation] Stage 1/5 - Format validation");
-
       let imagesToSend: string[] = [];
       if (images.length > 0) {
         imagesToSend.push(images[0]);
         if (images.length > 1) imagesToSend.push(images[images.length - 1]);
       }
 
-      // Stage 2: 논리 검증 (Logic validation)
-      await new Promise((r) => setTimeout(r, 300));
-      setValidationStep(2);
-      console.log("[Validation] Stage 2/5 - Logic validation");
+      // Different progress for photos vs documents
+      if (isPhotoValidation) {
+        // Photo validation: 3 fast stages
+        // Stage 1: 이미지 분석 (Image analysis)
+        await new Promise((r) => setTimeout(r, 150));
+        setValidationStep(1);
+        console.log("[Photo Validation] Stage 1/3 - Image analysis");
 
-      // Stage 3: 교차 분석 (Cross-document analysis)
-      await new Promise((r) => setTimeout(r, 400));
-      setValidationStep(3);
-      console.log("[Validation] Stage 3/5 - Cross-document analysis");
+        // Stage 2: 안전 검증 (Safety validation) - animate during API call
+        await new Promise((r) => setTimeout(r, 150));
+        console.log("[Photo Validation] Stage 2/3 - Safety validation (animating...)");
+        let progressValue = 1.0;
+        progressInterval = setInterval(() => {
+          progressValue += 0.15;
+          if (progressValue < 2.8) {
+            setValidationStep(Math.min(progressValue, 2.5));
+          }
+        }, 300);
+      } else {
+        // Document validation: 5 stages
+        // Stage 1: 형식 검증 (Format validation)
+        await new Promise((r) => setTimeout(r, 200));
+        setValidationStep(1);
+        console.log("[Validation] Stage 1/5 - Format validation");
 
-      // Stage 4: 패턴 감지 (Pattern detection) - animate during API call
-      await new Promise((r) => setTimeout(r, 300));
-      console.log("[Validation] Stage 4/5 - Pattern detection (animating...)");
-      let progressValue = 3.0;
-      progressInterval = setInterval(() => {
-        progressValue += 0.15;
-        if (progressValue < 4.8) {
-          setValidationStep(Math.min(progressValue, 4.5));
-        }
-      }, 400);
+        // Stage 2: 논리 검증 (Logic validation)
+        await new Promise((r) => setTimeout(r, 300));
+        setValidationStep(2);
+        console.log("[Validation] Stage 2/5 - Logic validation");
+
+        // Stage 3: 교차 분석 (Cross-document analysis)
+        await new Promise((r) => setTimeout(r, 400));
+        setValidationStep(3);
+        console.log("[Validation] Stage 3/5 - Cross-document analysis");
+
+        // Stage 4: 패턴 감지 (Pattern detection) - animate during API call
+        await new Promise((r) => setTimeout(r, 300));
+        console.log("[Validation] Stage 4/5 - Pattern detection (animating...)");
+        let progressValue = 3.0;
+        progressInterval = setInterval(() => {
+          progressValue += 0.15;
+          if (progressValue < 4.8) {
+            setValidationStep(Math.min(progressValue, 4.5));
+          }
+        }, 400);
+      }
 
       const res = await fetch("/api/validate", {
         method: "POST",
@@ -713,9 +750,16 @@ export default function Page() {
         throw new Error((data as any).error || "서버 오류가 발생했습니다");
       }
 
-      // Stage 5: 위험 평가 (Risk assessment complete)
-      setValidationStep(4);
-      console.log("[Validation] Stage 5/5 complete - Risk assessment done");
+      // Final stage: Complete
+      if (isPhotoValidation) {
+        // Photo Stage 3: 결과 생성 (Result generation complete)
+        setValidationStep(2);
+        console.log("[Photo Validation] Stage 3/3 complete - Result generation done");
+      } else {
+        // Document Stage 5: 위험 평가 (Risk assessment complete)
+        setValidationStep(4);
+        console.log("[Validation] Stage 5/5 complete - Risk assessment done");
+      }
 
       const elapsedTime = Date.now() - startTime;
       const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
@@ -857,13 +901,8 @@ export default function Page() {
       setImageQuality(null);
     }
 
-    // Auto-start validation for images (Photo Audit)
-    if (f.type.startsWith("image/")) {
-      setFile(f);
-      await runValidation(f, "SITE_PHOTO");
-      return;
-    }
-
+    // Show document type selector for BOTH PDFs and images
+    // User chooses whether it's a scanned document or site photo
     setPendingFile(f);
     setShowDocTypeSelector(true);
   }
@@ -1637,6 +1676,7 @@ export default function Page() {
                   tbmTranscript={report?.tbmTranscript || ""}
                   validationStep={validationStep}
                   showProgress={showProgress}
+                  validationSteps={validationSteps}
                 />
               }
             />
