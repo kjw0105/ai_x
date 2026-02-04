@@ -471,7 +471,8 @@ export default function Page() {
 
   function showWelcomeScreen() {
     setShowWelcome(true);
-    handleClearFile();
+    // Don't auto-clear file when navigating to home
+    // Users can explicitly clear if needed
   }
 
   function showError(error: ErrorDetails, onRetry?: () => void) {
@@ -1224,7 +1225,7 @@ export default function Page() {
       if (currentProjectId === projectId) {
         setCurrentProjectId(null);
         setShowWelcome(true);
-        handleClearFile();
+        performClearFile(); // Clear without confirmation when deleting project
       }
 
       setProjects((prev) => prev.filter((p) => p.id !== projectId));
