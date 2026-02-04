@@ -23,8 +23,8 @@
         onEditProject?: (project: { id: string; name: string; description: string }) => void;
         onShowWelcome?: () => void;
         onStartTBM?: () => void;
-        onUpload?: () => void;
-
+        onUpload: (e?: React.MouseEvent) => void;
+        
         // Breadcrumbs Props
         currentFileName?: string;
 
@@ -243,21 +243,7 @@
                                 )}
 
                                
-                                {onStartTBM && (
-                                    <button
-                                        onClick={onStartTBM}
-                                        disabled={isLoadingProjects}
-                                        className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-black border shadow-sm inline-flex items-center gap-2 transition-all duration-200 text-xs sm:text-sm ${
-                                            isLoadingProjects
-                                                ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-600 cursor-not-allowed opacity-60'
-                                                : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
-                                        }`}
-                                        title="TBM 시작 - 작업 전 대화 녹음"
-                                    >
-                                        <span className="material-symbols-outlined text-base sm:text-xl">mic</span>
-                                        <span className="hidden sm:inline">TBM 시작</span>
-                                    </button>
-                                )}
+                               
 
                                 
                             </>

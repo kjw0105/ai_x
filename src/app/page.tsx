@@ -28,6 +28,10 @@ type Report = {
   issues: any[];
   chat: { role: "ai" | "user"; text: string }[];
   documentType?: string | null;
+
+  // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
+  tbmSummary?: string;
+  tbmTranscript?: string;
 };
 
 function NewProjectModal({
@@ -45,6 +49,7 @@ function NewProjectModal({
   const [loading, setLoading] = useState(false);
   const titleId = useId();
   const descriptionId = useId();
+
   const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!isOpen) return null;
@@ -55,6 +60,9 @@ function NewProjectModal({
     try {
       await onCreate({ name, description, file });
       onClose();
+      setName("");
+      setDescription("");
+      setFile(null);
     } catch (err) {
       console.error("Failed to create project:", err);
     } finally {
@@ -153,18 +161,18 @@ function NewProjectModal({
 
 export default function Page() {
   const toast = useToast();
+  const [latestTBM, setLatestTBM] = useState<{ summary: string; transcript: string } | null>(null);
 
-  // ✅ 업로드(파일 선택창)용 hidden input
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isPickingRef = useRef(false);
+  const [tbmMode, setTbmMode] = useState<"record" | "upload">("record");
 
-  // ✅ validate fetch abort
   const validationAbortController = useRef<AbortController | null>(null);
 
-  // ✅ TBM 모달
   const [tbmOpen, setTbmOpen] = useState(false);
   const [tbmResultOpen, setTbmResultOpen] = useState(false);
   const [tbmResult, setTbmResult] = useState<any>(null);
-  // Doc state
+
   const [file, setFile] = useState<File | null>(null);
   const [pageImages, setPageImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -173,20 +181,16 @@ export default function Page() {
   const [historicalFileName, setHistoricalFileName] = useState<string | undefined>(undefined);
   const [currentReportId, setCurrentReportId] = useState<string | undefined>(undefined);
 
-  // Doc type selector
   const [showDocTypeSelector, setShowDocTypeSelector] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [selectedDocType, setSelectedDocType] = useState<DocumentType | null>(null);
 
-  // Sidebars / modals
   const [showHistory, setShowHistory] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
 
-  // Temp master doc state (for non-project validation)
   const [tempMasterDoc, setTempMasterDoc] = useState<{ text: string; fileName: string } | null>(null);
   const [showTempMasterModal, setShowTempMasterModal] = useState(false);
 
-  // Progress tracking state
   const [validationStep, setValidationStep] = useState(0);
   const [showProgress, setShowProgress] = useState(false);
 
@@ -197,7 +201,6 @@ export default function Page() {
     { id: "complete", label: "완료", icon: "check_circle" },
   ];
 
-  // Project State
   const [projects, setProjects] = useState<any[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -206,20 +209,16 @@ export default function Page() {
   const [projectSelectorKey, setProjectSelectorKey] = useState(0);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
-  // Welcome screen state
   const [showWelcome, setShowWelcome] = useState(true);
 
-  // Reset page when file/images changes
   useEffect(() => setCurrentPage(0), [file, pageImages]);
 
-  // Cleanup abort on unmount
   useEffect(() => {
     return () => {
       if (validationAbortController.current) validationAbortController.current.abort();
     };
   }, []);
 
-  // HYDRATION FIX: Load localStorage state in useEffect
   useEffect(() => {
     const savedProjectId = localStorage.getItem("current_project_id");
     if (savedProjectId) setCurrentProjectId(savedProjectId);
@@ -238,7 +237,12 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const didMountRef = useRef(false);
   useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
     fetchProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectSelectorKey]);
@@ -257,7 +261,6 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProjectId]);
 
-  // Preload font for PDF exports
   useEffect(() => {
     if (typeof window === "undefined") return;
     const link = document.createElement("link");
@@ -279,19 +282,31 @@ export default function Page() {
     }
   }
 
-  // pdfjs
-  let pdfjsPromise: Promise<any> | null = null;
+  function pickFileDialog(e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+
+    if (isPickingRef.current) return;
+    isPickingRef.current = true;
+
+    fileInputRef.current?.click();
+
+    setTimeout(() => {
+      isPickingRef.current = false;
+    }, 5000);
+  }
+
+  const pdfjsPromiseRef = useRef<Promise<any> | null>(null);
   async function getPdfjs() {
-    if (!pdfjsPromise) {
-      pdfjsPromise = import("pdfjs-dist/legacy/build/pdf.mjs").then((pdfjs) => {
+    if (!pdfjsPromiseRef.current) {
+      pdfjsPromiseRef.current = import("pdfjs-dist/legacy/build/pdf.mjs").then((pdfjs) => {
         (pdfjs as any).GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
         return pdfjs;
       });
     }
-    return pdfjsPromise;
+    return pdfjsPromiseRef.current;
   }
 
-  // For image file immediate preview
   useEffect(() => {
     if (!file) {
       setPageImages([]);
@@ -317,13 +332,15 @@ export default function Page() {
     handleClearFile();
   }
 
-  function pickFileDialog() {
-    fileInputRef.current?.click();
+  async function hasMicInput() {
+    const ds = await navigator.mediaDevices.enumerateDevices();
+    return ds.some((d) => d.kind === "audioinput");
   }
 
-  function startTBM() {
-    console.log("[TBM] startTBM clicked");
+  function startTBM(initialMode: "record" | "upload" = "record") {
+    console.log("[TBM] startTBM clicked", initialMode);
     dismissWelcome();
+    setTbmMode(initialMode);
     setTbmOpen(true);
   }
 
@@ -371,7 +388,9 @@ export default function Page() {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       const page = await pdf.getPage(p);
       const content = await page.getTextContent();
-      const pageText = content.items.map((it: any) => (typeof it.str === "string" ? it.str : "")).join(" ");
+      const pageText = content.items
+        .map((it: any) => (typeof it.str === "string" ? it.str : ""))
+        .join(" ");
       full += `\n[PAGE ${p}]\n${pageText}\n`;
     }
     return full;
@@ -385,6 +404,8 @@ export default function Page() {
     const signal = controller.signal;
 
     setLoading(true);
+    setShowProgress(true);
+    setValidationStep(0);
 
     const startTime = Date.now();
     const minDisplayTime = 800;
@@ -422,10 +443,7 @@ export default function Page() {
         return;
       }
 
-      setShowProgress(true);
-      setValidationStep(0);
-      await new Promise((r) => setTimeout(r, 300));
-
+      await new Promise((r) => setTimeout(r, 200));
       setValidationStep(1);
 
       let imagesToSend: string[] = [];
@@ -434,7 +452,7 @@ export default function Page() {
         if (images.length > 1) imagesToSend.push(images[images.length - 1]);
       }
 
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 300));
 
       setValidationStep(2);
       let progressValue = 2.0;
@@ -462,7 +480,18 @@ export default function Page() {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       const data = (await res.json()) as Report;
+      if (latestTBM?.summary) {
+  const first = data.chat?.[0]?.text || "";
+  const merged = `${first}\n\n[TBM 요약]\n${latestTBM.summary}`.trim();
 
+  data.chat = [
+    { role: "ai", text: merged },
+    ...(data.chat?.slice(1) ?? []),
+  ];
+
+  data.tbmSummary = latestTBM.summary;
+  data.tbmTranscript = latestTBM.transcript || "";
+}
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       if (!res.ok) {
@@ -482,13 +511,14 @@ export default function Page() {
 
       const elapsedTime = Date.now() - startTime;
       const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
-      await new Promise((r) => setTimeout(r, remainingTime + 500));
+      await new Promise((r) => setTimeout(r, remainingTime + 300));
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       data.issues = (data.issues ?? []).map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
 
-      setReport({ ...data, documentType: documentType });
+      // ✅ 일반 문서 리포트: TBM 필드는 비움
+      setReport({ ...data, documentType: documentType, tbmSummary: undefined, tbmTranscript: undefined });
     } catch (e: any) {
       if (progressInterval) clearInterval(progressInterval);
       if (e?.name === "AbortError") return;
@@ -539,6 +569,36 @@ export default function Page() {
     }
   }
 
+  async function saveTBMHistory(r: any) {
+    try {
+      const resp = await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "TBM",
+          projectId: currentProjectId,
+          fileName: "TBM(작업 전 대화)",
+          transcript: r?.transcript ?? "",
+          summary: r?.summary ?? "",
+        }),
+      });
+      if (!resp.ok) {
+        const t = await resp.text().catch(() => "");
+        console.warn("[TBM] history save failed:", resp.status, t);
+      } else {
+        setProjectSelectorKey((k) => k + 1);
+      }
+    } catch (e) {
+      console.warn("[TBM] history save error:", e);
+    }
+  }
+
+  function isTBMHistoryRecord(data: any) {
+    const dt = (data?.documentType ?? "") as string;
+    const t = (data?.type ?? "") as string;
+    return dt === "TBM" || t === "TBM";
+  }
+
   async function loadReportFromHistory(id: string) {
     setLoading(true);
     setShowHistory(false);
@@ -547,6 +607,33 @@ export default function Page() {
       const res = await fetch(`/api/history?id=${id}`);
       if (!res.ok) throw new Error("Failed to load report");
       const data = await res.json();
+
+      // ✅ TBM이면: 요약/전사 표시
+if (isTBMHistoryRecord(data)) {
+  const tbmSummary = data.tbmSummary || data.summary || "";
+  const tbmTranscript = data.tbmTranscript || data.transcript || "";
+
+  setReport({
+    fileName: data.fileName ?? "TBM(작업 전 대화)",
+    issues: [],
+    chat: [
+      { role: "ai", text: tbmSummary || "(요약 결과가 비어있어요)" },
+      ...(tbmTranscript
+        ? [{ role: "ai" as const, text: `\n\n[전사본]\n${tbmTranscript}` }]
+        : []),
+    ],
+    documentType: "TBM",
+    tbmSummary,
+    tbmTranscript,
+  });
+
+  setFile(null);
+  setPageImages([]);
+  setHistoricalFileName(data.fileName ?? "TBM(작업 전 대화)");
+  setCurrentReportId(id);
+  return;
+}
+
 
       let issues = JSON.parse(data.issuesJson);
       issues = issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
@@ -560,6 +647,8 @@ export default function Page() {
         issues,
         chat: [{ role: "ai", text: chatText }],
         documentType: data.documentType ?? null,
+        tbmSummary: undefined,
+        tbmTranscript: undefined,
       });
 
       setFile(null);
@@ -577,19 +666,57 @@ export default function Page() {
     setLoading(true);
     dismissWelcome();
 
-    let exportData: {
-      fileName: string;
-      projectName?: string;
-      documentType?: string | null;
-      createdAt: string;
-      issues: Array<{ severity: string; title: string; message: string; ruleId?: string }>;
-      summary: { totalIssues: number; criticalCount: number; warningCount: number; infoCount: number };
-    } | null = null;
+    let exportData: any = null;
 
     try {
       const res = await fetch(`/api/history?id=${id}`);
       if (!res.ok) throw new Error("Failed to load report");
       const data = await res.json();
+
+      if (isTBMHistoryRecord(data)) {
+        exportData = {
+          fileName: data.fileName ?? "TBM(작업 전 대화)",
+          projectName: projects.find((p) => p.id === currentProjectId)?.name,
+          documentType: "TBM",
+          createdAt: new Date(data.createdAt ?? Date.now()).toISOString(),
+          issues: [],
+          summary: { totalIssues: 0, criticalCount: 0, warningCount: 0, infoCount: 0 },
+          projectId: currentProjectId,
+          tbmSummary: data.tbmSummary || data.summary || "",
+          tbmTranscript: data.tbmTranscript || data.transcript || "",
+        };
+
+        const response = await fetch("/api/export-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(exportData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+          throw new Error(errorData.error || `HTTP ${response.status}`);
+        }
+
+        const contentDisposition = response.headers.get("Content-Disposition");
+        let filename = "report.pdf";
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=["']?([^"';\n]*)["']?/);
+          if (filenameMatch?.[1]) filename = decodeURIComponent(filenameMatch[1]);
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        toast.success("TBM PDF를 다시 다운로드했습니다");
+        return;
+      }
 
       let issues = JSON.parse(data.issuesJson);
       issues = issues.map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
@@ -600,17 +727,21 @@ export default function Page() {
         documentType: data.documentType ?? null,
         createdAt: new Date(data.createdAt).toISOString(),
         issues: issues.map((i: any) => ({
-          severity: i.severity,
-          title: i.title,
-          message: i.message,
-          ruleId: i.ruleId,
-        })),
+  severity: i.severity,
+  title: i.title,
+  message: i.message,
+  ruleId: i.ruleId,
+})),
+tbmSummary: report?.tbmSummary || "",
+tbmTranscript: report?.tbmTranscript || "",
+
         summary: {
           totalIssues: issues.length,
           criticalCount: issues.filter((i: any) => i.severity === "error").length,
           warningCount: issues.filter((i: any) => i.severity === "warn").length,
           infoCount: issues.filter((i: any) => i.severity === "info").length,
         },
+        projectId: currentProjectId,
       };
 
       const response = await fetch("/api/export-pdf", {
@@ -630,7 +761,7 @@ export default function Page() {
         const filenameMatch = contentDisposition.match(/filename[^;=\n]*=["']?([^"';\n]*)["']?/);
         if (filenameMatch?.[1]) filename = decodeURIComponent(filenameMatch[1]);
       }
-
+      
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -645,19 +776,25 @@ export default function Page() {
     } catch (error: any) {
       try {
         if (!exportData) throw error;
+
+        if (exportData.documentType === "TBM") {
+          throw new Error("TBM 브라우저 PDF fallback은 아직 지원되지 않습니다 (서버 export 필요)");
+        }
+
         await exportReportToPDF({
           fileName: exportData.fileName,
           projectName: exportData.projectName,
           documentType: exportData.documentType ?? null,
           createdAt: new Date(exportData.createdAt),
-          issues: exportData.issues.map((i) => ({
+          issues: exportData.issues.map((i: any) => ({
             severity: i.severity,
             title: i.title,
             message: i.message,
             ruleId: i.ruleId,
           })),
           summary: exportData.summary,
-        });
+        } as any);
+
         toast.success("브라우저에서 PDF를 생성했습니다");
       } catch (fallbackError: any) {
         toast.error(`PDF 재내보내기에 실패했습니다: ${fallbackError.message || "알 수 없는 오류"}`);
@@ -907,36 +1044,41 @@ export default function Page() {
         onAutoDetect={handleDocTypeAutoDetect}
       />
 
-      {/* ✅ TBM 모달(반드시 tbmOpen으로 제어) */}
       <TBMRecorderModal
         open={tbmOpen}
+        mode={tbmMode}
         projectId={currentProjectId}
         onClose={() => setTbmOpen(false)}
-        onComplete={(r) => {
-          console.log("[TBM] onComplete fired", r);
-          setTbmOpen(false);
-          setTbmResult(r);
-          dismissWelcome();
-          setFile(null);
-          setPageImages([]);
-          setHistoricalFileName(undefined);
-          setTbmResultOpen(true);
-          setReport({
-            fileName: "TBM(작업 전 대화)",
-            issues: [],
-            chat: [
-              { role: "ai", text: r.summary || "(요약 결과가 비어있어요)" },
-              ...(r.transcript ? [{ role: "ai" as const, text: `\n\n[전사본]\n${r.transcript}` }] : []),
-            ],
-            documentType: "TBM",
-          });
-        }}
+        onComplete={async (r) => {
+  await saveTBMHistory(r);
+
+  const tbmSummary = r.summary || "";
+  const tbmTranscript = r.transcript || "";
+  setLatestTBM({ summary: r.summary || "", transcript: r.transcript || "" }); // ✅ 추가
+  setTbmOpen(false);
+  setTbmResult(r);
+  dismissWelcome();
+  setFile(null);
+  setPageImages([]);
+  setHistoricalFileName(undefined);
+  setTbmResultOpen(true);
+
+  setReport({
+    fileName: "TBM(작업 전 대화)",
+    issues: [],
+    chat: [
+      { role: "ai", text: tbmSummary || "(요약 결과가 비어있어요)" },
+      ...(tbmTranscript ? [{ role: "ai" as const, text: `\n\n[전사본]\n${tbmTranscript}` }] : []),
+    ],
+    documentType: "TBM",
+    tbmSummary,
+    tbmTranscript,
+  });
+}}
+ 
       />
-      <TBMResultModal
-  open={tbmResultOpen}
-  data={tbmResult}
-  onClose={() => setTbmResultOpen(false)}
-/>
+
+      <TBMResultModal open={tbmResultOpen} data={tbmResult} onClose={() => setTbmResultOpen(false)} />
 
       <Header
         key={projectSelectorKey}
@@ -958,15 +1100,15 @@ export default function Page() {
         hasTempMasterDoc={!!tempMasterDoc}
         onOpenTempMasterDoc={() => setShowTempMasterModal(true)}
         onStartTBM={startTBM}
-        // ✅ 업로드 버튼을 Header에서 없앴더라도, 혹시 남아있다면 연결 가능
         onUpload={pickFileDialog}
       />
 
-      {/* Progress Modal */}
       {showProgress && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-3xl border border-slate-200 dark:border-slate-700">
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-6 text-center">문서 검증 중...</h3>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-6 text-center">
+              문서 검증 중...
+            </h3>
             <ProgressBar currentStep={validationStep} steps={validationSteps} />
           </div>
         </div>
@@ -991,9 +1133,8 @@ export default function Page() {
         />
       ) : (
         <>
-          {/* Desktop */}
           <div className="hidden lg:flex flex-1 min-h-0 w-full">
-            {(file || report) ? (
+            {file || report ? (
               <ThreeColumnLayout
                 left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
                 center={
@@ -1015,14 +1156,19 @@ export default function Page() {
                   />
                 }
                 right={
-                  <ChatPanel
-                    messages={report?.chat ?? []}
-                    loading={loading}
-                    currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
-                    currentFile={file}
-                    historicalFileName={historicalFileName}
-                    issues={report?.issues ?? []}
-                  />
+                 <ChatPanel
+  messages={report?.chat ?? []}
+  loading={loading}
+  currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
+  currentFile={file}
+  historicalFileName={historicalFileName}
+  issues={report?.issues ?? []}
+  tbmSummary={report?.tbmSummary ?? ""}
+  tbmTranscript={report?.tbmTranscript ?? ""}
+/>
+
+
+
                 }
               />
             ) : (
@@ -1047,7 +1193,6 @@ export default function Page() {
             )}
           </div>
 
-          {/* Mobile/Tablet */}
           <div className="flex lg:hidden flex-1 overflow-hidden">
             <ResizableSplitLayout
               initialLeftWidthPercent={70}
@@ -1079,6 +1224,8 @@ export default function Page() {
                   currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
                   currentFile={file}
                   historicalFileName={historicalFileName}
+                  tbmSummary={report?.tbmSummary || ""}
+                  tbmTranscript={report?.tbmTranscript || ""}
                 />
               }
             />
@@ -1086,7 +1233,6 @@ export default function Page() {
         </>
       )}
 
-      {/* ✅ Hidden file input for upload (required) — 최상위 div 맨 아래에 둔다 */}
       <input
         ref={fileInputRef}
         type="file"
@@ -1095,8 +1241,8 @@ export default function Page() {
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) onPickFile(f);
-          // iOS에서 같은 파일 다시 선택 가능하게
           e.currentTarget.value = "";
+          isPickingRef.current = false;
         }}
       />
     </div>

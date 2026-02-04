@@ -11,7 +11,7 @@ interface DocumentViewerProps {
   reportIssues: any[];
   currentPage: number;
   onPageChange: (page: number) => void;
-  onPickFile: () => void; // 파일 선택창 여는 트리거
+  onPickFile: (e?: React.MouseEvent) => void; // 파일 선택창 여는 트리거
   onFileSelect: (file: File) => void; // drag & drop 에서 파일 들어오는 경로
   onStartTBM?: () => void;
   onClearFile?: () => void;
@@ -99,10 +99,10 @@ export default function DocumentViewer({
       <div className="flex-1 overflow-auto p-8 flex justify-center items-start bg-slate-300/30">
         {!file && !historicalFileName && (
           <EmptyDocumentState
-            onFileSelect={onFileSelect}
-            onUploadClick={onPickFile}   // ✅ 핵심: 중앙 버튼 클릭 → 파일 선택창 열기
-            onStartTBM={onStartTBM}
-          />
+  onFileSelect={onFileSelect}
+  onUploadClick={(e) => onPickFile(e)}
+  onStartTBM={onStartTBM}
+/>
         )}
 
         {!file && historicalFileName && (
@@ -133,7 +133,8 @@ export default function DocumentViewer({
 
             <div className="space-y-3">
               <button
-                onClick={onPickFile}
+                type="button"
+  onClick={(e) => onPickFile(e)}
                 className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2 hover:bg-green-600 transition-colors"
                 title="문서 종류를 선택하고 파일을 업로드합니다"
               >

@@ -16,7 +16,13 @@ interface ChatPanelProps {
   currentFile?: File | null;
   historicalFileName?: string;
   issues?: any[];
+
+  documentType?: string | null;   // ✅ 추가
+  tbmSummary?: string;            // ✅ 추가
+  tbmTranscript?: string;         // ✅ 추가
 }
+
+
 
 export function ChatPanel({
   messages,
@@ -24,8 +30,13 @@ export function ChatPanel({
   currentProjectName,
   currentFile,
   historicalFileName,
-  issues = []
+  issues = [],
+  documentType,     // ✅
+  tbmSummary = "",
+  tbmTranscript = "",    // ✅
 }: ChatPanelProps) {
+
+
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
@@ -74,25 +85,32 @@ export function ChatPanel({
     setIsExportingPDF(true);
 
     const exportData = {
-      fileName: currentFile?.name ?? historicalFileName ?? "report",
-      projectName: currentProjectName,
-      documentType: null,
-      createdAt: new Date().toISOString(),
-      issues: issues.map(i => ({
-        severity: i.severity,
-        title: i.title,
-        message: i.message,
-        ruleId: i.ruleId,
-      })),
-      summary: {
-        totalIssues: issues.length,
-        criticalCount: issues.filter(i => i.severity === "error").length,
-        warningCount: issues.filter(i => i.severity === "warn").length,
-        infoCount: issues.filter(i => i.severity === "info").length,
-      },
-    };
+  fileName: currentFile?.name ?? historicalFileName ?? "report",
+  projectName: currentProjectName,
+  documentType: documentType ?? null,     // ✅ TBM인지 서버가 알아야 함
+  createdAt: new Date().toISOString(),
+  issues: issues.map(i => ({
+    severity: i.severity,
+    title: i.title,
+    message: i.message,
+    ruleId: i.ruleId,
+  })),
+  summary: {
+    totalIssues: issues.length,
+    criticalCount: issues.filter(i => i.severity === "error").length,
+    warningCount: issues.filter(i => i.severity === "warn").length,
+    infoCount: issues.filter(i => i.severity === "info").length,
+  },
+
+  // ✅ 핵심: 최상위로 보내야 함
+  tbmSummary,
+  tbmTranscript,
+};
+
 
     try {
+      console.log("[EXPORT payload]", exportData);
+
       const response = await fetch("/api/export-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
