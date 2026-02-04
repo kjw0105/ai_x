@@ -93,9 +93,11 @@ interface AnalysisPanelProps {
     riskCalculation?: RiskCalculation; // Stage 3: Risk matrix data
     historicalFileName?: string;
     currentFile?: File | null;
+    tbmSummary?: string;
+  tbmTranscript?: string;
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript }: AnalysisPanelProps) {
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
@@ -239,6 +241,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 warningCount: issues.filter(i => i.severity === "warn").length,
                 infoCount: issues.filter(i => i.severity === "info").length,
             },
+            tbmSummary: tbmSummary || "",
+            tbmTranscript: tbmTranscript || "",
         };
 
         try {
@@ -251,6 +255,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
 
             console.log('[AnalysisPanel] Prepared export data:', exportData);
             console.log('[AnalysisPanel] Calling backend API...');
+            console.log("[EXPORT payload]", exportData);
 
             // Call backend API for PDF generation
             const response = await fetch('/api/export-pdf', {

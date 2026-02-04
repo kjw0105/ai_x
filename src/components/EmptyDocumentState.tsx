@@ -5,7 +5,7 @@ import { useState } from "react";
 interface EmptyDocumentStateProps {
   onFileSelect: (file: File) => void;
   onStartTBM?: () => void;
-  onUploadClick?: () => void;
+  onUploadClick: (e?: React.MouseEvent) => void;
 }
 
 export function EmptyDocumentState({
@@ -117,14 +117,12 @@ export function EmptyDocumentState({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
           <button
             type="button"
-            onClick={fireUpload}
-            onPointerUp={fireUpload}
-            onTouchEnd={fireUpload}
+            onClick={(e) => onUploadClick(e)}
             className="relative z-20 w-full px-5 py-3 rounded-2xl bg-primary text-white font-black inline-flex items-center justify-center gap-2 hover:bg-green-600 active:scale-[0.99] transition"
             style={{ touchAction: "manipulation" }}
             title="문서 업로드"
           >
-            <span className="material-symbols-outlined">upload</span>
+            <span className="material-symbols-outlined pointer-events-none">upload</span>
             파일 업로드
           </button>
 
@@ -132,8 +130,7 @@ export function EmptyDocumentState({
             <button
               type="button"
               onClick={fireTBM}
-              onPointerUp={fireTBM}
-              onTouchEnd={fireTBM}
+              
               className="relative z-20 w-full px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold inline-flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-[0.99] transition"
               style={{ touchAction: "manipulation" }}
               title="TBM 시작"
