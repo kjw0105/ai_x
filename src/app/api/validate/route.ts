@@ -417,20 +417,28 @@ export async function POST(req: Request) {
     const extractedChat = Array.isArray((extracted as { chat?: unknown }).chat)
       ? JSON.stringify((extracted as { chat?: unknown[] }).chat)
       : null;
-    const savedReport = await prisma.report.create({
-      data: {
-        id: reportId,
-        fileName: fileName ?? "Untitled",
-        docDataJson: JSON.stringify(extracted),
-        issuesJson: JSON.stringify(allIssues),
-        chatJson: extractedChat,
-        projectId: projectId ?? null,
-        documentType: documentType ?? null,
-        // Stage 4: Save inspector name and checklist for pattern analysis
-        inspectorName: extracted.inspectorName ?? null,
-        checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
-      }
-    });
+
+    let savedReport = { id: reportId }; // Default ID if save fails
+
+    try {
+      await prisma.report.create({
+        data: {
+          id: reportId,
+          fileName: fileName ?? "Untitled",
+          docDataJson: JSON.stringify(extracted),
+          issuesJson: JSON.stringify(allIssues),
+          chatJson: extractedChat,
+          projectId: projectId ?? null,
+          documentType: documentType ?? null,
+          // Stage 4: Save inspector name and checklist for pattern analysis
+          inspectorName: extracted.inspectorName ?? null,
+          checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
+        }
+      });
+    } catch (e) {
+      console.warn("History save failed (likely read-only DB on Vercel):", e);
+      // Continue without failing the user response
+    }
 
     // Stage 5: Risk Signals - Format output with non-judgmental language
     const riskSignals = allIssues
