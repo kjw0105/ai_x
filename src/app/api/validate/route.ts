@@ -297,6 +297,12 @@ export async function POST(req: Request) {
       (extracted.checklist?.length ?? 0) > 0;
 
     if (!isSafetyDocument) {
+      // ✅ Better error message for images
+      const wasImage = pageImages && pageImages.length > 0;
+      const errorMessage = wasImage
+        ? "업로드된 이미지에서 안전 점검 문서 내용을 찾을 수 없습니다. 이미지가 선명하고 문서 전체가 잘 보이는지 확인해주세요. 흐릿하거나 일부만 촬영된 경우 다시 촬영해주세요."
+        : "업로드된 문서는 안전 점검 관련 문서가 아닌 것으로 보입니다. 산업안전 점검표, 위험성 평가 보고서, TBM 결과 등 안전 점검 문서를 업로드해주세요.";
+
       return NextResponse.json(
         {
           error: "안전 점검 문서가 아닌 것으로 판단됩니다",
@@ -305,7 +311,7 @@ export async function POST(req: Request) {
           chat: [
             {
               role: "ai",
-              text: "업로드된 문서는 안전 점검 관련 문서가 아닌 것으로 보입니다. 산업안전 점검표, 위험성 평가 보고서, TBM 결과 등 안전 점검 문서를 업로드해주세요."
+              text: errorMessage
             }
           ]
         },
