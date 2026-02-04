@@ -58,10 +58,10 @@ export function WelcomeScreen({
                     <div className="inline-flex items-center justify-center size-20 bg-primary rounded-2xl text-white shadow-2xl shadow-primary/30 mb-6">
                         <span className="material-symbols-outlined text-5xl">safety_check</span>
                     </div>
-                    <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-3">
+                    <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-3" suppressHydrationWarning>
                         스마트 안전지킴이에 오신 것을 환영합니다
                     </h1>
-                    <p className="text-lg text-slate-600 dark:text-slate-300">
+                    <p className="text-lg text-slate-600 dark:text-slate-300" suppressHydrationWarning>
                         안전 점검 문서를 검증하려면 프로젝트를 선택하거나 새로 만드세요
                     </p>
                 </div>

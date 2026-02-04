@@ -31,6 +31,7 @@ import { ModalDialog } from "@/components/ModalDialog";
 import { exportReportToPDF } from "@/lib/pdfExport";
 import TBMResultModal from "@/components/TBMResultModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import TBMTimeline from "@/components/TBMTimeline";
 
 type Report = {
   fileName: string;
@@ -349,6 +350,11 @@ export default function Page() {
 
   const [showWelcome, setShowWelcome] = useState(true);
 
+  // TBM Timeline states
+  const [activeTab, setActiveTab] = useState<"document" | "tbm">("document");
+  const [tbmRecords, setTbmRecords] = useState<any[]>([]);
+  const [loadingTBMs, setLoadingTBMs] = useState(false);
+
   // Confirmation dialog states
   const [confirmClearFile, setConfirmClearFile] = useState(false);
   const [confirmProjectSwitch, setConfirmProjectSwitch] = useState<{ projectId: string | null } | null>(null);
@@ -411,6 +417,14 @@ export default function Page() {
     link.as = "style";
     document.head.appendChild(link);
   }, []);
+
+  // Load TBM records when switching to TBM tab or project changes
+  useEffect(() => {
+    if (activeTab === "tbm") {
+      loadTBMRecords();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, currentProjectId]);
 
   async function fetchProjects() {
     setIsLoadingProjects(true);
@@ -706,6 +720,12 @@ export default function Page() {
           projectId: currentProjectId,
           documentType: documentType,
           tempContextText: !currentProjectId && tempMasterDoc ? tempMasterDoc.text : undefined,
+          latestTBM: latestTBM ? {
+            workType: latestTBM.workType,
+            extractedHazards: latestTBM.extractedHazards || [],
+            extractedInspector: latestTBM.extractedInspector,
+            summary: latestTBM.summary,
+          } : null,
         }),
         signal,
       });
@@ -934,8 +954,13 @@ export default function Page() {
           type: "TBM",
           projectId: currentProjectId,
           fileName: "TBM(작업 전 대화)",
-          transcript: r?.transcript ?? "",
           summary: r?.summary ?? "",
+          transcript: r?.transcript ?? "",
+          tbmDuration: r?.duration ?? 0,
+          workType: r?.workType ?? null,
+          extractedHazards: JSON.stringify(r?.extractedHazards ?? []),
+          extractedInspector: r?.extractedInspector ?? null,
+          participants: JSON.stringify(r?.participants ?? []),
         }),
       });
       if (!resp.ok) {
@@ -953,6 +978,46 @@ export default function Page() {
     const dt = (data?.documentType ?? "") as string;
     const t = (data?.type ?? "") as string;
     return dt === "TBM" || t === "TBM";
+  }
+
+  async function loadTBMRecords() {
+    setLoadingTBMs(true);
+    try {
+      // Fetch TBMs for current project, or all TBMs if no project selected
+      const url = currentProjectId
+        ? `/api/history?projectId=${currentProjectId}`
+        : `/api/history`;
+
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch: ${resp.status}`);
+      }
+
+      const allReports = await resp.json();
+      const tbms = allReports.filter((r: any) => r.documentType === "TBM");
+
+      console.log(`[TBM Timeline] Loaded ${tbms.length} TBM records`);
+      setTbmRecords(tbms);
+    } catch (e) {
+      console.error("Failed to load TBM records:", e);
+      setTbmRecords([]);
+    } finally {
+      setLoadingTBMs(false);
+    }
+  }
+
+  async function deleteTBM(id: string) {
+    try {
+      const resp = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
+      if (!resp.ok) throw new Error("Failed to delete TBM");
+
+      // Refresh the list
+      await loadTBMRecords();
+      toast.success("TBM 기록이 삭제되었습니다", 2000);
+    } catch (e) {
+      console.error("Failed to delete TBM:", e);
+      toast.error("삭제에 실패했습니다", 2000);
+    }
   }
 
   async function loadReportFromHistory(id: string) {
@@ -1452,31 +1517,42 @@ export default function Page() {
         projectId={currentProjectId}
         onClose={() => setTbmOpen(false)}
         onComplete={async (r) => {
+          console.log("[TBM onComplete] Starting...", r);
+
+          // Save to database
           await saveTBMHistory(r);
+          console.log("[TBM onComplete] Saved to database");
 
-          const tbmSummary = r.summary || "";
-          const tbmTranscript = r.transcript || "";
-          setLatestTBM({ summary: r.summary || "", transcript: r.transcript || "" }); // ✅ 추가
-          setTbmOpen(false);
-          setTbmResult(r);
-          dismissWelcome();
-          setFile(null);
-          setPageImages([]);
-          // ✅ Set historicalFileName so DocumentViewer knows there's content
-          setHistoricalFileName("TBM(작업 전 대화)");
-          setTbmResultOpen(true);
+          // Small delay to ensure database write completes
+          await new Promise(resolve => setTimeout(resolve, 100));
 
-          setReport({
-            fileName: "TBM(작업 전 대화)",
-            issues: [],
-            chat: [
-              { role: "ai", text: tbmSummary || "(요약 결과가 비어있어요)" },
-              ...(tbmTranscript ? [{ role: "ai" as const, text: `\n\n[전사본]\n${tbmTranscript}` }] : []),
-            ],
-            documentType: "TBM",
-            tbmSummary,
-            tbmTranscript,
+          // Set latest TBM context for validation
+          setLatestTBM({
+            summary: r.summary || "",
+            transcript: r.transcript || "",
+            workType: r.workType || null,
+            extractedHazards: r.extractedHazards || [],
+            extractedInspector: r.extractedInspector || null,
           });
+
+          // Close modal
+          setTbmOpen(false);
+          dismissWelcome();
+
+          // Auto-switch to TBM Timeline tab
+          setActiveTab("tbm");
+          console.log("[TBM onComplete] Switched to TBM tab");
+
+          // Reload TBM records to show the new one
+          console.log("[TBM onComplete] Loading TBM records...");
+          await loadTBMRecords();
+          console.log("[TBM onComplete] TBM records loaded");
+
+          // Show success toast with extracted info
+          const workTypeText = r.workType ? `"${r.workType}"` : "TBM";
+          const hazardCount = r.extractedHazards?.length || 0;
+          const hazardText = hazardCount > 0 ? ` (${hazardCount}개 위험요인 감지)` : "";
+          toast.success(`${workTypeText} 녹음이 완료되었습니다${hazardText}`, 4000);
         }}
 
       />
@@ -1563,7 +1639,33 @@ export default function Page() {
         />
       ) : (
         <>
-          <div className="hidden lg:flex flex-1 min-h-0 w-full">
+          {/* Tab Switcher */}
+          <div className="flex items-center gap-2 px-6 pt-4 pb-2 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <button
+              onClick={() => setActiveTab("document")}
+              className={`px-4 py-2 rounded-t-lg font-medium transition ${
+                activeTab === "document"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
+              }`}
+            >
+              📄 문서 검증
+            </button>
+            <button
+              onClick={() => setActiveTab("tbm")}
+              className={`px-4 py-2 rounded-t-lg font-medium transition ${
+                activeTab === "tbm"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
+              }`}
+            >
+              🎤 TBM 타임라인 {tbmRecords.length > 0 && `(${tbmRecords.length})`}
+            </button>
+          </div>
+
+          {activeTab === "document" ? (
+            <>
+              <div className="hidden lg:flex flex-1 min-h-0 w-full">
             {file || report ? (
               <ThreeColumnLayout
                 left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
@@ -1682,6 +1784,28 @@ export default function Page() {
               }
             />
           </div>
+            </>
+          ) : (
+            <div className="flex-1 overflow-hidden">
+              <TBMTimeline
+                tbmRecords={tbmRecords}
+                loading={loadingTBMs}
+                onSelectTBM={(record) => {
+                  setLatestTBM({
+                    summary: record.tbmSummary,
+                    transcript: record.tbmTranscript,
+                    workType: record.tbmWorkType,
+                    extractedHazards: record.tbmExtractedHazards ? JSON.parse(record.tbmExtractedHazards) : [],
+                    extractedInspector: record.tbmExtractedInspector,
+                  });
+                  setActiveTab("document");
+                  toast.success("TBM이 선택되었습니다. 문서를 업로드하여 검증하세요.", 3000);
+                }}
+                onRefresh={loadTBMRecords}
+                onDelete={deleteTBM}
+              />
+            </div>
+          )}
         </>
       )}
 

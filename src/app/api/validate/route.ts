@@ -13,6 +13,7 @@ import { calculateRiskLevel, riskCalculationToIssues } from "@/lib/riskMatrix";
 import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } from "@/lib/crossDocumentAnalysis";
 import { parseDocExtraction } from "@/lib/docSchema";
 import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtraction } from "@/lib/extractionSchema";
+import { validateAgainstTBM } from "@/lib/tbmCrossValidation";
 import {
   VERIFICATION_TOOLS,
   shouldVerifyExtraction,
@@ -453,7 +454,7 @@ async function verifyExtraction(
 
 export async function POST(req: Request) {
   try {
-    const { provider, fileName, pdfText, pageImages, projectId, documentType, tempContextText } = await req.json();
+    const { provider, fileName, pdfText, pageImages, projectId, documentType, tempContextText, latestTBM } = await req.json();
 
     // VALIDATION: Check if document has sufficient content
     const hasText = pdfText && pdfText.trim().length >= 50;
@@ -872,8 +873,21 @@ export async function POST(req: Request) {
       }
     }
 
-    // Merge all issues: validation + structured + risk + pattern + cross-document analysis
-    const allIssues = [...validationIssues, ...mismatchIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues].map(issue => ({
+    // Stage 3d: TBM Cross-Validation
+    let tbmIssues: typeof validationIssues = [];
+    if (latestTBM && latestTBM.extractedHazards && latestTBM.extractedHazards.length > 0) {
+      try {
+        console.log("[Stage 3d] Running TBM cross-validation...");
+        tbmIssues = validateAgainstTBM(extracted, latestTBM);
+        console.log(`[Stage 3d] TBM validation found ${tbmIssues.length} issues`);
+      } catch (e) {
+        console.warn("[Stage 3d] TBM validation failed:", e);
+        // Non-critical, continue without TBM validation
+      }
+    }
+
+    // Merge all issues: validation + structured + risk + pattern + cross-document + TBM analysis
+    const allIssues = [...validationIssues, ...mismatchIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues, ...tbmIssues].map(issue => ({
       ...issue,
       id: crypto.randomUUID()
     }));

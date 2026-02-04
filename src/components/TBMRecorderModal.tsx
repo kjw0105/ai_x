@@ -335,14 +335,35 @@ form.append("audio", audioBlob, filename);
 
           {mode === "record" ? (
             <>
+              {!isRecording && !isPosting && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 text-sm text-blue-800 dark:text-blue-300">
+                  <div className="font-bold mb-1">📝 녹음 가이드</div>
+                  <div className="text-xs">
+                    1. "녹음 시작" 버튼을 클릭하세요<br />
+                    2. 작업 내용, 위험요인, 담당자를 말씀하세요<br />
+                    3. AI가 자동으로 정보를 추출합니다
+                  </div>
+                </div>
+              )}
+
               <RecordingHUD stream={stream} isRecording={isRecording} startedAtMs={startedAtMs} />
+
+              {isPosting && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3 text-sm text-yellow-800 dark:text-yellow-300">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin size-4 border-2 border-yellow-600 border-t-transparent rounded-full"></div>
+                    <span className="font-bold">AI가 녹음을 분석하는 중...</span>
+                  </div>
+                  <div className="text-xs mt-1">작업 종류, 위험요인, 담당자를 추출합니다</div>
+                </div>
+              )}
 
               <div className="flex gap-2">
                 {!isRecording ? (
                   <button
                     onClick={start}
                     disabled={isPosting}
-                    className="flex-1 px-4 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-black disabled:opacity-50"
+                    className="flex-1 px-4 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-black disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPosting ? "처리 중..." : "녹음 시작"}
                   </button>

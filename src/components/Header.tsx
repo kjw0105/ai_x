@@ -135,7 +135,19 @@
                             </span>
                         </div>
 
-                        {/* Overflow Menu */}
+                        {/* TBM Button */}
+                        {onStartTBM && (
+                            <button
+                                onClick={onStartTBM}
+                                disabled={showWelcome}
+                                className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white font-bold transition-colors disabled:cursor-not-allowed"
+                                aria-label="TBM 녹음 시작"
+                                title="TBM 녹음 - 작업 전 안전회의를 녹음하고 자동으로 요약합니다"
+                            >
+                                <span className="material-symbols-outlined text-lg sm:text-xl">mic</span>
+                            </button>
+                        )}
+
                         {/* Overflow Menu */}
 <div className="relative" ref={menuRef}>
   <button
@@ -150,6 +162,22 @@
   {/* Dropdown Menu */}
   {menuOpen && (
     <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+      {onStartTBM && (
+        <button
+          onClick={() => {
+            onStartTBM();
+            setMenuOpen(false);
+          }}
+          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 text-left text-slate-700 dark:text-slate-200 transition-colors"
+        >
+          <span className="material-symbols-outlined text-xl">mic</span>
+          <div>
+            <div className="font-bold text-sm">TBM 녹음</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">작업 전 안전회의 녹음</div>
+          </div>
+        </button>
+      )}
+
       <button
         onClick={() => {
           onShowHistory();
