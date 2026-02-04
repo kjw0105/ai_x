@@ -16,6 +16,9 @@ import { EditProjectModal } from "@/components/EditProjectModal";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { ProgressBar } from "@/components/ProgressBar";
 import { TempMasterDocModal } from "@/components/TempMasterDocModal";
+import { ImageQualityCard, type ImageQuality } from "@/components/ImageQualityCard";
+import { ErrorDialog } from "@/components/ErrorDialog";
+import { ErrorMessages, type ErrorDetails, formatErrorMessage } from "@/lib/errorMessages";
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
@@ -193,12 +196,15 @@ export default function Page() {
 
   const [validationStep, setValidationStep] = useState(0);
   const [showProgress, setShowProgress] = useState(false);
+  const [imageQuality, setImageQuality] = useState<ImageQuality | null>(null);
+  const [errorDialog, setErrorDialog] = useState<{ error: ErrorDetails; onRetry?: () => void } | null>(null);
 
   const validationSteps = [
-    { id: "extract", label: "텍스트 추출", icon: "description" },
-    { id: "analyze", label: "AI 분석", icon: "psychology" },
-    { id: "validate", label: "규칙 검증", icon: "task_alt" },
-    { id: "complete", label: "완료", icon: "check_circle" },
+    { id: "stage1", label: "형식 검증", icon: "description" },
+    { id: "stage2", label: "논리 검증", icon: "rule" },
+    { id: "stage3", label: "교차 분석", icon: "compare_arrows" },
+    { id: "stage4", label: "패턴 감지", icon: "analytics" },
+    { id: "stage5", label: "위험 평가", icon: "shield" },
   ];
 
   const [projects, setProjects] = useState<any[]>([]);
@@ -332,6 +338,10 @@ export default function Page() {
     handleClearFile();
   }
 
+  function showError(error: ErrorDetails, onRetry?: () => void) {
+    setErrorDialog({ error, onRetry });
+  }
+
   async function hasMicInput() {
     const ds = await navigator.mediaDevices.enumerateDevices();
     return ds.some((d) => d.kind === "audioinput");
@@ -419,6 +429,17 @@ export default function Page() {
         images = await renderPdfPages(f, signal);
         text = await extractPdfText(f, signal);
       } else if (f.type.startsWith("image/")) {
+        // ✅ Basic image validation
+        if (f.size < 10000) {
+          // Less than 10KB is suspiciously small
+          if (!signal.aborted) {
+            showError(ErrorMessages.IMAGE_TOO_SMALL(), () => pickFileDialog());
+            setFile(null);
+            setShowProgress(false);
+          }
+          return;
+        }
+
         const reader = new FileReader();
         const dataUrl = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(reader.result as string);
@@ -426,6 +447,25 @@ export default function Page() {
           reader.readAsDataURL(f);
         });
         if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+        // ✅ Check image dimensions
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = dataUrl;
+        });
+
+        if (img.width < 400 || img.height < 400) {
+          if (!signal.aborted) {
+            showError(ErrorMessages.IMAGE_LOW_RESOLUTION(img.width, img.height), () => pickFileDialog());
+            setFile(null);
+            setShowProgress(false);
+          }
+          return;
+        }
+
+        console.log(`[Image] Validated: ${img.width}x${img.height}, ${(f.size / 1024).toFixed(1)}KB`);
         images = [dataUrl];
       }
 
@@ -435,7 +475,7 @@ export default function Page() {
       const hasImages = images && images.length > 0;
       if (!hasText && !hasImages) {
         if (!signal.aborted) {
-          toast.error("문서에 내용이 없거나 읽을 수 없습니다");
+          showError(ErrorMessages.EMPTY_DOCUMENT(), () => pickFileDialog());
           setFile(null);
           setReport(null);
           setShowProgress(false);
@@ -443,6 +483,7 @@ export default function Page() {
         return;
       }
 
+      // Stage 1: 형식 검증 (Format validation)
       await new Promise((r) => setTimeout(r, 200));
       setValidationStep(1);
 
@@ -452,14 +493,20 @@ export default function Page() {
         if (images.length > 1) imagesToSend.push(images[images.length - 1]);
       }
 
+      // Stage 2: 논리 검증 (Logic validation)
       await new Promise((r) => setTimeout(r, 300));
-
       setValidationStep(2);
-      let progressValue = 2.0;
+
+      // Stage 3: 교차 분석 (Cross-document analysis)
+      await new Promise((r) => setTimeout(r, 400));
+      setValidationStep(3);
+
+      // Stage 4: 패턴 감지 (Pattern detection) - animate during API call
+      let progressValue = 3.0;
       progressInterval = setInterval(() => {
-        progressValue += 0.05;
-        if (progressValue < 2.9) setValidationStep(progressValue);
-      }, 500);
+        progressValue += 0.1;
+        if (progressValue < 3.9) setValidationStep(progressValue);
+      }, 600);
 
       const res = await fetch("/api/validate", {
         method: "POST",
@@ -497,7 +544,15 @@ export default function Page() {
       if (!res.ok) {
         if (res.status === 400) {
           if (!signal.aborted) {
-            toast.error((data as any).error || "문서 검증에 실패했습니다");
+            const errorMsg = (data as any).error || "문서 검증에 실패했습니다";
+            // Check if it's a "not a safety document" error
+            if (errorMsg.includes("안전") || errorMsg.includes("문서")) {
+              showError(ErrorMessages.NOT_SAFETY_DOCUMENT(), () => pickFileDialog());
+            } else {
+              showError(ErrorMessages.VALIDATION_FAILED(errorMsg), () => {
+                if (f) runValidation(f, documentType);
+              });
+            }
             setFile(null);
             setReport(null);
             setShowProgress(false);
@@ -507,7 +562,8 @@ export default function Page() {
         throw new Error((data as any).error || "서버 오류가 발생했습니다");
       }
 
-      setValidationStep(3);
+      // Stage 5: 위험 평가 (Risk assessment complete)
+      setValidationStep(4);
 
       const elapsedTime = Date.now() - startTime;
       const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
@@ -523,8 +579,10 @@ export default function Page() {
       if (progressInterval) clearInterval(progressInterval);
       if (e?.name === "AbortError") return;
       console.error(e);
-      toast.error(e?.message || "문서 검증 중 오류가 발생했습니다");
       if (!signal.aborted) {
+        showError(ErrorMessages.VALIDATION_ERROR(e?.message), () => {
+          if (f) runValidation(f, documentType);
+        });
         setFile(null);
         setReport(null);
       }
@@ -536,17 +594,113 @@ export default function Page() {
     }
   }
 
+  async function analyzeImageQuality(file: File): Promise<ImageQuality> {
+    const reader = new FileReader();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+
+    const width = img.width;
+    const height = img.height;
+    const fileSize = file.size;
+    const megapixels = (width * height) / 1_000_000;
+
+    let quality: ImageQuality["quality"];
+    const issues: string[] = [];
+    const tips: string[] = [];
+
+    // Determine quality level
+    if (width >= 1920 && height >= 1080 && fileSize >= 100_000) {
+      quality = "excellent";
+      tips.push("이미지 품질이 우수합니다. 검증을 진행하세요.");
+    } else if (width >= 1280 && height >= 720 && fileSize >= 50_000) {
+      quality = "good";
+      tips.push("이미지 품질이 양호합니다.");
+    } else if (width >= 800 && height >= 600 && fileSize >= 30_000) {
+      quality = "fair";
+      issues.push("해상도가 다소 낮습니다. 더 선명한 사진을 권장합니다.");
+      tips.push("밝은 조명에서 다시 촬영해보세요.");
+      tips.push("카메라를 문서에 가까이 대고 촬영하세요.");
+    } else {
+      quality = "poor";
+      issues.push("해상도가 매우 낮습니다 (" + width + "×" + height + ")");
+      tips.push("최소 800×600 이상의 해상도로 촬영하세요.");
+      tips.push("밝은 조명에서 문서 전체가 보이도록 촬영하세요.");
+      tips.push("손떨림 방지를 위해 안정된 자세로 촬영하세요.");
+    }
+
+    // Check file size
+    if (fileSize < 10_000) {
+      quality = "poor";
+      issues.push("파일 크기가 너무 작습니다 (" + (fileSize / 1024).toFixed(1) + "KB)");
+      tips.push("원본 사진을 압축하지 말고 업로드하세요.");
+    } else if (fileSize > 10_000_000) {
+      issues.push("파일 크기가 매우 큽니다 (" + (fileSize / 1024 / 1024).toFixed(1) + "MB)");
+      tips.push("업로드 시간이 오래 걸릴 수 있습니다.");
+    }
+
+    // Check aspect ratio (documents should be roughly rectangular)
+    const aspectRatio = width / height;
+    if (aspectRatio < 0.5 || aspectRatio > 2.5) {
+      issues.push("비정상적인 가로세로 비율입니다. 문서 전체가 잘 보이는지 확인하세요.");
+    }
+
+    // Check megapixels
+    if (megapixels < 0.5) {
+      issues.push("이미지 해상도가 낮아 텍스트 인식이 어려울 수 있습니다.");
+    }
+
+    console.log(`[Image Quality] ${width}×${height}, ${(fileSize/1024).toFixed(1)}KB, ${megapixels.toFixed(1)}MP → ${quality}`);
+
+    return {
+      resolution: { width, height },
+      fileSize,
+      quality,
+      issues,
+      tips,
+    };
+  }
+
   async function onPickFile(f: File) {
     dismissWelcome();
 
     if (f.size === 0) {
-      toast.error("빈 파일입니다. 내용이 있는 문서를 업로드해주세요");
+      showError(ErrorMessages.EMPTY_FILE(), () => pickFileDialog());
       return;
     }
 
     setFile(f);
     setReport(null);
     setHistoricalFileName(undefined);
+
+    // Analyze image quality for images
+    if (f.type.startsWith("image/")) {
+      try {
+        const quality = await analyzeImageQuality(f);
+        setImageQuality(quality);
+
+        // Warn about poor quality images
+        if (quality.quality === "poor") {
+          toast.warning("⚠️ 이미지 품질이 불량합니다. 검증 결과가 부정확할 수 있습니다.");
+          // Still allow proceeding with validation, but show warning
+        }
+      } catch (error) {
+        console.error("Image quality analysis failed:", error);
+        // Continue anyway
+      }
+    } else {
+      // Reset image quality for PDFs
+      setImageQuality(null);
+    }
 
     setPendingFile(f);
     setShowDocTypeSelector(true);
@@ -656,7 +810,7 @@ if (isTBMHistoryRecord(data)) {
       setHistoricalFileName(data.fileName);
       setCurrentReportId(id);
     } catch (e) {
-      toast.error("기록을 불러오는 데 실패했습니다");
+      showError(ErrorMessages.LOAD_HISTORY_FAILED(), () => loadReportFromHistory(id));
     } finally {
       setLoading(false);
     }
@@ -797,7 +951,7 @@ tbmTranscript: report?.tbmTranscript || "",
 
         toast.success("브라우저에서 PDF를 생성했습니다");
       } catch (fallbackError: any) {
-        toast.error(`PDF 재내보내기에 실패했습니다: ${fallbackError.message || "알 수 없는 오류"}`);
+        showError(ErrorMessages.PDF_EXPORT_FAILED(fallbackError.message), () => exportReportFromHistory(id));
       }
     } finally {
       setLoading(false);
@@ -833,7 +987,7 @@ tbmTranscript: report?.tbmTranscript || "",
       setCurrentProjectId(newProject.id);
       dismissWelcome();
     } catch (error) {
-      toast.error("프로젝트 생성에 실패했습니다");
+      showError(ErrorMessages.PROJECT_CREATE_FAILED());
       throw error;
     }
   }
@@ -855,7 +1009,7 @@ tbmTranscript: report?.tbmTranscript || "",
       setProjects((prev) => prev.filter((p) => p.id !== projectId));
       toast.success("프로젝트가 삭제되었습니다");
     } catch (error) {
-      toast.error("프로젝트 삭제에 실패했습니다");
+      showError(ErrorMessages.PROJECT_DELETE_FAILED());
       throw error;
     }
   }
@@ -906,7 +1060,7 @@ tbmTranscript: report?.tbmTranscript || "",
       setShowTempMasterModal(false);
     } catch (error) {
       console.error("Failed to upload temp master doc", error);
-      toast.error("임시 마스터 문서 업로드에 실패했습니다");
+      showError(ErrorMessages.TEMP_MASTER_DOC_UPLOAD_FAILED());
     }
   }
 
@@ -927,6 +1081,7 @@ tbmTranscript: report?.tbmTranscript || "",
     setCurrentPage(0);
     setHistoricalFileName(undefined);
     setCurrentReportId(undefined);
+    setImageQuality(null);
   }
 
   async function loadCurrentProjectState() {
@@ -1060,7 +1215,8 @@ tbmTranscript: report?.tbmTranscript || "",
   dismissWelcome();
   setFile(null);
   setPageImages([]);
-  setHistoricalFileName(undefined);
+  // ✅ Set historicalFileName so DocumentViewer knows there's content
+  setHistoricalFileName("TBM(작업 전 대화)");
   setTbmResultOpen(true);
 
   setReport({
@@ -1153,6 +1309,9 @@ tbmTranscript: report?.tbmTranscript || "",
                     currentProjectId={currentProjectId}
                     currentReportId={currentReportId}
                     onLoadDocument={loadReportFromHistory}
+                    tbmSummary={report?.tbmSummary}
+                    tbmTranscript={report?.tbmTranscript}
+                    imageQuality={imageQuality}
                   />
                 }
                 right={
@@ -1165,6 +1324,7 @@ tbmTranscript: report?.tbmTranscript || "",
   issues={report?.issues ?? []}
   tbmSummary={report?.tbmSummary ?? ""}
   tbmTranscript={report?.tbmTranscript ?? ""}
+  documentType={report?.documentType ?? null}
 />
 
 
@@ -1188,6 +1348,9 @@ tbmTranscript: report?.tbmTranscript || "",
                   currentProjectId={currentProjectId}
                   currentReportId={currentReportId}
                   onLoadDocument={loadReportFromHistory}
+                  tbmSummary={report?.tbmSummary}
+                  tbmTranscript={report?.tbmTranscript}
+                  imageQuality={imageQuality}
                 />
               </div>
             )}
@@ -1212,6 +1375,9 @@ tbmTranscript: report?.tbmTranscript || "",
                   currentProjectId={currentProjectId}
                   currentReportId={currentReportId}
                   onLoadDocument={loadReportFromHistory}
+                  tbmSummary={report?.tbmSummary}
+                  tbmTranscript={report?.tbmTranscript}
+                  imageQuality={imageQuality}
                 />
               }
               right={
@@ -1245,6 +1411,15 @@ tbmTranscript: report?.tbmTranscript || "",
           isPickingRef.current = false;
         }}
       />
+
+      {/* Error Dialog */}
+      {errorDialog && (
+        <ErrorDialog
+          error={errorDialog.error}
+          onClose={() => setErrorDialog(null)}
+          onRetry={errorDialog.onRetry}
+        />
+      )}
     </div>
   );
 }

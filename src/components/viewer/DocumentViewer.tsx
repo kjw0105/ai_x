@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
 import { EmptyDocumentState } from "@/components/EmptyDocumentState";
 import { RecentDocuments } from "@/components/RecentDocuments";
+import { ImageQualityCard, type ImageQuality } from "@/components/ImageQualityCard";
 
 interface DocumentViewerProps {
   file: File | null;
@@ -20,6 +21,9 @@ interface DocumentViewerProps {
   currentProjectId?: string | null;
   currentReportId?: string;
   onLoadDocument?: (id: string) => void;
+  tbmSummary?: string;
+  tbmTranscript?: string;
+  imageQuality?: ImageQuality | null;
 }
 
 export default function DocumentViewer({
@@ -37,6 +41,9 @@ export default function DocumentViewer({
   currentProjectId,
   currentReportId,
   onLoadDocument,
+  tbmSummary,
+  tbmTranscript,
+  imageQuality,
 }: DocumentViewerProps) {
   const issueCount = reportIssues.length;
   const [isZoomOpen, setIsZoomOpen] = useState(false);
@@ -105,7 +112,64 @@ export default function DocumentViewer({
 />
         )}
 
-        {!file && historicalFileName && (
+        {/* ✅ TBM-only mode: show TBM card */}
+        {!file && documentType === "TBM" && historicalFileName && (
+          <div className="w-full max-w-[800px] bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 border border-slate-200 dark:border-slate-700 mt-20">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="size-16 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg">
+                <span className="material-symbols-outlined text-4xl text-white">
+                  mic
+                </span>
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white">TBM 완료</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">작업 전 대화 기록</p>
+              </div>
+            </div>
+
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 mb-6">
+              <p className="text-sm text-green-900 dark:text-green-200">
+                <span className="material-symbols-outlined text-sm align-middle mr-1">
+                  check_circle
+                </span>
+                TBM 요약이 생성되었습니다. 오른쪽 패널에서 결과를 확인하고 PDF로 내보낼 수 있습니다.
+              </p>
+            </div>
+
+            {tbmSummary && (
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-6 mb-6 max-h-[400px] overflow-y-auto">
+                <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-xl">summarize</span>
+                  요약 미리보기
+                </h4>
+                <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                  {tbmSummary.substring(0, 300)}
+                  {tbmSummary.length > 300 && "..."}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={(e) => onPickFile(e)}
+                className="px-6 py-3 rounded-2xl bg-primary text-white font-black shadow-lg shadow-green-200 inline-flex items-center gap-2 hover:bg-green-600 transition-colors"
+                title="추가로 안전 서류를 업로드하여 검증할 수 있습니다"
+              >
+                <span className="material-symbols-outlined">add_a_photo</span>
+                안전 서류 업로드
+              </button>
+
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold">
+                <span className="material-symbols-outlined text-sm">info</span>
+                TBM 단독으로도 PDF 내보내기 가능
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ✅ Historical record (non-TBM) */}
+        {!file && documentType !== "TBM" && historicalFileName && (
           <div className="w-full max-w-[800px] bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 border border-slate-200 dark:border-slate-700 mt-20">
             <div className="flex items-center gap-3 mb-4">
               <span className="material-symbols-outlined text-4xl text-blue-500">
@@ -147,6 +211,13 @@ export default function DocumentViewer({
                 문서 종류 선택 가능
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Image Quality Feedback */}
+        {imageQuality && file && (
+          <div className="w-full max-w-[860px] mb-6">
+            <ImageQualityCard quality={imageQuality} fileName={file.name} />
           </div>
         )}
 
