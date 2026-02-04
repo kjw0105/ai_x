@@ -366,66 +366,11 @@ const CONSISTENCY_RULES: ConsistencyRule[] = [
   // ========================================
   // Category: Suspicious Patterns (N/A)
   // ========================================
-  {
-    id: "rule_critical_na_height",
-    category: "suspicious_pattern",
-    descriptionKo: "고소작업 여부가 N/A로 표시됨 - 명확한 기재 필요",
-    descriptionEn: "Critical item marked N/A: Work at height",
-    guidance: "고소작업 실시 여부를 명확히 ✔ 또는 ✖로 표시해야 합니다",
-    severity: "warn",
-    check: (checklist) => {
-      const item = checklist.find((c) => c.id === "fall_01");
-      return item?.value === "N/A";
-    },
-  },
-  {
-    id: "rule_critical_na_fire",
-    category: "suspicious_pattern",
-    descriptionKo: "화기작업 여부가 N/A로 표시됨 - 명확한 기재 필요",
-    descriptionEn: "Critical item marked N/A: Hot work",
-    guidance: "화기작업 실시 여부를 명확히 ✔ 또는 ✖로 표시해야 합니다",
-    severity: "warn",
-    check: (checklist) => {
-      const item = checklist.find((c) => c.id === "fire_01");
-      return item?.value === "N/A";
-    },
-  },
-  {
-    id: "rule_critical_na_confined",
-    category: "suspicious_pattern",
-    descriptionKo: "밀폐공간 작업 여부가 N/A로 표시됨 - 명확한 기재 필요",
-    descriptionEn: "Critical item marked N/A: Confined space entry",
-    guidance: "밀폐공간 작업 실시 여부를 명확히 ✔ 또는 ✖로 표시해야 합니다",
-    severity: "warn",
-    check: (checklist) => {
-      const item = checklist.find((c) => c.id === "conf_01");
-      return item?.value === "N/A";
-    },
-  },
-  {
-    id: "rule_critical_na_excavation",
-    category: "suspicious_pattern",
-    descriptionKo: "굴착작업 여부가 N/A로 표시됨 - 명확한 기재 필요",
-    descriptionEn: "Critical item marked N/A: Excavation work",
-    guidance: "굴착작업 실시 여부를 명확히 ✔ 또는 ✖로 표시해야 합니다",
-    severity: "warn",
-    check: (checklist) => {
-      const item = checklist.find((c) => c.id === "exc_01");
-      return item?.value === "N/A";
-    },
-  },
-  {
-    id: "rule_critical_na_electrical",
-    category: "suspicious_pattern",
-    descriptionKo: "전기작업 여부가 N/A로 표시됨 - 명확한 기재 필요",
-    descriptionEn: "Critical item marked N/A: Electrical work",
-    guidance: "전기작업 실시 여부를 명확히 ✔ 또는 ✖로 표시해야 합니다",
-    severity: "warn",
-    check: (checklist) => {
-      const item = checklist.find((c) => c.id === "elec_02");
-      return item?.value === "N/A";
-    },
-  },
+  // NOTE: Removed overly strict "critical N/A" rules (rule_critical_na_height,
+  // rule_critical_na_fire, rule_critical_na_confined, rule_critical_na_excavation,
+  // rule_critical_na_electrical). N/A is valid when those activities are not performed.
+  // If needed in future, make these context-aware by checking work description.
+  // ========================================
   {
     id: "rule_excessive_na",
     category: "suspicious_pattern",

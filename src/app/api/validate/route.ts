@@ -106,23 +106,44 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
     sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 이 내용을 참고하여 위반 사항이나 불일치 점이 있으면 지적하라:\n${opts.contextText}`;
   }
 
-  const content: any[] = [{ type: "input_text", text: sysPrompt }];
+  // Build content array for Chat Completions API (correct format for GPT-4o vision)
+  const content: any[] = [];
 
+  // Add system prompt as text
+  content.push({ type: "text", text: sysPrompt });
+
+  // Add extracted text
   if (opts.pdfText && opts.pdfText.trim().length >= 50) {
-    content.push({ type: "input_text", text: `추출 텍스트:\n${opts.pdfText}` });
+    content.push({ type: "text", text: `추출 텍스트:\n${opts.pdfText}` });
   }
+
+  // Add images (GPT-4o vision format)
   if (opts.pageImages?.length) {
     for (const img of opts.pageImages) {
-      content.push({ type: "input_image", image_url: img });
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: img, // Already a data URL (data:image/jpeg;base64,...)
+          detail: "high" // Use high detail for better extraction
+        }
+      });
     }
   }
 
-  const r = await getOpenAI().responses.create({
-    model: "gpt-4o", // 너 계정에서 쓰는 비전 모델로 바꿔도 됨
-    input: [{ role: "user", content }],
+  const response = await getOpenAI().chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "user",
+        content: content
+      }
+    ],
+    max_tokens: 1500,
+    temperature: 0, // Deterministic output for structured extraction
   });
 
-  return safeJsonParse(r.output_text ?? "");
+  const responseText = response.choices[0]?.message?.content ?? "";
+  return safeJsonParse(responseText);
 }
 
 async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null; contextText?: string }) {
@@ -250,22 +271,27 @@ export async function POST(req: Request) {
     // auto: 스캔(텍스트 거의 없음)이면 비전 강한 쪽(둘 중 아무거나)로
     // 여기선: 이미지 있으면 OpenAI 먼저, 없으면 Claude 먼저 같은 식으로도 가능
     let result: any;
-    if (p === "openai") result = await callOpenAI({ pdfText, pageImages, contextText });
-    else if (p === "claude") result = await callClaude({ pdfText, pageImages, contextText });
-    else {
+
+    if (p === "openai") {
+      result = await callOpenAI({ pdfText, pageImages, contextText });
+    } else if (p === "claude") {
+      result = await callClaude({ pdfText, pageImages, contextText });
+    } else {
       // auto
       if (pageImages?.length) {
         // 스캔이면 OpenAI 시도 -> 실패하면 Claude
         try {
           result = await callOpenAI({ pdfText, pageImages, contextText });
-        } catch {
+        } catch (e) {
+          console.warn("[AI] OpenAI failed, falling back to Claude");
           result = await callClaude({ pdfText, pageImages, contextText });
         }
       } else {
         // 텍스트면 Claude 시도 -> 실패하면 OpenAI
         try {
           result = await callClaude({ pdfText, pageImages: null, contextText });
-        } catch {
+        } catch (e) {
+          console.warn("[AI] Claude failed, falling back to OpenAI");
           result = await callOpenAI({ pdfText, pageImages: null, contextText });
         }
       }
