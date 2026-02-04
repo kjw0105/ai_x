@@ -12,30 +12,77 @@ Validates the *reliability and consistency* of safety inspection records.
 
 ## Core Validation Framework (5 Stages)
 
-### Stage 1: Format Validation ✅ (Partially implemented)
+### Stage 1: Format Validation ✅ IMPLEMENTED
 - Missing required fields (date, task name, inspector signature)
 - Checklist values present (✔/✖/N/A)
-- **Location**: `src/lib/validator.ts`
+- Signature verification (담당/소장)
+- **Location**: `src/lib/validator.ts:632` - `validateDocument()`
+- **Triggers**: Always runs on every document
 
-### Stage 2: Intra-Checklist Logic ⬜ (TODO)
-- IF-THEN consistency within a single document
+### Stage 2: Intra-Checklist Logic ✅ IMPLEMENTED
+- IF-THEN consistency within a single document (25+ rules)
+- Safety violation detection: fall protection, fire safety, confined space, excavation, electrical
+- Logical contradiction detection
 - Example: "Not working at height" ✔ BUT "Fall protection PPE" ✔ → contradiction
-- **Location**: `src/lib/validator.ts` (add structured rules)
+- **Location**: `src/lib/validator.ts:473` - `validateIntraChecklistLogic()`
+- **Triggers**: When `checklist` array exists in document
 
-### Stage 3: Cross-Document Consistency ⬜ (TODO)
+### Stage 3: Cross-Document Consistency ✅ IMPLEMENTED (3 sub-modules)
+
+#### 3a. Structured Master Plan Validation
+- Validates document against project's structured Master Safety Plan
+- Checks required risks, PPE, procedures
+- **Location**: `src/lib/structuredValidation.ts`
+- **Triggers**: When project has `isStructured=true` and `masterPlanJson` exists
+- **API Call**: `validate/route.ts:354-363`
+
+#### 3b. Risk Matrix Calculation
+- Calculates risk level from checklist items
+- Identifies risk mismatches (claimed low-risk but high-risk items present)
+- **Location**: `src/lib/riskMatrix.ts`
+- **Triggers**: Always runs when checklist exists
+- **API Call**: `validate/route.ts:365-373`
+
+#### 3c. Cross-Document Analysis
 - Multiple documents about same work should tell same story
 - Example: Risk assessment says "high-risk" but pre-work checklist says "no issues"
-- **Location**: `src/app/api/validate/route.ts` (AI reasoning)
+- **Location**: `src/lib/crossDocumentAnalysis.ts`
+- **Triggers**: When `projectId` exists (project context available)
+- **API Call**: `validate/route.ts:392-402`
 
-### Stage 4: Behavioral Pattern Analysis ⬜ (TODO)
-- Detecting "always ✔" patterns, copy-paste behavior
-- Repetitive patterns by specific inspector
-- **Location**: Needs DB queries + `route.ts` for analysis
+### Stage 4: Behavioral Pattern Analysis ✅ IMPLEMENTED
+- Detecting "always ✔" patterns (>95% check rate)
+- Copy-paste behavior (3+ identical descriptions)
+- Rapid completion detection (5+ reports in 30 minutes)
+- Inspector-specific patterns across multiple reports
+- **Location**: `src/lib/patternAnalysis.ts`
+- **Triggers**: When `inspectorName` exists in document
+- **API Call**: `validate/route.ts:377-390`
+- **Requires**: Database history (5+ reports for meaningful analysis)
 
-### Stage 5: Risk Signal Guidance ⬜ (TODO)
+### Stage 5: Risk Signal Guidance ✅ IMPLEMENTED
 - Non-judgmental alerts based on rule violations
 - Phrasing: "Inconsistency exists" NOT "This is unsafe"
-- **Location**: `src/app/api/validate/route.ts` (AI output formatting)
+- Includes KOSHA/MOEL reference links
+- Actionable recommendations
+- **Location**: `src/lib/riskMatrix.ts`, `src/app/api/validate/route.ts:429-435`
+- **Triggers**: When pattern issues exist (Stage 4 results)
+
+---
+
+## Stage Trigger Summary
+
+| Stage | Always Runs? | Condition | Notes |
+|-------|-------------|-----------|-------|
+| Stage 1 | ✅ Yes | None | Format validation always runs |
+| Stage 2 | ⚠️ Conditional | `checklist.length > 0` | Most documents have checklists |
+| Stage 3a | ⚠️ Conditional | `isStructured && masterPlanJson` | Only structured projects |
+| Stage 3b | ✅ Yes | `checklist` exists | Risk matrix calculation |
+| Stage 3c | ⚠️ Conditional | `projectId` exists | Only in projects |
+| Stage 4 | ⚠️ Conditional | `inspectorName` exists | Needs 5+ reports for patterns |
+| Stage 5 | ⚠️ Conditional | Stage 4 triggered | Formats pattern warnings |
+
+**All stages wrapped in try-catch** - failures are logged but don't break validation process.
 
 ## Architecture
 

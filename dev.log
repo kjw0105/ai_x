@@ -1,0 +1,150 @@
+
+> smart-safety-doc-validator-webonly@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 4.5s
+ ○ Compiling / ...
+ ✓ Compiled / in 5.9s (578 modules)
+ GET / 200 in 6461ms
+ ✓ Compiled in 511ms (281 modules)
+ ○ Compiling /api/projects ...
+ ✓ Compiled /api/projects in 2.4s (320 modules)
+ ✓ Compiled (347 modules)
+ GET /icon.svg?ea5eb718b03a2272 200 in 2723ms
+prisma:query SELECT `main`.`Project`.`id`, `main`.`Project`.`name`, `main`.`Project`.`description`, `main`.`Project`.`createdAt`, `main`.`Project`.`contextText` FROM `main`.`Project` WHERE 1=1 ORDER BY `main`.`Project`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/projects 200 in 2717ms
+prisma:query SELECT `main`.`Project`.`id`, `main`.`Project`.`name`, `main`.`Project`.`description`, `main`.`Project`.`createdAt`, `main`.`Project`.`contextText` FROM `main`.`Project` WHERE 1=1 ORDER BY `main`.`Project`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/projects 200 in 28ms
+prisma:query SELECT `main`.`Project`.`id`, `main`.`Project`.`name`, `main`.`Project`.`description`, `main`.`Project`.`createdAt`, `main`.`Project`.`contextText` FROM `main`.`Project` WHERE 1=1 ORDER BY `main`.`Project`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/projects 200 in 15ms
+ ✓ Compiled /api/history in 85ms (349 modules)
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 122ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 9ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 9ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 10ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 10ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 9ms
+ ○ Compiling /api/tbm ...
+ ✓ Compiled /api/tbm in 534ms (460 modules)
+[TBM] audio: { name: 'tbm 녹음.m4a', type: 'audio/x-m4a', size: 136039 }
+[TBM] step=transcribe start
+[TBM] step=transcribe done
+prisma:query SELECT 1
+prisma:query SELECT `main`.`Project`.`id`, `main`.`Project`.`name`, `main`.`Project`.`description`, `main`.`Project`.`contextText`, `main`.`Project`.`masterPlanJson`, `main`.`Project`.`isStructured` FROM `main`.`Project` WHERE (`main`.`Project`.`id` = ? AND 1=1) LIMIT ? OFFSET ?
+[TBM] Using project context: 
+
+[프로젝트 컨텍스트]
+프로젝트명: omkniokmbinkb...
+[TBM] step=summarize start
+[TBM] step=summarize done
+ POST /api/tbm 200 in 4428ms
+ POST /api/history 405 in 8ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 9ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 11ms
+prisma:query SELECT 1
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 16ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 14ms
+prisma:query SELECT 1
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 14ms
+prisma:query SELECT `main`.`Report`.`id`, `main`.`Report`.`fileName`, `main`.`Report`.`createdAt`, `main`.`Report`.`docDataJson`, `main`.`Report`.`issuesJson`, `main`.`Report`.`chatJson`, `main`.`Report`.`score`, `main`.`Report`.`inspectorName`, `main`.`Report`.`checklistJson`, `main`.`Report`.`documentType`, `main`.`Report`.`tags`, `main`.`Report`.`tbmSummary`, `main`.`Report`.`tbmTranscript`, `main`.`Report`.`tbmDuration`, `main`.`Report`.`tbmAudioUrl`, `main`.`Report`.`projectId` FROM `main`.`Report` WHERE `main`.`Report`.`projectId` = ? ORDER BY `main`.`Report`.`createdAt` DESC LIMIT ? OFFSET ?
+ GET /api/history?projectId=561d8455-0bbd-41d0-a195-f3b6da6e6f2c 200 in 12ms
+ ✓ Compiled in 1815ms (569 modules)
+ ✓ Compiled in 420ms (569 modules)
+ ✓ Compiled in 416ms (569 modules)
+ ✓ Compiled in 761ms (569 modules)
+ ✓ Compiled in 414ms (569 modules)
+ ✓ Compiled in 591ms (569 modules)
+ ✓ Compiled in 363ms (569 modules)
+ ✓ Compiled in 476ms (569 modules)
+ ✓ Compiled in 562ms (569 modules)
+ ✓ Compiled in 487ms (569 modules)
+ ✓ Compiled /_not-found in 213ms (558 modules)
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1426ms (784 modules)
+ GET / 404 in 1996ms
+ GET / 404 in 144ms
+ GET /_next/static/css/app/layout.css?v=1770182763006 404 in 34ms
+ GET /_next/static/chunks/main-app.js?v=1770182763006 404 in 33ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 32ms
+ GET /_next/static/chunks/app/layout.js 404 in 33ms
+ GET / 404 in 58ms
+ GET /_next/static/css/app/layout.css?v=1770182765533 404 in 21ms
+ GET /_next/static/chunks/main-app.js?v=1770182765533 404 in 34ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 31ms
+ GET /_next/static/chunks/app/layout.js 404 in 32ms
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, lstat 'C:\Users\Jinet\Desktop\ai_x\.next\server\app\api'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, lstat 'C:\Users\Jinet\Desktop\ai_x\.next\server\app\api'
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Resolving '../../../../.next/server/app/api/history/route' in C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server for build dependencies doesn't lead to expected result 'C:\Users\Jinet\Desktop\ai_x\.next\server\app\api\history\route.js', but to 'Error: Can't resolve '../../../../.next/server/app/api/history/route' in 'C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server'' instead. Resolving dependencies are ignored for this path.
+<w>  at resolve commonjs file ../../../../.next/server/app/api/history/route (expected C:\Users\Jinet\Desktop\ai_x\.next\server\app\api\history\route.js)
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\require.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\require.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\load-components.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\load-components.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\utils.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\utils.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-route-loader\index.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-route-loader\index.js
+<w>  at resolve commonjs C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-route-loader\index.js
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Resolving '../../../../.next/server/app/api/history/route' in C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server for build dependencies doesn't lead to expected result 'C:\Users\Jinet\Desktop\ai_x\.next\server\app\api\history\route.js', but to 'Error: Can't resolve '../../../../.next/server/app/api/history/route' in 'C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server'' instead. Resolving dependencies are ignored for this path.
+<w>  at resolve commonjs file ../../../../.next/server/app/api/history/route (expected C:\Users\Jinet\Desktop\ai_x\.next\server\app\api\history\route.js)
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\require.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\require.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\load-components.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\load-components.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\utils.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\utils.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-route-loader\index.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-route-loader\index.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\loader-runner\LoaderRunner.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\loader-runner\LoaderRunner.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\webpack\bundle5.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\webpack\bundle5.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\webpack\webpack.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\webpack\webpack.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\plugins\define-env-plugin.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\plugins\define-env-plugin.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack-config.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack-config.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js
+<w>  at resolve commonjs C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Resolving '../../../../.next/server/app/api/tbm/route' in C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server for build dependencies doesn't lead to expected result 'C:\Users\Jinet\Desktop\ai_x\.next\server\app\api\tbm\route.js', but to 'Error: Can't resolve '../../../../.next/server/app/api/tbm/route' in 'C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server'' instead. Resolving dependencies are ignored for this path.
+<w>  at resolve commonjs file ../../../../.next/server/app/api/tbm/route (expected C:\Users\Jinet\Desktop\ai_x\.next\server\app\api\tbm\route.js)
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\require.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\require.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\load-components.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\server\load-components.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\utils.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\utils.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-route-loader\index.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-route-loader\index.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\loader-runner\LoaderRunner.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\loader-runner\LoaderRunner.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\webpack\bundle5.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\webpack\bundle5.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\webpack\webpack.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\compiled\webpack\webpack.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\plugins\define-env-plugin.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\plugins\define-env-plugin.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack-config.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack-config.js
+<w>  at file dependencies C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js
+<w>  at file C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js
+<w>  at resolve commonjs C:\Users\Jinet\Desktop\ai_x\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js
+[?25h

@@ -94,10 +94,11 @@ interface AnalysisPanelProps {
     historicalFileName?: string;
     currentFile?: File | null;
     tbmSummary?: string;
-  tbmTranscript?: string;
+    tbmTranscript?: string;
+    documentType?: string | null;
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType }: AnalysisPanelProps) {
     const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
@@ -206,8 +207,9 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     };
 
     const handleExportPDF = async () => {
-        if (!currentFile && !historicalFileName) {
-            toast.warning("먼저 문서를 업로드하거나 기록을 선택하세요");
+        // ✅ Allow export if there's a file, historical record, OR TBM data
+        if (!currentFile && !historicalFileName && !tbmSummary) {
+            toast.warning("내보낼 보고서가 없습니다. 문서를 업로드하거나 TBM을 기록하세요.");
             return;
         }
 
@@ -223,11 +225,15 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         console.log('[AnalysisPanel] Current file:', currentFile?.name ?? historicalFileName);
         console.log('[AnalysisPanel] Issues count:', issues.length);
         console.log('[AnalysisPanel] Project name:', currentProjectName);
+        console.log('[AnalysisPanel] Document type:', documentType);
+        console.log('[AnalysisPanel] TBM Summary length:', (tbmSummary || "").length);
+        console.log('[AnalysisPanel] TBM Summary content:', tbmSummary ? tbmSummary.substring(0, 100) + "..." : "(empty)");
+        console.log('[AnalysisPanel] TBM Transcript length:', (tbmTranscript || "").length);
 
         const exportData = {
-            fileName: currentFile?.name ?? historicalFileName ?? "report",
+            fileName: currentFile?.name ?? historicalFileName ?? (tbmSummary ? "TBM(작업 전 대화)" : "report"),
             projectName: currentProjectName,
-            documentType: null, // Can be enhanced to track document type
+            documentType: documentType || (tbmSummary ? "TBM" : null),
             createdAt: new Date().toISOString(), // Convert to ISO string for JSON
             issues: issues.map(i => ({
                 severity: i.severity,
@@ -375,7 +381,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </div>
 
                     {/* PDF Export Button */}
-                    {reportExists && (currentFile || historicalFileName) && (
+                    {reportExists && (currentFile || historicalFileName || tbmSummary) && (
                         <button
                             onClick={handleExportPDF}
                             disabled={isExportingPDF}

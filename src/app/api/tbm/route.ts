@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { prisma } from "@/lib/db";
 
 function getOpenAI() {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -29,9 +30,18 @@ function buildTBMSystemPrompt() {
 6) 결정사항/액션아이템 (담당자/기한이 언급되면 포함)
 7) 누락/불명확한 부분 (확인 필요 사항)
 
+프로젝트 컨텍스트 활용:
+- 사용자가 [프로젝트 컨텍스트]를 제공한 경우, 해당 정보를 참고하여:
+  * 프로젝트의 주요 위험요인이 TBM에서 언급되었는지 확인
+  * 필수 보호구가 체크되었는지 검토
+  * 핵심 절차가 논의되었는지 검토
+  * 누락된 중요 항목이 있다면 "7) 누락/불명확한 부분"에 명시
+- 프로젝트 컨텍스트와 TBM 내용이 불일치하면 객관적으로 기록
+
 주의:
 - 사실에 근거해 작성하고, 추측은 "추정"으로 표시.
-- 개인 비난/판단 금지.
+- 개인 비난/판단 금지. 비판단적 어조 사용 ("확인 필요", "누락됨" 등).
+- 프로젝트 컨텍스트는 참고 자료일 뿐, TBM 전사본 내용이 최우선.
 `.trim();
 }
 
@@ -100,16 +110,71 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "전사 결과가 비어있습니다." }, { status: 500 });
     }
 
-    // 2) Summarize
+    // 2) Load project context if projectId provided
+    let contextInfo = "";
+    if (projectId) {
+      try {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: {
+            name: true,
+            description: true,
+            contextText: true,
+            masterPlanJson: true,
+            isStructured: true,
+          },
+        });
+
+        if (project) {
+          contextInfo = `\n\n[프로젝트 컨텍스트]\n프로젝트명: ${project.name}`;
+
+          if (project.description) {
+            contextInfo += `\n프로젝트 설명: ${project.description}`;
+          }
+
+          // Use structured master plan if available
+          if (project.isStructured && project.masterPlanJson) {
+            try {
+              const plan = JSON.parse(project.masterPlanJson);
+              if (plan.risks && Array.isArray(plan.risks) && plan.risks.length > 0) {
+                const riskNames = plan.risks.map((r: any) => r.name || r.description).filter(Boolean);
+                if (riskNames.length > 0) {
+                  contextInfo += `\n주요 위험요인: ${riskNames.join(", ")}`;
+                }
+              }
+              if (plan.requiredPPE && Array.isArray(plan.requiredPPE) && plan.requiredPPE.length > 0) {
+                contextInfo += `\n필수 보호구: ${plan.requiredPPE.join(", ")}`;
+              }
+              if (plan.criticalProcedures && Array.isArray(plan.criticalProcedures) && plan.criticalProcedures.length > 0) {
+                contextInfo += `\n핵심 절차: ${plan.criticalProcedures.map((p: any) => p.name || p.description).filter(Boolean).join(", ")}`;
+              }
+            } catch (e) {
+              console.warn("[TBM] Failed to parse structured plan:", e);
+            }
+          }
+          // Fallback to legacy context text
+          else if (project.contextText && project.contextText.trim()) {
+            contextInfo += `\n마스터 안전 계획:\n${project.contextText.substring(0, 500)}`;
+          }
+
+          console.log("[TBM] Using project context:", contextInfo.substring(0, 200) + "...");
+        } else {
+          console.warn("[TBM] Project not found:", projectId);
+        }
+      } catch (e) {
+        console.error("[TBM] Error loading project context:", e);
+      }
+    }
+
+    // 3) Summarize with context
     console.log("[TBM] step=summarize start");
-    const contextLine = projectId ? `\n\n[PROJECT_ID]\n${projectId}` : "";
     const summaryRes = await client.responses.create({
       model: "gpt-4o-mini",
       input: [
         { role: "system", content: buildTBMSystemPrompt() },
         {
           role: "user",
-          content: `다음은 TBM 녹음 전사본이다. 이를 요약해라.\n\n[TRANSCRIPT]\n${transcript}${contextLine}`,
+          content: `다음은 TBM 녹음 전사본이다. 이를 요약해라.\n\n[TRANSCRIPT]\n${transcript}${contextInfo}`,
         },
       ],
     });
