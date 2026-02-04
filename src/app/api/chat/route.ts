@@ -84,8 +84,8 @@ export async function POST(req: Request) {
 
       // Execute each tool call
       for (const toolCall of toolCalls) {
-        const functionName = toolCall.function.name;
-        const functionArgs = JSON.parse(toolCall.function.arguments);
+        const functionName = (toolCall as any).function.name;
+        const functionArgs = JSON.parse((toolCall as any).function.arguments);
 
         console.log(`[Tool Call] ${functionName}`, functionArgs);
 

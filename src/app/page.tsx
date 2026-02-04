@@ -240,7 +240,7 @@ function NewProjectModal({ isOpen, onClose, onCreate }: ModalDialogProps) {
                 <span className="material-symbols-outlined text-lg shrink-0">upload_file</span>
                 <div>
                   <span className="font-bold block mb-0.5">PDF 마스터 플랜 사용 중</span>
-                  업로드된 "{file.name}" 문서를 기준으로 안전 검증을 수행합니다. 템플릿 선택은 무시됩니다.
+                  업로드된 &quot;{file.name}&quot; 문서를 기준으로 안전 검증을 수행합니다. 템플릿 선택은 무시됩니다.
                   <button
                     type="button"
                     onClick={(e) => {
@@ -285,7 +285,13 @@ function NewProjectModal({ isOpen, onClose, onCreate }: ModalDialogProps) {
 
 export default function Page() {
   const toast = useToast();
-  const [latestTBM, setLatestTBM] = useState<{ summary: string; transcript: string } | null>(null);
+  const [latestTBM, setLatestTBM] = useState<{
+    summary: string;
+    transcript: string;
+    workType?: string | null;
+    extractedHazards?: any[];
+    extractedInspector?: string | null;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isPickingRef = useRef(false);
@@ -1643,21 +1649,19 @@ export default function Page() {
           <div className="flex items-center gap-2 px-6 pt-4 pb-2 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
             <button
               onClick={() => setActiveTab("document")}
-              className={`px-4 py-2 rounded-t-lg font-medium transition ${
-                activeTab === "document"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
-              }`}
+              className={`px-4 py-2 rounded-t-lg font-medium transition ${activeTab === "document"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
+                }`}
             >
               📄 문서 검증
             </button>
             <button
               onClick={() => setActiveTab("tbm")}
-              className={`px-4 py-2 rounded-t-lg font-medium transition ${
-                activeTab === "tbm"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
-              }`}
+              className={`px-4 py-2 rounded-t-lg font-medium transition ${activeTab === "tbm"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
+                }`}
             >
               🎤 TBM 타임라인 {tbmRecords.length > 0 && `(${tbmRecords.length})`}
             </button>
@@ -1666,124 +1670,124 @@ export default function Page() {
           {activeTab === "document" ? (
             <>
               <div className="hidden lg:flex flex-1 min-h-0 w-full">
-            {file || report ? (
-              <ThreeColumnLayout
-                left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
-                center={
-                  <DocumentViewer
-                    file={file}
-                    pageImages={pageImages}
-                    reportIssues={report?.issues ?? []}
-                    currentPage={currentPage}
-                    onPageChange={setCurrentPage}
-                    onPickFile={pickFileDialog}
-                    onFileSelect={onPickFile}
-                    onStartTBM={startTBM}
-                    onClearFile={handleClearFile}
-                    historicalFileName={historicalFileName}
-                    documentType={report?.documentType}
-                    currentProjectId={currentProjectId}
-                    currentReportId={currentReportId}
-                    onLoadDocument={loadReportFromHistory}
-                    tbmSummary={report?.tbmSummary}
-                    tbmTranscript={report?.tbmTranscript}
-                    imageQuality={imageQuality}
+                {file || report ? (
+                  <ThreeColumnLayout
+                    left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
+                    center={
+                      <DocumentViewer
+                        file={file}
+                        pageImages={pageImages}
+                        reportIssues={report?.issues ?? []}
+                        currentPage={currentPage}
+                        onPageChange={setCurrentPage}
+                        onPickFile={pickFileDialog}
+                        onFileSelect={onPickFile}
+                        onStartTBM={startTBM}
+                        onClearFile={handleClearFile}
+                        historicalFileName={historicalFileName}
+                        documentType={report?.documentType}
+                        currentProjectId={currentProjectId}
+                        currentReportId={currentReportId}
+                        onLoadDocument={loadReportFromHistory}
+                        tbmSummary={report?.tbmSummary}
+                        tbmTranscript={report?.tbmTranscript}
+                        imageQuality={imageQuality}
+                      />
+                    }
+                    right={
+                      <ChatPanel
+                        messages={report?.chat ?? []}
+                        loading={loading}
+                        currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
+                        currentFile={file}
+                        historicalFileName={historicalFileName}
+                        issues={report?.issues ?? []}
+                        tbmSummary={report?.tbmSummary ?? ""}
+                        tbmTranscript={report?.tbmTranscript ?? ""}
+                        documentType={report?.documentType ?? null}
+                        reportContext={report ? {
+                          docType: (report as any).docType,
+                          fields: (report as any).fields,
+                          signature: (report as any).signature,
+                          inspectorName: (report as any).inspectorName,
+                          riskLevel: (report as any).riskLevel,
+                          checklist: (report as any).checklist,
+                          issues: report.issues,
+                        } : null}
+                      />
+
+
+
+                    }
                   />
-                }
-                right={
-                  <ChatPanel
-                    messages={report?.chat ?? []}
-                    loading={loading}
-                    currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
-                    currentFile={file}
-                    historicalFileName={historicalFileName}
-                    issues={report?.issues ?? []}
-                    tbmSummary={report?.tbmSummary ?? ""}
-                    tbmTranscript={report?.tbmTranscript ?? ""}
-                    documentType={report?.documentType ?? null}
-                    reportContext={report ? {
-                      docType: (report as any).docType,
-                      fields: (report as any).fields,
-                      signature: (report as any).signature,
-                      inspectorName: (report as any).inspectorName,
-                      riskLevel: (report as any).riskLevel,
-                      checklist: (report as any).checklist,
-                      issues: report.issues,
-                    } : null}
-                  />
+                ) : (
+                  <div className="flex-1 overflow-hidden">
+                    <DocumentViewer
+                      file={file}
+                      pageImages={pageImages}
+                      reportIssues={[]}
+                      currentPage={currentPage}
+                      onPageChange={setCurrentPage}
+                      onPickFile={pickFileDialog}
+                      onFileSelect={onPickFile}
+                      onStartTBM={startTBM}
+                      onClearFile={handleClearFile}
+                      historicalFileName={historicalFileName}
+                      documentType={null}
+                      currentProjectId={currentProjectId}
+                      currentReportId={currentReportId}
+                      onLoadDocument={loadReportFromHistory}
+                      tbmSummary={undefined}
+                      tbmTranscript={undefined}
+                      imageQuality={imageQuality}
+                    />
+                  </div>
+                )}
+              </div>
 
-
-
-                }
-              />
-            ) : (
-              <div className="flex-1 overflow-hidden">
-                <DocumentViewer
-                  file={file}
-                  pageImages={pageImages}
-                  reportIssues={[]}
-                  currentPage={currentPage}
-                  onPageChange={setCurrentPage}
-                  onPickFile={pickFileDialog}
-                  onFileSelect={onPickFile}
-                  onStartTBM={startTBM}
-                  onClearFile={handleClearFile}
-                  historicalFileName={historicalFileName}
-                  documentType={null}
-                  currentProjectId={currentProjectId}
-                  currentReportId={currentReportId}
-                  onLoadDocument={loadReportFromHistory}
-                  tbmSummary={undefined}
-                  tbmTranscript={undefined}
-                  imageQuality={imageQuality}
+              <div className="flex lg:hidden flex-1 overflow-hidden">
+                <ResizableSplitLayout
+                  initialLeftWidthPercent={70}
+                  left={
+                    <DocumentViewer
+                      file={file}
+                      pageImages={pageImages}
+                      reportIssues={report?.issues ?? []}
+                      currentPage={currentPage}
+                      onPageChange={setCurrentPage}
+                      onPickFile={pickFileDialog}
+                      onFileSelect={onPickFile}
+                      onStartTBM={startTBM}
+                      onClearFile={handleClearFile}
+                      historicalFileName={historicalFileName}
+                      documentType={report?.documentType}
+                      currentProjectId={currentProjectId}
+                      currentReportId={currentReportId}
+                      onLoadDocument={loadReportFromHistory}
+                      tbmSummary={report?.tbmSummary}
+                      tbmTranscript={report?.tbmTranscript}
+                      imageQuality={imageQuality}
+                    />
+                  }
+                  right={
+                    <AnalysisPanel
+                      loading={loading}
+                      issues={report?.issues ?? []}
+                      chatMessages={report?.chat ?? []}
+                      onReupload={pickFileDialog}
+                      onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
+                      currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
+                      currentFile={file}
+                      historicalFileName={historicalFileName}
+                      tbmSummary={report?.tbmSummary || ""}
+                      tbmTranscript={report?.tbmTranscript || ""}
+                      validationStep={validationStep}
+                      showProgress={showProgress}
+                      validationSteps={validationSteps}
+                    />
+                  }
                 />
               </div>
-            )}
-          </div>
-
-          <div className="flex lg:hidden flex-1 overflow-hidden">
-            <ResizableSplitLayout
-              initialLeftWidthPercent={70}
-              left={
-                <DocumentViewer
-                  file={file}
-                  pageImages={pageImages}
-                  reportIssues={report?.issues ?? []}
-                  currentPage={currentPage}
-                  onPageChange={setCurrentPage}
-                  onPickFile={pickFileDialog}
-                  onFileSelect={onPickFile}
-                  onStartTBM={startTBM}
-                  onClearFile={handleClearFile}
-                  historicalFileName={historicalFileName}
-                  documentType={report?.documentType}
-                  currentProjectId={currentProjectId}
-                  currentReportId={currentReportId}
-                  onLoadDocument={loadReportFromHistory}
-                  tbmSummary={report?.tbmSummary}
-                  tbmTranscript={report?.tbmTranscript}
-                  imageQuality={imageQuality}
-                />
-              }
-              right={
-                <AnalysisPanel
-                  loading={loading}
-                  issues={report?.issues ?? []}
-                  chatMessages={report?.chat ?? []}
-                  onReupload={pickFileDialog}
-                  onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-                  currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
-                  currentFile={file}
-                  historicalFileName={historicalFileName}
-                  tbmSummary={report?.tbmSummary || ""}
-                  tbmTranscript={report?.tbmTranscript || ""}
-                  validationStep={validationStep}
-                  showProgress={showProgress}
-                  validationSteps={validationSteps}
-                />
-              }
-            />
-          </div>
             </>
           ) : (
             <div className="flex-1 overflow-hidden">

@@ -394,7 +394,7 @@ async function verifyExtraction(
 
       // Execute each tool call
       for (const toolCall of message.tool_calls) {
-        const { name, arguments: argsStr } = toolCall.function;
+        const { name, arguments: argsStr } = (toolCall as any).function;
         const args = JSON.parse(argsStr);
 
         console.log(`[Verification] Tool: ${name}`, args);
@@ -403,17 +403,17 @@ async function verifyExtraction(
 
         switch (name) {
           case "re_extract_field":
-            toolResult = reExtractField(args.fieldName, args.reason, pdfText, pageImages);
+            toolResult = reExtractField(args.fieldName, args.reason, pdfText, pageImages ?? undefined);
             // TODO: In production, actually re-extract from document
             break;
 
           case "verify_checklist_item":
-            toolResult = verifyChecklistItem(args.itemId, args.currentValue, pdfText, pageImages);
+            toolResult = verifyChecklistItem(args.itemId, args.currentValue, pdfText, pageImages ?? undefined);
             // TODO: In production, actually verify from document
             break;
 
           case "check_signature_presence":
-            toolResult = checkSignaturePresence(args.signatureType, pdfText, pageImages);
+            toolResult = checkSignaturePresence(args.signatureType, pdfText, pageImages ?? undefined);
             // TODO: In production, actually check document
             break;
 
@@ -616,10 +616,9 @@ export async function POST(req: Request) {
 
         // Convert photo analysis to standard format
         const extraction: DocumentExtraction = {
-          isSafetyDocument: true,
           docType: "현장 사진",
           fields: photoAnalysis.fields || {},
-          signature: { worker: "unknown", supervisor: "unknown" },
+          signature: { 담당: "unknown", 소장: "unknown" },
           inspectorName: null,
           riskLevel: null,
           checklist: photoAnalysis.checklist || [],

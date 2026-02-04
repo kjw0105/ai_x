@@ -107,6 +107,7 @@ export interface ValidationIssue {
   confidence?: number; // Stage 4: Confidence score (0-100)
   score?: number; // Stage 4: Severity score
   isAIFixable?: boolean; // Whether AI can suggest a fix (false for signatures, photos, physical inspections)
+  path?: string; // Path to specific field or section
 }
 
 export type Issue = ValidationIssue & { id?: string };

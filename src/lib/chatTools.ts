@@ -3,7 +3,7 @@
  * Provides contextual assistance for safety document validation
  */
 
-import type { ValidationIssue } from "./validator";
+import type { ValidationIssue, Issue } from "./validator";
 
 // Rule metadata for explanations (subset of validation rules)
 const RULE_METADATA: Record<string, {
@@ -148,7 +148,7 @@ export interface ReportContext {
     nameKo: string;
     value: "✔" | "✖" | "N/A" | null;
   }>;
-  issues?: ValidationIssue[];
+  issues?: Issue[];
   chat?: Array<{ role: string; text: string }>;
 }
 
