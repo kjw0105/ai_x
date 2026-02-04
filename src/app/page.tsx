@@ -528,17 +528,17 @@ export default function Page() {
 
       const data = (await res.json()) as Report;
       if (latestTBM?.summary) {
-  const first = data.chat?.[0]?.text || "";
-  const merged = `${first}\n\n[TBM 요약]\n${latestTBM.summary}`.trim();
+        const first = data.chat?.[0]?.text || "";
+        const merged = `${first}\n\n[TBM 요약]\n${latestTBM.summary}`.trim();
 
-  data.chat = [
-    { role: "ai", text: merged },
-    ...(data.chat?.slice(1) ?? []),
-  ];
+        data.chat = [
+          { role: "ai", text: merged },
+          ...(data.chat?.slice(1) ?? []),
+        ];
 
-  data.tbmSummary = latestTBM.summary;
-  data.tbmTranscript = latestTBM.transcript || "";
-}
+        data.tbmSummary = latestTBM.summary;
+        data.tbmTranscript = latestTBM.transcript || "";
+      }
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       if (!res.ok) {
@@ -659,7 +659,7 @@ export default function Page() {
       issues.push("이미지 해상도가 낮아 텍스트 인식이 어려울 수 있습니다.");
     }
 
-    console.log(`[Image Quality] ${width}×${height}, ${(fileSize/1024).toFixed(1)}KB, ${megapixels.toFixed(1)}MP → ${quality}`);
+    console.log(`[Image Quality] ${width}×${height}, ${(fileSize / 1024).toFixed(1)}KB, ${megapixels.toFixed(1)}MP → ${quality}`);
 
     return {
       resolution: { width, height },
@@ -763,30 +763,30 @@ export default function Page() {
       const data = await res.json();
 
       // ✅ TBM이면: 요약/전사 표시
-if (isTBMHistoryRecord(data)) {
-  const tbmSummary = data.tbmSummary || data.summary || "";
-  const tbmTranscript = data.tbmTranscript || data.transcript || "";
+      if (isTBMHistoryRecord(data)) {
+        const tbmSummary = data.tbmSummary || data.summary || "";
+        const tbmTranscript = data.tbmTranscript || data.transcript || "";
 
-  setReport({
-    fileName: data.fileName ?? "TBM(작업 전 대화)",
-    issues: [],
-    chat: [
-      { role: "ai", text: tbmSummary || "(요약 결과가 비어있어요)" },
-      ...(tbmTranscript
-        ? [{ role: "ai" as const, text: `\n\n[전사본]\n${tbmTranscript}` }]
-        : []),
-    ],
-    documentType: "TBM",
-    tbmSummary,
-    tbmTranscript,
-  });
+        setReport({
+          fileName: data.fileName ?? "TBM(작업 전 대화)",
+          issues: [],
+          chat: [
+            { role: "ai", text: tbmSummary || "(요약 결과가 비어있어요)" },
+            ...(tbmTranscript
+              ? [{ role: "ai" as const, text: `\n\n[전사본]\n${tbmTranscript}` }]
+              : []),
+          ],
+          documentType: "TBM",
+          tbmSummary,
+          tbmTranscript,
+        });
 
-  setFile(null);
-  setPageImages([]);
-  setHistoricalFileName(data.fileName ?? "TBM(작업 전 대화)");
-  setCurrentReportId(id);
-  return;
-}
+        setFile(null);
+        setPageImages([]);
+        setHistoricalFileName(data.fileName ?? "TBM(작업 전 대화)");
+        setCurrentReportId(id);
+        return;
+      }
 
 
       let issues = JSON.parse(data.issuesJson);
@@ -881,13 +881,13 @@ if (isTBMHistoryRecord(data)) {
         documentType: data.documentType ?? null,
         createdAt: new Date(data.createdAt).toISOString(),
         issues: issues.map((i: any) => ({
-  severity: i.severity,
-  title: i.title,
-  message: i.message,
-  ruleId: i.ruleId,
-})),
-tbmSummary: report?.tbmSummary || "",
-tbmTranscript: report?.tbmTranscript || "",
+          severity: i.severity,
+          title: i.title,
+          message: i.message,
+          ruleId: i.ruleId,
+        })),
+        tbmSummary: report?.tbmSummary || "",
+        tbmTranscript: report?.tbmTranscript || "",
 
         summary: {
           totalIssues: issues.length,
@@ -915,7 +915,7 @@ tbmTranscript: report?.tbmTranscript || "",
         const filenameMatch = contentDisposition.match(/filename[^;=\n]*=["']?([^"';\n]*)["']?/);
         if (filenameMatch?.[1]) filename = decodeURIComponent(filenameMatch[1]);
       }
-      
+
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -1205,33 +1205,33 @@ tbmTranscript: report?.tbmTranscript || "",
         projectId={currentProjectId}
         onClose={() => setTbmOpen(false)}
         onComplete={async (r) => {
-  await saveTBMHistory(r);
+          await saveTBMHistory(r);
 
-  const tbmSummary = r.summary || "";
-  const tbmTranscript = r.transcript || "";
-  setLatestTBM({ summary: r.summary || "", transcript: r.transcript || "" }); // ✅ 추가
-  setTbmOpen(false);
-  setTbmResult(r);
-  dismissWelcome();
-  setFile(null);
-  setPageImages([]);
-  // ✅ Set historicalFileName so DocumentViewer knows there's content
-  setHistoricalFileName("TBM(작업 전 대화)");
-  setTbmResultOpen(true);
+          const tbmSummary = r.summary || "";
+          const tbmTranscript = r.transcript || "";
+          setLatestTBM({ summary: r.summary || "", transcript: r.transcript || "" }); // ✅ 추가
+          setTbmOpen(false);
+          setTbmResult(r);
+          dismissWelcome();
+          setFile(null);
+          setPageImages([]);
+          // ✅ Set historicalFileName so DocumentViewer knows there's content
+          setHistoricalFileName("TBM(작업 전 대화)");
+          setTbmResultOpen(true);
 
-  setReport({
-    fileName: "TBM(작업 전 대화)",
-    issues: [],
-    chat: [
-      { role: "ai", text: tbmSummary || "(요약 결과가 비어있어요)" },
-      ...(tbmTranscript ? [{ role: "ai" as const, text: `\n\n[전사본]\n${tbmTranscript}` }] : []),
-    ],
-    documentType: "TBM",
-    tbmSummary,
-    tbmTranscript,
-  });
-}}
- 
+          setReport({
+            fileName: "TBM(작업 전 대화)",
+            issues: [],
+            chat: [
+              { role: "ai", text: tbmSummary || "(요약 결과가 비어있어요)" },
+              ...(tbmTranscript ? [{ role: "ai" as const, text: `\n\n[전사본]\n${tbmTranscript}` }] : []),
+            ],
+            documentType: "TBM",
+            tbmSummary,
+            tbmTranscript,
+          });
+        }}
+
       />
 
       <TBMResultModal open={tbmResultOpen} data={tbmResult} onClose={() => setTbmResultOpen(false)} />
@@ -1315,17 +1315,17 @@ tbmTranscript: report?.tbmTranscript || "",
                   />
                 }
                 right={
-                 <ChatPanel
-  messages={report?.chat ?? []}
-  loading={loading}
-  currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
-  currentFile={file}
-  historicalFileName={historicalFileName}
-  issues={report?.issues ?? []}
-  tbmSummary={report?.tbmSummary ?? ""}
-  tbmTranscript={report?.tbmTranscript ?? ""}
-  documentType={report?.documentType ?? null}
-/>
+                  <ChatPanel
+                    messages={report?.chat ?? []}
+                    loading={loading}
+                    currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
+                    currentFile={file}
+                    historicalFileName={historicalFileName}
+                    issues={report?.issues ?? []}
+                    tbmSummary={report?.tbmSummary ?? ""}
+                    tbmTranscript={report?.tbmTranscript ?? ""}
+                    documentType={report?.documentType ?? null}
+                  />
 
 
 
@@ -1348,8 +1348,8 @@ tbmTranscript: report?.tbmTranscript || "",
                   currentProjectId={currentProjectId}
                   currentReportId={currentReportId}
                   onLoadDocument={loadReportFromHistory}
-                  tbmSummary={report?.tbmSummary}
-                  tbmTranscript={report?.tbmTranscript}
+                  tbmSummary={undefined}
+                  tbmTranscript={undefined}
                   imageQuality={imageQuality}
                 />
               </div>
