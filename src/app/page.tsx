@@ -19,6 +19,7 @@ import { TempMasterDocModal } from "@/components/TempMasterDocModal";
 import { ImageQualityCard, type ImageQuality } from "@/components/ImageQualityCard";
 import { ErrorDialog } from "@/components/ErrorDialog";
 import { ErrorMessages, type ErrorDetails, formatErrorMessage } from "@/lib/errorMessages";
+import { optimizeImage } from "@/lib/imageOptimizer";
 import { get, set, del } from "idb-keyval";
 import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
@@ -368,14 +369,24 @@ export default function Page() {
     for (let i = 1; i <= pdf.numPages; i++) {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 1.5 });
+      // Reduced scale from 1.5 to 1.0 for lower initial size
+      const viewport = page.getViewport({ scale: 1.0 });
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
       if (!ctx) continue;
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
       await page.render({ canvasContext: ctx, viewport }).promise;
-      images.push(canvas.toDataURL("image/jpeg"));
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+      // ✅ Optimize image to reduce token usage
+      try {
+        const optimized = await optimizeImage(dataUrl, 2048, 0.85);
+        images.push(optimized.dataUrl);
+      } catch (e) {
+        console.warn("Failed to optimize PDF page, using original", e);
+        images.push(dataUrl);
+      }
     }
 
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -466,7 +477,16 @@ export default function Page() {
         }
 
         console.log(`[Image] Validated: ${img.width}x${img.height}, ${(f.size / 1024).toFixed(1)}KB`);
-        images = [dataUrl];
+
+        // ✅ Optimize image to reduce token usage
+        try {
+          const optimized = await optimizeImage(dataUrl, 2048, 0.85);
+          images = [optimized.dataUrl];
+          console.log(`[Image] Optimized: ${optimized.width}x${optimized.height}, saved ${((1 - optimized.compressionRatio) * 100).toFixed(1)}%`);
+        } catch (e) {
+          console.warn("Failed to optimize image, using original", e);
+          images = [dataUrl];
+        }
       }
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -486,6 +506,7 @@ export default function Page() {
       // Stage 1: 형식 검증 (Format validation)
       await new Promise((r) => setTimeout(r, 200));
       setValidationStep(1);
+      console.log("[Validation] Stage 1/5 - Format validation");
 
       let imagesToSend: string[] = [];
       if (images.length > 0) {
@@ -496,17 +517,23 @@ export default function Page() {
       // Stage 2: 논리 검증 (Logic validation)
       await new Promise((r) => setTimeout(r, 300));
       setValidationStep(2);
+      console.log("[Validation] Stage 2/5 - Logic validation");
 
       // Stage 3: 교차 분석 (Cross-document analysis)
       await new Promise((r) => setTimeout(r, 400));
       setValidationStep(3);
+      console.log("[Validation] Stage 3/5 - Cross-document analysis");
 
       // Stage 4: 패턴 감지 (Pattern detection) - animate during API call
+      await new Promise((r) => setTimeout(r, 300));
+      console.log("[Validation] Stage 4/5 - Pattern detection (animating...)");
       let progressValue = 3.0;
       progressInterval = setInterval(() => {
-        progressValue += 0.1;
-        if (progressValue < 3.9) setValidationStep(progressValue);
-      }, 600);
+        progressValue += 0.15;
+        if (progressValue < 4.8) {
+          setValidationStep(Math.min(progressValue, 4.5));
+        }
+      }, 400);
 
       const res = await fetch("/api/validate", {
         method: "POST",
@@ -522,6 +549,7 @@ export default function Page() {
         signal,
       });
 
+      // Clear animation interval before processing response
       if (progressInterval) clearInterval(progressInterval);
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -564,10 +592,11 @@ export default function Page() {
 
       // Stage 5: 위험 평가 (Risk assessment complete)
       setValidationStep(4);
+      console.log("[Validation] Stage 5/5 complete - Risk assessment done");
 
       const elapsedTime = Date.now() - startTime;
       const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
-      await new Promise((r) => setTimeout(r, remainingTime + 300));
+      await new Promise((r) => setTimeout(r, remainingTime + 200));
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
@@ -575,6 +604,9 @@ export default function Page() {
 
       // ✅ 일반 문서 리포트: TBM 필드는 비움
       setReport({ ...data, documentType: documentType, tbmSummary: undefined, tbmTranscript: undefined });
+
+      // Brief pause to show 100% completion before hiding progress
+      await new Promise((r) => setTimeout(r, 300));
     } catch (e: any) {
       if (progressInterval) clearInterval(progressInterval);
       if (e?.name === "AbortError") return;
