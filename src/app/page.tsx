@@ -326,6 +326,8 @@ export default function Page() {
   const [imageQuality, setImageQuality] = useState<ImageQuality | null>(null);
   const [errorDialog, setErrorDialog] = useState<{ error: ErrorDetails; onRetry?: () => void } | null>(null);
   const [activeValidationType, setActiveValidationType] = useState<"document" | "photo">("document");
+  const [hiddenIssueIds, setHiddenIssueIds] = useState<string[]>([]); // Persist dismissed issues
+  const [hasUnviewedIssues, setHasUnviewedIssues] = useState(false); // Show indicator when analysis completes
 
   // Document validation stages (5 stages)
   const documentValidationSteps = [
@@ -798,6 +800,12 @@ export default function Page() {
 
       // ✅ 일반 문서 리포트: TBM 필드는 비움
       setReport({ ...data, documentType: documentType, tbmSummary: undefined, tbmTranscript: undefined });
+
+      // Set indicator if there are issues to review
+      if (data.issues && data.issues.length > 0) {
+        console.log(`[Validation Complete] Setting hasUnviewedIssues=true, issues count: ${data.issues.length}`);
+        setHasUnviewedIssues(true);
+      }
 
       // Brief pause to show 100% completion before hiding progress
       await new Promise((r) => setTimeout(r, 300));
@@ -1383,6 +1391,7 @@ export default function Page() {
       const savedImages = await get(getProjectKey("images"));
       const savedReport = await get(getProjectKey("report"));
       const savedPage = await get(getProjectKey("page"));
+      const savedHiddenIssues = await get(getProjectKey("hiddenIssues"));
 
       if (savedFile || savedReport) {
         setFile(savedFile || null);
@@ -1391,6 +1400,15 @@ export default function Page() {
         setCurrentPage(savedPage || 0);
         setHistoricalFileName(undefined);
         setCurrentReportId(undefined);
+
+        // Restore hidden issues
+        if (savedHiddenIssues) {
+          setHiddenIssueIds(savedHiddenIssues);
+        } else {
+          setHiddenIssueIds([]);
+        }
+
+        // Progress state is NOT restored - it's ephemeral and only relevant during active validation
       } else {
         clearDocumentState();
       }
@@ -1429,6 +1447,19 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, currentProjectId]);
 
+  // NOTE: Progress state (validationStep, showProgress) is NOT persisted
+  // It's ephemeral and only relevant during active validation
+
+  useEffect(() => {
+    // Persist hidden issues (dismissed by user)
+    if (hiddenIssueIds.length > 0) {
+      set(getProjectKey("hiddenIssues"), hiddenIssueIds);
+    } else {
+      del(getProjectKey("hiddenIssues"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hiddenIssueIds, currentProjectId]);
+
   function handleClearFile() {
     // Show confirmation if file exists
     if (file) {
@@ -1444,6 +1475,7 @@ export default function Page() {
     del(getProjectKey("images"));
     del(getProjectKey("report"));
     del(getProjectKey("page"));
+    del(getProjectKey("hiddenIssues"));
   }
 
   function handleWelcomeCreateProject() {
@@ -1784,6 +1816,10 @@ export default function Page() {
                       validationStep={validationStep}
                       showProgress={showProgress}
                       validationSteps={validationSteps}
+                      initialHiddenIssueIds={hiddenIssueIds}
+                      onHiddenIssuesChange={setHiddenIssueIds}
+                      hasUnviewedIssues={hasUnviewedIssues}
+                      onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
                     />
                   }
                 />

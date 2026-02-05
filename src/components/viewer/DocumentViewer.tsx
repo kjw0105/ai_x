@@ -87,6 +87,17 @@ export default function DocumentViewer({
             </span>
           )}
 
+          {file && (
+            <button
+              onClick={onPickFile}
+              className="p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors flex-shrink-0"
+              title="새 문서 업로드"
+              aria-label="새 문서 업로드"
+            >
+              <span className="material-symbols-outlined text-xl">upload_file</span>
+            </button>
+          )}
+
           {onClearFile && (
             <button
               onClick={onClearFile}

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 
 import { useToast } from "@/contexts/ToastContext";
 import { exportReportToPDF } from "@/lib/pdfExport";
@@ -109,9 +109,13 @@ interface AnalysisPanelProps {
     validationStep?: number;
     showProgress?: boolean;
     validationSteps?: ValidationStage[]; // Dynamic stages
+    initialHiddenIssueIds?: string[]; // Persist hidden issues across restarts
+    onHiddenIssuesChange?: (hiddenIds: string[]) => void; // Callback when hidden issues change
+    hasUnviewedIssues?: boolean; // Show indicator when analysis completes with issues
+    onMarkIssuesViewed?: () => void; // Callback when user views issues
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, onMarkIssuesViewed }: AnalysisPanelProps) {
     // Default to 5-stage document validation if not provided
     const defaultSteps: ValidationStage[] = [
         { id: "stage1", label: "형식 검증", icon: "description" },
@@ -122,7 +126,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     ];
     const steps = validationSteps || defaultSteps;
     const totalSteps = steps.length;
-    const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
+    const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set(initialHiddenIssueIds));
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
     const [showRiskDetails, setShowRiskDetails] = useState(false);
@@ -146,6 +150,18 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
 
     // Suggestion Modal State
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
+
+    // Notify parent when hidden issues change (for persistence)
+    useEffect(() => {
+        if (onHiddenIssuesChange) {
+            onHiddenIssuesChange(Array.from(hiddenIssueIds));
+        }
+    }, [hiddenIssueIds, onHiddenIssuesChange]);
+
+    // Ref for issues section - used for auto-scroll
+    const issuesSectionRef = useRef<HTMLDivElement>(null);
+
+
 
     // Chat functionality
     const handleSendChat = async () => {
@@ -207,6 +223,34 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const visibleIssues = issues.filter(i =>
         !hiddenIssueIds.has(i.id) && severityFilters.has(i.severity)
     );
+
+    // Auto-scroll to issues when analysis completes with new issues
+    useEffect(() => {
+        console.log(`[Auto-scroll] hasUnviewedIssues: ${hasUnviewedIssues}, visibleIssues.length: ${visibleIssues.length}, issuesSectionRef.current: ${!!issuesSectionRef.current}`);
+
+        if (hasUnviewedIssues && visibleIssues.length > 0 && issuesSectionRef.current) {
+            console.log('[Auto-scroll] Triggering scroll in 800ms...');
+            // Delay to ensure DOM is ready and progress modal is closed
+            const timeoutId = setTimeout(() => {
+                console.log('[Auto-scroll] Executing scrollIntoView');
+                try {
+                    issuesSectionRef.current?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center',
+                        inline: 'nearest'
+                    });
+                    console.log('[Auto-scroll] Scroll executed successfully');
+                } catch (error) {
+                    console.error('[Auto-scroll] Error during scroll:', error);
+                }
+                // Mark as viewed after scrolling
+                onMarkIssuesViewed?.();
+                console.log('[Auto-scroll] Marked as viewed');
+            }, 800);
+
+            return () => clearTimeout(timeoutId);
+        }
+    }, [hasUnviewedIssues, visibleIssues.length]);
 
     const toggleSeverityFilter = (severity: string) => {
         setSeverityFilters(prev => {
@@ -656,72 +700,79 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 )}
 
                 {/* Render Issues by Stage - Card List View */}
-                {[
-                    { title: "📸 시각적 증거 분석 (Photo Audit)", issues: visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage-photo"), color: "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800" },
-                    { title: "Stage 1-2: 형식 및 논리 검증", issues: stage12Issues, color: "text-red-500 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" },
-                    { title: "Stage 3: 구조화된 계획 검증", issues: stage3StructuredIssues, color: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" },
-                    { title: "Stage 3: 위험도 분석", issues: stage3RiskIssues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
-                    { title: "Stage 3: 문서 간 분석", issues: stage3CrossIssues, color: "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800" },
-                    { title: "Stage 4: 행동 패턴 분석", issues: stage4Issues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
-                ].map((group, idx) => (
-                    group.issues.length > 0 && (
-                        <div key={idx} className="space-y-3">
-                            <div className="flex justify-center mb-3">
-                                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${group.color}`}>
-                                    {group.title}
-                                </span>
-                            </div>
+                <div ref={issuesSectionRef}>
+                    {[
+                        { title: "📸 시각적 증거 분석 (Photo Audit)", issues: visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage-photo"), color: "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800" },
+                        { title: "Stage 1-2: 형식 및 논리 검증", issues: stage12Issues, color: "text-red-500 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" },
+                        { title: "Stage 3: 구조화된 계획 검증", issues: stage3StructuredIssues, color: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" },
+                        { title: "Stage 3: 위험도 분석", issues: stage3RiskIssues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
+                        { title: "Stage 3: 문서 간 분석", issues: stage3CrossIssues, color: "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800" },
+                        { title: "Stage 4: 행동 패턴 분석", issues: stage4Issues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
+                    ].map((group, idx) => (
+                        group.issues.length > 0 && (
+                            <div key={idx} className="space-y-3">
+                                <div className="flex justify-center mb-3">
+                                    <span className={`text-xs font-bold px-3 py-1 rounded-full border ${group.color}`}>
+                                        {group.title}
+                                    </span>
+                                </div>
 
-                            {/* Card List - Mobile-Friendly */}
-                            <div className="space-y-2 px-2">
-                                {group.issues.map((issue) => (
-                                    <button
-                                        key={issue.id}
-                                        onClick={() => setSelectedIssue(issue)}
-                                        className="w-full text-left"
-                                    >
-                                        <div className={`p-3 rounded-xl border-2 transition-all hover:shadow-md ${issue.severity === "error"
-                                            ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700"
-                                            : issue.severity === "warn"
-                                                ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 hover:border-orange-300 dark:hover:border-orange-700"
-                                                : "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700"
-                                            }`}>
-                                            <div className="flex items-start gap-3">
-                                                {/* Icon */}
-                                                <div className={`size-10 rounded-full flex items-center justify-center flex-shrink-0 ${avatarBgColor(issue.ruleId)}`}>
-                                                    <span className={`material-symbols-outlined text-xl ${avatarColor(issue.ruleId)}`}>
-                                                        {severityIcon(issue.severity, issue.ruleId)}
-                                                    </span>
-                                                </div>
-
-                                                {/* Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <h4 className={`font-bold text-sm ${severityColor(issue.severity, issue.ruleId)}`}>
-                                                            {issue.title}
-                                                        </h4>
-                                                        {issue.confidence !== undefined && (
-                                                            <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                                                                {issue.confidence}%
-                                                            </span>
-                                                        )}
+                                {/* Card List - Mobile-Friendly */}
+                                <div className="space-y-2 px-2">
+                                    {group.issues.map((issue) => (
+                                        <button
+                                            key={issue.id}
+                                            onClick={() => {
+                                                setSelectedIssue(issue);
+                                                onMarkIssuesViewed?.();
+                                            }}
+                                            className="w-full text-left"
+                                        >
+                                            <div className={`p-3 rounded-xl border-2 transition-all hover:shadow-md ${
+                                                hasUnviewedIssues ? "ring-4 ring-blue-500 ring-offset-2 shadow-lg shadow-blue-500/50" : ""
+                                                } ${issue.severity === "error"
+                                                    ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700"
+                                                    : issue.severity === "warn"
+                                                        ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 hover:border-orange-300 dark:hover:border-orange-700"
+                                                        : "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700"
+                                                }`}>
+                                                <div className="flex items-start gap-3">
+                                                    {/* Icon */}
+                                                    <div className={`size-10 rounded-full flex items-center justify-center flex-shrink-0 ${avatarBgColor(issue.ruleId)}`}>
+                                                        <span className={`material-symbols-outlined text-xl ${avatarColor(issue.ruleId)}`}>
+                                                            {severityIcon(issue.severity, issue.ruleId)}
+                                                        </span>
                                                     </div>
-                                                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
-                                                        {issue.message}
-                                                    </p>
-                                                    <div className="mt-2 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                                                        <span className="material-symbols-outlined text-sm">touch_app</span>
-                                                        <span>탭하여 자세히 보기</span>
+
+                                                    {/* Content */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className={`font-bold text-sm ${severityColor(issue.severity, issue.ruleId)}`}>
+                                                                {issue.title}
+                                                            </h4>
+                                                            {issue.confidence !== undefined && (
+                                                                <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                                                    {issue.confidence}%
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                                                            {issue.message}
+                                                        </p>
+                                                        <div className="mt-2 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                                                            <span className="material-symbols-outlined text-sm">touch_app</span>
+                                                            <span>탭하여 자세히 보기</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </button>
-                                ))}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    )
-                ))}
+                        )
+                    ))}
+                </div>
 
                 <div className="h-4" />
             </div>

@@ -18,16 +18,19 @@ export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
     const currentStepIndex = Math.floor(currentStep);
     const currentStepData = steps[currentStepIndex];
 
+    // Debug logging
+    console.log(`[ProgressBar] currentStep: ${currentStep}, stepsLength: ${steps.length}, progress: ${progress}%, currentStepIndex: ${currentStepIndex}`);
+
     return (
         <div className="w-full max-w-3xl mx-auto p-6">
             {/* Current Stage Display */}
             {currentStepData && (
-                <div className="text-center mb-8">
+                <div key={`stage-${currentStepIndex}`} className="text-center mb-8">
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-2">
                         <span className="material-symbols-outlined text-lg animate-pulse">{currentStepData.icon}</span>
-                        <span className="text-sm font-bold">Stage {currentStepIndex + 1}/{steps.length}</span>
+                        <span key={`stage-label-${currentStepIndex}`} className="text-sm font-bold">Stage {currentStepIndex + 1}/{steps.length}</span>
                     </div>
-                    <h4 className="text-xl font-black text-slate-900 dark:text-white">
+                    <h4 key={`stage-title-${currentStepIndex}`} className="text-xl font-black text-slate-900 dark:text-white">
                         {currentStepData.label}
                     </h4>
                 </div>
@@ -103,7 +106,7 @@ export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
 
             {/* Percentage */}
             <div className="text-center mt-8">
-                <span className="text-4xl font-black text-slate-900 dark:text-white">
+                <span key={`progress-${Math.round(progress)}`} className="text-4xl font-black text-slate-900 dark:text-white">
                     {Math.round(progress)}%
                 </span>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
