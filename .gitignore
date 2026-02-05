@@ -24,6 +24,8 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+build_error*.log
+lint_error*.log
 
 # Framework / bundler folders
 .next/

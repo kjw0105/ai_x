@@ -37,6 +37,12 @@ model Report {
   tbmDuration   Int?     // Recording duration in milliseconds
   tbmAudioUrl   String?  // Optional: URL to stored audio file
 
+  // NEW: Structured TBM extraction
+  tbmWorkType           String?  // 작업 종류
+  tbmExtractedHazards   String?  // JSON array of hazards
+  tbmExtractedInspector String?  // 담당자 이름
+  tbmParticipants       String?  // JSON array of participants
+
   // Relation to Project context
   projectId   String?
   project     Project? @relation(fields: [projectId], references: [id])

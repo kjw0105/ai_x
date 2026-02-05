@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DocumentTypeBadge } from "@/components/DocumentTypeBadge";
 import { EmptyDocumentState } from "@/components/EmptyDocumentState";
 import { RecentDocuments } from "@/components/RecentDocuments";
-import { ImageQualityCard, type ImageQuality } from "@/components/ImageQualityCard";
+import type { ImageQuality } from "@/components/ImageQualityCard";
 
 interface DocumentViewerProps {
   file: File | null;
@@ -45,9 +45,14 @@ export default function DocumentViewer({
   tbmTranscript,
   imageQuality,
 }: DocumentViewerProps) {
-  const issueCount = reportIssues.length;
   const [isZoomOpen, setIsZoomOpen] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
   const fileDisplayName = file?.name ?? historicalFileName ?? "파일을 업로드하세요";
+
+  // Reset loading state when page or images change
+  useEffect(() => {
+    setImageLoading(true);
+  }, [currentPage, pageImages]);
 
   const totalPages = pageImages.length;
   const hasNext = currentPage < totalPages - 1;
@@ -68,10 +73,29 @@ export default function DocumentViewer({
 
           {documentType && <DocumentTypeBadge type={documentType} size="sm" />}
 
+          {/* Image Quality Badge - Minimal */}
+          {imageQuality && file && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-semibold shrink-0 border border-green-200 dark:border-green-800">
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+              품질 확인
+            </span>
+          )}
+
           {historicalFileName && !file && (
             <span className="px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold shrink-0">
               과거 기록
             </span>
+          )}
+
+          {file && (
+            <button
+              onClick={onPickFile}
+              className="p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors flex-shrink-0"
+              title="새 문서 업로드"
+              aria-label="새 문서 업로드"
+            >
+              <span className="material-symbols-outlined text-xl">upload_file</span>
+            </button>
           )}
 
           {onClearFile && (
@@ -85,31 +109,42 @@ export default function DocumentViewer({
               <span className="material-symbols-outlined text-xl">delete</span>
             </button>
           )}
-
-          {issueCount > 0 && (
-            <span className="px-3 py-1 rounded-full bg-red-100 text-red-600 font-black text-xs border border-red-200 shrink-0">
-              수정 필요 {issueCount}건
-            </span>
-          )}
         </div>
       </div>
 
-      {onLoadDocument && (
+      {/* Compact mode - Show when document is loaded */}
+      {onLoadDocument && (file || historicalFileName) && (
         <RecentDocuments
           currentProjectId={currentProjectId ?? null}
           currentReportId={currentReportId}
           onSelectDocument={onLoadDocument}
           maxItems={4}
+          mode="compact"
         />
       )}
 
       <div className="flex-1 overflow-auto p-8 flex justify-center items-start bg-slate-300/30">
         {!file && !historicalFileName && (
-          <EmptyDocumentState
-  onFileSelect={onFileSelect}
-  onUploadClick={(e) => onPickFile(e)}
-  onStartTBM={onStartTBM}
-/>
+          <div className="flex flex-col items-center justify-center gap-8 w-full max-w-2xl">
+            <EmptyDocumentState
+              onFileSelect={onFileSelect}
+              onUploadClick={(e) => onPickFile(e)}
+              onStartTBM={onStartTBM}
+            />
+
+            {/* Full mode - Show in empty state */}
+            {onLoadDocument && currentProjectId && (
+              <div className="w-full px-4">
+                <RecentDocuments
+                  currentProjectId={currentProjectId}
+                  currentReportId={currentReportId}
+                  onSelectDocument={onLoadDocument}
+                  maxItems={4}
+                  mode="full"
+                />
+              </div>
+            )}
+          </div>
         )}
 
         {/* ✅ TBM-only mode: show TBM card */}
@@ -214,13 +249,6 @@ export default function DocumentViewer({
           </div>
         )}
 
-        {/* Image Quality Feedback */}
-        {imageQuality && file && (
-          <div className="w-full max-w-[860px] mb-6">
-            <ImageQualityCard quality={imageQuality} fileName={file.name} />
-          </div>
-        )}
-
         {totalPages > 0 && (
           <div className="relative w-full max-w-[860px] mb-8">
             <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden pdf-page-shadow relative group">
@@ -259,12 +287,30 @@ export default function DocumentViewer({
                 </>
               )}
 
+              {/* Loading skeleton */}
+              {imageLoading && (
+                <div className="w-full min-h-[600px] bg-slate-100 dark:bg-slate-800 animate-pulse flex items-center justify-center">
+                  <div className="text-center space-y-3">
+                    <span className="material-symbols-outlined text-slate-400 text-5xl animate-spin">
+                      sync
+                    </span>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                      이미지 로딩 중...
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={pageImages[currentPage]}
                 alt={`Page ${currentPage + 1}`}
-                className="w-full h-auto block select-none cursor-zoom-in"
+                className={`w-full h-auto block select-none cursor-zoom-in transition-opacity duration-300 ${
+                  imageLoading ? "opacity-0 absolute" : "opacity-100"
+                }`}
                 onClick={() => setIsZoomOpen(true)}
+                onLoad={() => setImageLoading(false)}
+                onError={() => setImageLoading(false)}
                 title="클릭하여 확대 보기"
               />
             </div>

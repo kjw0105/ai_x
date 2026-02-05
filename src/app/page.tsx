@@ -19,12 +19,19 @@ import { TempMasterDocModal } from "@/components/TempMasterDocModal";
 import { ImageQualityCard, type ImageQuality } from "@/components/ImageQualityCard";
 import { ErrorDialog } from "@/components/ErrorDialog";
 import { ErrorMessages, type ErrorDetails, formatErrorMessage } from "@/lib/errorMessages";
+import { optimizeImage } from "@/lib/imageOptimizer";
 import { get, set, del } from "idb-keyval";
+import { calculateRiskLevel, riskCalculationToIssues } from "@/lib/riskMatrix";
+import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } from "@/lib/crossDocumentAnalysis";
+import { parseDocExtraction } from "@/lib/docSchema";
+import { TEMPLATE_METADATA, TEMPLATES } from "@/lib/masterPlanTemplates";
 import { useToast } from "@/contexts/ToastContext";
 import { DocumentType } from "@/lib/documentTypes";
 import { ModalDialog } from "@/components/ModalDialog";
 import { exportReportToPDF } from "@/lib/pdfExport";
 import TBMResultModal from "@/components/TBMResultModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import TBMTimeline from "@/components/TBMTimeline";
 
 type Report = {
   fileName: string;
@@ -33,21 +40,22 @@ type Report = {
   documentType?: string | null;
 
   // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
+  // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
   tbmSummary?: string;
   tbmTranscript?: string;
 };
 
-function NewProjectModal({
-  isOpen,
-  onClose,
-  onCreate,
-}: {
+interface ModalDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (data: any) => Promise<void>;
-}) {
+  // eslint-disable-next-line
+  onCreate: (data: { name: string; description: string; file: File | null; templateId?: string }) => Promise<void>;
+}
+
+function NewProjectModal({ isOpen, onClose, onCreate }: ModalDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("general_construction");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const titleId = useId();
@@ -61,11 +69,12 @@ function NewProjectModal({
     e.preventDefault();
     setLoading(true);
     try {
-      await onCreate({ name, description, file });
+      await onCreate({ name, description, file, templateId: selectedTemplateId });
       onClose();
       setName("");
       setDescription("");
       setFile(null);
+      setSelectedTemplateId("general_construction");
     } catch (err) {
       console.error("Failed to create project:", err);
     } finally {
@@ -80,81 +89,193 @@ function NewProjectModal({
       labelledBy={titleId}
       describedBy={descriptionId}
       overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-700"
+      className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-4xl border border-slate-200 dark:border-slate-700"
       initialFocusRef={nameInputRef}
     >
-      <h3 id={titleId} className="text-xl font-bold mb-2 text-slate-900 dark:text-white">
-        New Project
-      </h3>
-      <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-300 mb-4">
-        Provide the project details below to create a new workspace.
-      </p>
+      <div className="mb-6">
+        <h3 id={titleId} className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+          새 프로젝트 생성
+        </h3>
+        <p id={descriptionId} className="text-slate-600 dark:text-slate-300">
+          안전 검증을 위한 새로운 프로젝트를 설정합니다. 현장 특성에 맞는 안전 기준을 선택하세요.
+        </p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-            Project Name
-          </label>
-          <input
-            ref={nameInputRef}
-            required
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Gimpo Han River Site A"
-          />
-        </div>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          {/* Left Column: Project Details */}
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                프로젝트 정보
+              </label>
+              <div className="space-y-4">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 font-medium text-lg"
+                  placeholder="프로젝트 이름 입력"
+                />
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                  placeholder="프로젝트 설명 (선택사항)"
+                />
+              </div>
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-            Description
-          </label>
-          <input
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional description"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-            마스터 안전 계획서 (선택사항)
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="file"
-              accept="application/pdf"
-              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-            />
+            <div>
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                마스터 안전 계획서 (PDF) <span className="text-slate-400 font-normal">- 선택사항</span>
+              </label>
+              <div className={`p-4 rounded-xl border border-dashed transition-colors ${file
+                ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500"
+                : "bg-slate-50 dark:bg-slate-700/50 border-slate-300 dark:border-slate-600 hover:border-blue-500"
+                }`}>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="flex flex-col items-center justify-center text-center">
+                    {file ? (
+                      <>
+                        <span className="material-symbols-outlined text-3xl text-blue-500 mb-2">assignment_turned_in</span>
+                        <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{file.name}</span>
+                        <span className="text-xs text-blue-500 mt-1">클릭하여 변경</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setFile(null);
+                          }}
+                          className="absolute top-1 right-1 p-1.5 text-blue-400 hover:text-red-500 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full transition-colors z-10"
+                          title="파일 제거"
+                        >
+                          <span className="material-symbols-outlined text-lg">close</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-3xl text-slate-400 mb-2">upload_file</span>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">PDF 파일 업로드</span>
+                        <span className="text-xs text-slate-400 mt-1">여기를 클릭하거나 파일을 드래그하세요</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">💡 이 문서는 무엇인가요?</p>
-            <p className="text-xs text-blue-700 dark:text-blue-400">
-              프로젝트의 <strong>안전 규칙 및 기준</strong>을 담은 PDF입니다. AI가 이 기준을 참고하여 제출된 점검 문서를 검증합니다.
-            </p>
-            <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
-              ⚠️ 이 파일은 검증 대상이 아닙니다. 프로젝트 생성 후 별도로 점검 문서를 업로드하세요.
-            </p>
+          {/* Right Column: Site Type Selection */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">
+              현장 유형 및 안전 기준
+            </label>
+
+            {/* Template Grid */}
+            <div className={`grid grid-cols-2 gap-3 transition-opacity ${file ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+              {TEMPLATE_METADATA.map((t) => {
+                const isSelected = selectedTemplateId === t.id && !file;
+                let icon = "construction";
+                if (t.id === "high_rise") icon = "location_city";
+                if (t.id === "infrastructure") icon = "engineering";
+                if (t.id === "interior_renovation") icon = "design_services";
+
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTemplateId(t.id);
+                      setFile(null); // Deselect file if clicking a template
+                    }}
+                    className={`relative flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all text-center group h-32 ${isSelected
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-500 shadow-sm"
+                      : "border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-slate-500 bg-white dark:bg-slate-800"
+                      }`}
+                  >
+                    <div className={`p-2 rounded-lg mb-2 transition-colors ${isSelected
+                      ? "bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200"
+                      : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-600"
+                      }`}>
+                      <span className="material-symbols-outlined text-3xl">{icon}</span>
+                    </div>
+
+                    <div className="font-bold text-slate-900 dark:text-white leading-tight text-sm">
+                      {t.name.split('(')[0].trim()}
+                    </div>
+
+                    {isSelected && (
+                      <div className="absolute top-2 right-2 text-blue-500">
+                        <span className="material-symbols-outlined text-lg">check_circle</span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected Template Description Box */}
+            {!file && (
+              <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600 text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-bold block mb-1 text-slate-900 dark:text-white">
+                  {TEMPLATE_METADATA.find(t => t.id === selectedTemplateId)?.name}
+                </span>
+                {TEMPLATE_METADATA.find(t => t.id === selectedTemplateId)?.description}
+              </div>
+            )}
+
+            {/* PDF Upload Override Message */}
+            {file && (
+              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200 flex items-start gap-2 animate-in fade-in slide-in-from-top-1">
+                <span className="material-symbols-outlined text-lg shrink-0">upload_file</span>
+                <div>
+                  <span className="font-bold block mb-0.5">PDF 마스터 플랜 사용 중</span>
+                  업로드된 &quot;{file.name}&quot; 문서를 기준으로 안전 검증을 수행합니다. 템플릿 선택은 무시됩니다.
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setFile(null);
+                    }}
+                    className="block mt-1.5 text-blue-600 underline hover:text-blue-800 font-bold"
+                  >
+                    업로드 취소하고 템플릿 사용하기
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-700">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+            className="px-6 py-3 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
           >
-            Cancel
+            취소
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98]"
           >
-            {loading ? "Creating..." : "Create Project"}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="material-symbols-outlined animate-spin text-lg">sync</span>
+                생성 중...
+              </span>
+            ) : "프로젝트 생성"}
           </button>
         </div>
       </form>
@@ -164,7 +285,13 @@ function NewProjectModal({
 
 export default function Page() {
   const toast = useToast();
-  const [latestTBM, setLatestTBM] = useState<{ summary: string; transcript: string } | null>(null);
+  const [latestTBM, setLatestTBM] = useState<{
+    summary: string;
+    transcript: string;
+    workType?: string | null;
+    extractedHazards?: any[];
+    extractedInspector?: string | null;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isPickingRef = useRef(false);
@@ -198,14 +325,28 @@ export default function Page() {
   const [showProgress, setShowProgress] = useState(false);
   const [imageQuality, setImageQuality] = useState<ImageQuality | null>(null);
   const [errorDialog, setErrorDialog] = useState<{ error: ErrorDetails; onRetry?: () => void } | null>(null);
+  const [activeValidationType, setActiveValidationType] = useState<"document" | "photo">("document");
+  const [hiddenIssueIds, setHiddenIssueIds] = useState<string[]>([]); // Persist dismissed issues
+  const [hasUnviewedIssues, setHasUnviewedIssues] = useState(false); // Show indicator when analysis completes
 
-  const validationSteps = [
+  // Document validation stages (5 stages)
+  const documentValidationSteps = [
     { id: "stage1", label: "형식 검증", icon: "description" },
     { id: "stage2", label: "논리 검증", icon: "rule" },
     { id: "stage3", label: "교차 분석", icon: "compare_arrows" },
     { id: "stage4", label: "패턴 감지", icon: "analytics" },
     { id: "stage5", label: "위험 평가", icon: "shield" },
   ];
+
+  // Photo validation stages (3 stages - faster and more relevant)
+  const photoValidationSteps = [
+    { id: "stage1", label: "이미지 분석", icon: "photo_camera" },
+    { id: "stage2", label: "안전 검증", icon: "verified_user" },
+    { id: "stage3", label: "결과 생성", icon: "check_circle" },
+  ];
+
+  // Use appropriate stages based on validation type
+  const validationSteps = activeValidationType === "photo" ? photoValidationSteps : documentValidationSteps;
 
   const [projects, setProjects] = useState<any[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
@@ -216,6 +357,15 @@ export default function Page() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   const [showWelcome, setShowWelcome] = useState(true);
+
+  // TBM Timeline states
+  const [activeTab, setActiveTab] = useState<"document" | "tbm">("document");
+  const [tbmRecords, setTbmRecords] = useState<any[]>([]);
+  const [loadingTBMs, setLoadingTBMs] = useState(false);
+
+  // Confirmation dialog states
+  const [confirmClearFile, setConfirmClearFile] = useState(false);
+  const [confirmProjectSwitch, setConfirmProjectSwitch] = useState<{ projectId: string | null } | null>(null);
 
   useEffect(() => setCurrentPage(0), [file, pageImages]);
 
@@ -276,6 +426,14 @@ export default function Page() {
     document.head.appendChild(link);
   }, []);
 
+  // Load TBM records when switching to TBM tab or project changes
+  useEffect(() => {
+    if (activeTab === "tbm") {
+      loadTBMRecords();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, currentProjectId]);
+
   async function fetchProjects() {
     setIsLoadingProjects(true);
     try {
@@ -335,7 +493,8 @@ export default function Page() {
 
   function showWelcomeScreen() {
     setShowWelcome(true);
-    handleClearFile();
+    // Don't auto-clear file when navigating to home
+    // Users can explicitly clear if needed
   }
 
   function showError(error: ErrorDetails, onRetry?: () => void) {
@@ -368,14 +527,24 @@ export default function Page() {
     for (let i = 1; i <= pdf.numPages; i++) {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 1.5 });
+      // Reduced scale from 1.5 to 1.0 for lower initial size
+      const viewport = page.getViewport({ scale: 1.0 });
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
       if (!ctx) continue;
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
       await page.render({ canvasContext: ctx, viewport }).promise;
-      images.push(canvas.toDataURL("image/jpeg"));
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+      // ✅ Optimize image to reduce token usage
+      try {
+        const optimized = await optimizeImage(dataUrl, 2048, 0.85);
+        images.push(optimized.dataUrl);
+      } catch (e) {
+        console.warn("Failed to optimize PDF page, using original", e);
+        images.push(dataUrl);
+      }
     }
 
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -412,6 +581,10 @@ export default function Page() {
     const controller = new AbortController();
     validationAbortController.current = controller;
     const signal = controller.signal;
+
+    // Set validation type based on document type
+    const isPhotoValidation = documentType === "SITE_PHOTO";
+    setActiveValidationType(isPhotoValidation ? "photo" : "document");
 
     setLoading(true);
     setShowProgress(true);
@@ -466,7 +639,16 @@ export default function Page() {
         }
 
         console.log(`[Image] Validated: ${img.width}x${img.height}, ${(f.size / 1024).toFixed(1)}KB`);
-        images = [dataUrl];
+
+        // ✅ Optimize image to reduce token usage
+        try {
+          const optimized = await optimizeImage(dataUrl, 2048, 0.85);
+          images = [optimized.dataUrl];
+          console.log(`[Image] Optimized: ${optimized.width}x${optimized.height}, saved ${((1 - optimized.compressionRatio) * 100).toFixed(1)}%`);
+        } catch (e) {
+          console.warn("Failed to optimize image, using original", e);
+          images = [dataUrl];
+        }
       }
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -483,30 +665,58 @@ export default function Page() {
         return;
       }
 
-      // Stage 1: 형식 검증 (Format validation)
-      await new Promise((r) => setTimeout(r, 200));
-      setValidationStep(1);
-
       let imagesToSend: string[] = [];
       if (images.length > 0) {
         imagesToSend.push(images[0]);
         if (images.length > 1) imagesToSend.push(images[images.length - 1]);
       }
 
-      // Stage 2: 논리 검증 (Logic validation)
-      await new Promise((r) => setTimeout(r, 300));
-      setValidationStep(2);
+      // Different progress for photos vs documents
+      if (isPhotoValidation) {
+        // Photo validation: 3 fast stages
+        // Stage 1: 이미지 분석 (Image analysis)
+        await new Promise((r) => setTimeout(r, 150));
+        setValidationStep(1);
+        console.log("[Photo Validation] Stage 1/3 - Image analysis");
 
-      // Stage 3: 교차 분석 (Cross-document analysis)
-      await new Promise((r) => setTimeout(r, 400));
-      setValidationStep(3);
+        // Stage 2: 안전 검증 (Safety validation) - animate during API call
+        await new Promise((r) => setTimeout(r, 150));
+        console.log("[Photo Validation] Stage 2/3 - Safety validation (animating...)");
+        let progressValue = 1.0;
+        progressInterval = setInterval(() => {
+          progressValue += 0.15;
+          if (progressValue < 2.8) {
+            setValidationStep(Math.min(progressValue, 2.5));
+          }
+        }, 300);
+      } else {
+        // Document validation: 5 stages
+        // Stage 1: 형식 검증 (Format validation)
+        await new Promise((r) => setTimeout(r, 200));
+        setValidationStep(1);
+        console.log("[Validation] Stage 1/5 - Format validation");
 
-      // Stage 4: 패턴 감지 (Pattern detection) - animate during API call
-      let progressValue = 3.0;
-      progressInterval = setInterval(() => {
-        progressValue += 0.1;
-        if (progressValue < 3.9) setValidationStep(progressValue);
-      }, 600);
+        // Stage 2: 논리 검증 (Logic validation)
+        await new Promise((r) => setTimeout(r, 300));
+        setValidationStep(2);
+        console.log("[Validation] Stage 2/5 - Logic validation");
+
+        // Stage 3: 교차 분석 (Cross-document analysis)
+        await new Promise((r) => setTimeout(r, 400));
+        setValidationStep(3);
+        console.log("[Validation] Stage 3/5 - Cross-document analysis");
+
+        // Stage 4: 패턴 감지 (Pattern detection) - animate during API call
+        await new Promise((r) => setTimeout(r, 300));
+        console.log("[Validation] Stage 4/5 - Pattern detection (animating...)");
+        let progressValue = 3.0;
+        progressInterval = setInterval(() => {
+          progressValue += 0.15;
+          if (progressValue < 4.8) {
+            setValidationStep(Math.min(progressValue, 4.5));
+          }
+        }, 400);
+      }
 
       const res = await fetch("/api/validate", {
         method: "POST",
@@ -518,10 +728,17 @@ export default function Page() {
           projectId: currentProjectId,
           documentType: documentType,
           tempContextText: !currentProjectId && tempMasterDoc ? tempMasterDoc.text : undefined,
+          latestTBM: latestTBM ? {
+            workType: latestTBM.workType,
+            extractedHazards: latestTBM.extractedHazards || [],
+            extractedInspector: latestTBM.extractedInspector,
+            summary: latestTBM.summary,
+          } : null,
         }),
         signal,
       });
 
+      // Clear animation interval before processing response
       if (progressInterval) clearInterval(progressInterval);
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -562,12 +779,20 @@ export default function Page() {
         throw new Error((data as any).error || "서버 오류가 발생했습니다");
       }
 
-      // Stage 5: 위험 평가 (Risk assessment complete)
-      setValidationStep(4);
+      // Final stage: Complete
+      if (isPhotoValidation) {
+        // Photo Stage 3: 결과 생성 (Result generation complete)
+        setValidationStep(2);
+        console.log("[Photo Validation] Stage 3/3 complete - Result generation done");
+      } else {
+        // Document Stage 5: 위험 평가 (Risk assessment complete)
+        setValidationStep(4);
+        console.log("[Validation] Stage 5/5 complete - Risk assessment done");
+      }
 
       const elapsedTime = Date.now() - startTime;
       const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
-      await new Promise((r) => setTimeout(r, remainingTime + 300));
+      await new Promise((r) => setTimeout(r, remainingTime + 200));
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
@@ -575,6 +800,15 @@ export default function Page() {
 
       // ✅ 일반 문서 리포트: TBM 필드는 비움
       setReport({ ...data, documentType: documentType, tbmSummary: undefined, tbmTranscript: undefined });
+
+      // Set indicator if there are issues to review
+      if (data.issues && data.issues.length > 0) {
+        console.log(`[Validation Complete] Setting hasUnviewedIssues=true, issues count: ${data.issues.length}`);
+        setHasUnviewedIssues(true);
+      }
+
+      // Brief pause to show 100% completion before hiding progress
+      await new Promise((r) => setTimeout(r, 300));
     } catch (e: any) {
       if (progressInterval) clearInterval(progressInterval);
       if (e?.name === "AbortError") return;
@@ -702,6 +936,8 @@ export default function Page() {
       setImageQuality(null);
     }
 
+    // Show document type selector for BOTH PDFs and images
+    // User chooses whether it's a scanned document or site photo
     setPendingFile(f);
     setShowDocTypeSelector(true);
   }
@@ -732,8 +968,13 @@ export default function Page() {
           type: "TBM",
           projectId: currentProjectId,
           fileName: "TBM(작업 전 대화)",
-          transcript: r?.transcript ?? "",
           summary: r?.summary ?? "",
+          transcript: r?.transcript ?? "",
+          tbmDuration: r?.duration ?? 0,
+          workType: r?.workType ?? null,
+          extractedHazards: JSON.stringify(r?.extractedHazards ?? []),
+          extractedInspector: r?.extractedInspector ?? null,
+          participants: JSON.stringify(r?.participants ?? []),
         }),
       });
       if (!resp.ok) {
@@ -751,6 +992,46 @@ export default function Page() {
     const dt = (data?.documentType ?? "") as string;
     const t = (data?.type ?? "") as string;
     return dt === "TBM" || t === "TBM";
+  }
+
+  async function loadTBMRecords() {
+    setLoadingTBMs(true);
+    try {
+      // Fetch TBMs for current project, or all TBMs if no project selected
+      const url = currentProjectId
+        ? `/api/history?projectId=${currentProjectId}`
+        : `/api/history`;
+
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch: ${resp.status}`);
+      }
+
+      const allReports = await resp.json();
+      const tbms = allReports.filter((r: any) => r.documentType === "TBM");
+
+      console.log(`[TBM Timeline] Loaded ${tbms.length} TBM records`);
+      setTbmRecords(tbms);
+    } catch (e) {
+      console.error("Failed to load TBM records:", e);
+      setTbmRecords([]);
+    } finally {
+      setLoadingTBMs(false);
+    }
+  }
+
+  async function deleteTBM(id: string) {
+    try {
+      const resp = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
+      if (!resp.ok) throw new Error("Failed to delete TBM");
+
+      // Refresh the list
+      await loadTBMRecords();
+      toast.success("TBM 기록이 삭제되었습니다", 2000);
+    } catch (e) {
+      console.error("Failed to delete TBM:", e);
+      toast.error("삭제에 실패했습니다", 2000);
+    }
   }
 
   async function loadReportFromHistory(id: string) {
@@ -962,10 +1243,12 @@ export default function Page() {
     name,
     description,
     file,
+    templateId,
   }: {
     name: string;
     description: string;
     file: File | null;
+    templateId?: string;
   }) {
     try {
       let contextText = "";
@@ -974,16 +1257,31 @@ export default function Page() {
         contextText = await extractPdfText(file, controller.signal);
       }
 
+      let masterPlanJson: string | null = null;
+      let isStructured = false;
+
+      if (templateId && TEMPLATES[templateId]) {
+        // Use the selected template
+        masterPlanJson = JSON.stringify(TEMPLATES[templateId]);
+        isStructured = true;
+      }
+
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, contextText }),
+        body: JSON.stringify({
+          name,
+          description,
+          contextText,
+          masterPlanJson,
+          isStructured
+        }),
       });
 
       if (!res.ok) throw new Error("Failed");
 
       const newProject = await res.json();
-      setProjects((prev) => [...prev, newProject]);
+      setProjects((prev) => [newProject, ...prev]);
       setCurrentProjectId(newProject.id);
       dismissWelcome();
     } catch (error) {
@@ -1000,14 +1298,17 @@ export default function Page() {
         throw new Error(error.error || "Failed to delete project");
       }
 
+      const projectToDelete = projects.find((p) => p.id === projectId);
+      const projectName = projectToDelete ? projectToDelete.name : "프로젝트";
+
       if (currentProjectId === projectId) {
         setCurrentProjectId(null);
         setShowWelcome(true);
-        handleClearFile();
+        performClearFile(); // Clear without confirmation when deleting project
       }
 
       setProjects((prev) => prev.filter((p) => p.id !== projectId));
-      toast.success("프로젝트가 삭제되었습니다");
+      toast.success(`"${projectName}" 프로젝트가 삭제되었습니다`);
     } catch (error) {
       showError(ErrorMessages.PROJECT_DELETE_FAILED());
       throw error;
@@ -1090,6 +1391,7 @@ export default function Page() {
       const savedImages = await get(getProjectKey("images"));
       const savedReport = await get(getProjectKey("report"));
       const savedPage = await get(getProjectKey("page"));
+      const savedHiddenIssues = await get(getProjectKey("hiddenIssues"));
 
       if (savedFile || savedReport) {
         setFile(savedFile || null);
@@ -1098,6 +1400,15 @@ export default function Page() {
         setCurrentPage(savedPage || 0);
         setHistoricalFileName(undefined);
         setCurrentReportId(undefined);
+
+        // Restore hidden issues
+        if (savedHiddenIssues) {
+          setHiddenIssueIds(savedHiddenIssues);
+        } else {
+          setHiddenIssueIds([]);
+        }
+
+        // Progress state is NOT restored - it's ephemeral and only relevant during active validation
       } else {
         clearDocumentState();
       }
@@ -1136,12 +1447,35 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, currentProjectId]);
 
+  // NOTE: Progress state (validationStep, showProgress) is NOT persisted
+  // It's ephemeral and only relevant during active validation
+
+  useEffect(() => {
+    // Persist hidden issues (dismissed by user)
+    if (hiddenIssueIds.length > 0) {
+      set(getProjectKey("hiddenIssues"), hiddenIssueIds);
+    } else {
+      del(getProjectKey("hiddenIssues"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hiddenIssueIds, currentProjectId]);
+
   function handleClearFile() {
+    // Show confirmation if file exists
+    if (file) {
+      setConfirmClearFile(true);
+      return;
+    }
+    performClearFile();
+  }
+
+  function performClearFile() {
     clearDocumentState();
     del(getProjectKey("file"));
     del(getProjectKey("images"));
     del(getProjectKey("report"));
     del(getProjectKey("page"));
+    del(getProjectKey("hiddenIssues"));
   }
 
   function handleWelcomeCreateProject() {
@@ -1159,8 +1493,24 @@ export default function Page() {
     setCurrentProjectId(null);
   }
 
+  function handleProjectChange(projectId: string | null) {
+    // Show confirmation if switching projects with unsaved work
+    if (file && projectId !== currentProjectId) {
+      setConfirmProjectSwitch({ projectId });
+      return;
+    }
+    performProjectChange(projectId);
+  }
+
+  function performProjectChange(projectId: string | null) {
+    if (showWelcome) {
+      dismissWelcome();
+    }
+    setCurrentProjectId(projectId);
+  }
+
   return (
-    <div className="flex flex-col min-h-dvh bg-slate-50 dark:bg-gray-900 relative">
+    <div className="flex flex-col h-dvh bg-slate-50 dark:bg-gray-900 relative overflow-hidden">
       <NewProjectModal
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}
@@ -1205,36 +1555,74 @@ export default function Page() {
         projectId={currentProjectId}
         onClose={() => setTbmOpen(false)}
         onComplete={async (r) => {
+          console.log("[TBM onComplete] Starting...", r);
+
+          // Save to database
           await saveTBMHistory(r);
+          console.log("[TBM onComplete] Saved to database");
 
-          const tbmSummary = r.summary || "";
-          const tbmTranscript = r.transcript || "";
-          setLatestTBM({ summary: r.summary || "", transcript: r.transcript || "" }); // ✅ 추가
-          setTbmOpen(false);
-          setTbmResult(r);
-          dismissWelcome();
-          setFile(null);
-          setPageImages([]);
-          // ✅ Set historicalFileName so DocumentViewer knows there's content
-          setHistoricalFileName("TBM(작업 전 대화)");
-          setTbmResultOpen(true);
+          // Small delay to ensure database write completes
+          await new Promise(resolve => setTimeout(resolve, 100));
 
-          setReport({
-            fileName: "TBM(작업 전 대화)",
-            issues: [],
-            chat: [
-              { role: "ai", text: tbmSummary || "(요약 결과가 비어있어요)" },
-              ...(tbmTranscript ? [{ role: "ai" as const, text: `\n\n[전사본]\n${tbmTranscript}` }] : []),
-            ],
-            documentType: "TBM",
-            tbmSummary,
-            tbmTranscript,
+          // Set latest TBM context for validation
+          setLatestTBM({
+            summary: r.summary || "",
+            transcript: r.transcript || "",
+            workType: r.workType || null,
+            extractedHazards: r.extractedHazards || [],
+            extractedInspector: r.extractedInspector || null,
           });
+
+          // Close modal
+          setTbmOpen(false);
+          dismissWelcome();
+
+          // Auto-switch to TBM Timeline tab
+          setActiveTab("tbm");
+          console.log("[TBM onComplete] Switched to TBM tab");
+
+          // Reload TBM records to show the new one
+          console.log("[TBM onComplete] Loading TBM records...");
+          await loadTBMRecords();
+          console.log("[TBM onComplete] TBM records loaded");
+
+          // Show success toast with extracted info
+          const workTypeText = r.workType ? `"${r.workType}"` : "TBM";
+          const hazardCount = r.extractedHazards?.length || 0;
+          const hazardText = hazardCount > 0 ? ` (${hazardCount}개 위험요인 감지)` : "";
+          toast.success(`${workTypeText} 녹음이 완료되었습니다${hazardText}`, 4000);
         }}
 
       />
 
       <TBMResultModal open={tbmResultOpen} data={tbmResult} onClose={() => setTbmResultOpen(false)} />
+
+      <ConfirmDialog
+        isOpen={confirmClearFile}
+        onClose={() => setConfirmClearFile(false)}
+        onConfirm={performClearFile}
+        title="파일 삭제 확인"
+        message={`현재 업로드된 파일 "${file?.name}"을(를) 삭제하시겠습니까?\n\n검증 결과와 분석 내용이 모두 사라집니다.`}
+        confirmText="삭제"
+        cancelText="취소"
+        variant="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={!!confirmProjectSwitch}
+        onClose={() => setConfirmProjectSwitch(null)}
+        onConfirm={() => {
+          if (confirmProjectSwitch) {
+            performProjectChange(confirmProjectSwitch.projectId);
+            setConfirmProjectSwitch(null);
+          }
+        }}
+        title="프로젝트 전환 확인"
+        message={`현재 작업 중인 파일이 있습니다.\n프로젝트를 전환하시겠습니까?\n\n현재 파일: ${file?.name}\n\n프로젝트를 전환하면 현재 작업 내용이 저장되지 않을 수 있습니다.`}
+        confirmText="전환"
+        cancelText="취소"
+        variant="warning"
+      />
 
       <Header
         key={projectSelectorKey}
@@ -1247,7 +1635,7 @@ export default function Page() {
         showWelcome={showWelcome}
         projects={projects}
         currentProjectId={currentProjectId}
-        onProjectChange={setCurrentProjectId}
+        onProjectChange={handleProjectChange}
         onOpenNewProject={() => setIsProjectModalOpen(true)}
         onDeleteProject={handleDeleteProject}
         onEditProject={handleOpenEditProject}
@@ -1289,113 +1677,175 @@ export default function Page() {
         />
       ) : (
         <>
-          <div className="hidden lg:flex flex-1 min-h-0 w-full">
-            {file || report ? (
-              <ThreeColumnLayout
-                left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
-                center={
-                  <DocumentViewer
-                    file={file}
-                    pageImages={pageImages}
-                    reportIssues={report?.issues ?? []}
-                    currentPage={currentPage}
-                    onPageChange={setCurrentPage}
-                    onPickFile={pickFileDialog}
-                    onFileSelect={onPickFile}
-                    onStartTBM={startTBM}
-                    onClearFile={handleClearFile}
-                    historicalFileName={historicalFileName}
-                    documentType={report?.documentType}
-                    currentProjectId={currentProjectId}
-                    currentReportId={currentReportId}
-                    onLoadDocument={loadReportFromHistory}
-                    tbmSummary={report?.tbmSummary}
-                    tbmTranscript={report?.tbmTranscript}
-                    imageQuality={imageQuality}
+          {/* Tab Switcher */}
+          <div className="flex items-center gap-2 px-6 pt-4 pb-2 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <button
+              onClick={() => setActiveTab("document")}
+              className={`px-4 py-2 rounded-t-lg font-medium transition ${activeTab === "document"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
+                }`}
+            >
+              📄 문서 검증
+            </button>
+            <button
+              onClick={() => setActiveTab("tbm")}
+              className={`px-4 py-2 rounded-t-lg font-medium transition ${activeTab === "tbm"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
+                }`}
+            >
+              🎤 TBM 타임라인 {tbmRecords.length > 0 && `(${tbmRecords.length})`}
+            </button>
+          </div>
+
+          {activeTab === "document" ? (
+            <>
+              <div className="hidden lg:flex flex-1 min-h-0 w-full">
+                {file || report ? (
+                  <ThreeColumnLayout
+                    left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
+                    center={
+                      <DocumentViewer
+                        file={file}
+                        pageImages={pageImages}
+                        reportIssues={report?.issues ?? []}
+                        currentPage={currentPage}
+                        onPageChange={setCurrentPage}
+                        onPickFile={pickFileDialog}
+                        onFileSelect={onPickFile}
+                        onStartTBM={startTBM}
+                        onClearFile={handleClearFile}
+                        historicalFileName={historicalFileName}
+                        documentType={report?.documentType}
+                        currentProjectId={currentProjectId}
+                        currentReportId={currentReportId}
+                        onLoadDocument={loadReportFromHistory}
+                        tbmSummary={report?.tbmSummary}
+                        tbmTranscript={report?.tbmTranscript}
+                        imageQuality={imageQuality}
+                      />
+                    }
+                    right={
+                      <ChatPanel
+                        messages={report?.chat ?? []}
+                        loading={loading}
+                        currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
+                        currentFile={file}
+                        historicalFileName={historicalFileName}
+                        issues={report?.issues ?? []}
+                        tbmSummary={report?.tbmSummary ?? ""}
+                        tbmTranscript={report?.tbmTranscript ?? ""}
+                        documentType={report?.documentType ?? null}
+                        reportContext={report ? {
+                          docType: (report as any).docType,
+                          fields: (report as any).fields,
+                          signature: (report as any).signature,
+                          inspectorName: (report as any).inspectorName,
+                          riskLevel: (report as any).riskLevel,
+                          checklist: (report as any).checklist,
+                          issues: report.issues,
+                        } : null}
+                      />
+
+
+
+                    }
                   />
-                }
-                right={
-                  <ChatPanel
-                    messages={report?.chat ?? []}
-                    loading={loading}
-                    currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
-                    currentFile={file}
-                    historicalFileName={historicalFileName}
-                    issues={report?.issues ?? []}
-                    tbmSummary={report?.tbmSummary ?? ""}
-                    tbmTranscript={report?.tbmTranscript ?? ""}
-                    documentType={report?.documentType ?? null}
-                  />
+                ) : (
+                  <div className="flex-1 overflow-hidden">
+                    <DocumentViewer
+                      file={file}
+                      pageImages={pageImages}
+                      reportIssues={[]}
+                      currentPage={currentPage}
+                      onPageChange={setCurrentPage}
+                      onPickFile={pickFileDialog}
+                      onFileSelect={onPickFile}
+                      onStartTBM={startTBM}
+                      onClearFile={handleClearFile}
+                      historicalFileName={historicalFileName}
+                      documentType={null}
+                      currentProjectId={currentProjectId}
+                      currentReportId={currentReportId}
+                      onLoadDocument={loadReportFromHistory}
+                      tbmSummary={undefined}
+                      tbmTranscript={undefined}
+                      imageQuality={imageQuality}
+                    />
+                  </div>
+                )}
+              </div>
 
-
-
-                }
-              />
-            ) : (
-              <div className="flex-1 overflow-hidden">
-                <DocumentViewer
-                  file={file}
-                  pageImages={pageImages}
-                  reportIssues={[]}
-                  currentPage={currentPage}
-                  onPageChange={setCurrentPage}
-                  onPickFile={pickFileDialog}
-                  onFileSelect={onPickFile}
-                  onStartTBM={startTBM}
-                  onClearFile={handleClearFile}
-                  historicalFileName={historicalFileName}
-                  documentType={null}
-                  currentProjectId={currentProjectId}
-                  currentReportId={currentReportId}
-                  onLoadDocument={loadReportFromHistory}
-                  tbmSummary={undefined}
-                  tbmTranscript={undefined}
-                  imageQuality={imageQuality}
+              <div className="flex lg:hidden flex-1 overflow-hidden">
+                <ResizableSplitLayout
+                  initialLeftWidthPercent={70}
+                  left={
+                    <DocumentViewer
+                      file={file}
+                      pageImages={pageImages}
+                      reportIssues={report?.issues ?? []}
+                      currentPage={currentPage}
+                      onPageChange={setCurrentPage}
+                      onPickFile={pickFileDialog}
+                      onFileSelect={onPickFile}
+                      onStartTBM={startTBM}
+                      onClearFile={handleClearFile}
+                      historicalFileName={historicalFileName}
+                      documentType={report?.documentType}
+                      currentProjectId={currentProjectId}
+                      currentReportId={currentReportId}
+                      onLoadDocument={loadReportFromHistory}
+                      tbmSummary={report?.tbmSummary}
+                      tbmTranscript={report?.tbmTranscript}
+                      imageQuality={imageQuality}
+                    />
+                  }
+                  right={
+                    <AnalysisPanel
+                      loading={loading}
+                      issues={report?.issues ?? []}
+                      chatMessages={report?.chat ?? []}
+                      onReupload={pickFileDialog}
+                      onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
+                      currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
+                      currentFile={file}
+                      historicalFileName={historicalFileName}
+                      tbmSummary={report?.tbmSummary || ""}
+                      tbmTranscript={report?.tbmTranscript || ""}
+                      validationStep={validationStep}
+                      showProgress={showProgress}
+                      validationSteps={validationSteps}
+                      initialHiddenIssueIds={hiddenIssueIds}
+                      onHiddenIssuesChange={setHiddenIssueIds}
+                      hasUnviewedIssues={hasUnviewedIssues}
+                      onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
+                    />
+                  }
                 />
               </div>
-            )}
-          </div>
-
-          <div className="flex lg:hidden flex-1 overflow-hidden">
-            <ResizableSplitLayout
-              initialLeftWidthPercent={70}
-              left={
-                <DocumentViewer
-                  file={file}
-                  pageImages={pageImages}
-                  reportIssues={report?.issues ?? []}
-                  currentPage={currentPage}
-                  onPageChange={setCurrentPage}
-                  onPickFile={pickFileDialog}
-                  onFileSelect={onPickFile}
-                  onStartTBM={startTBM}
-                  onClearFile={handleClearFile}
-                  historicalFileName={historicalFileName}
-                  documentType={report?.documentType}
-                  currentProjectId={currentProjectId}
-                  currentReportId={currentReportId}
-                  onLoadDocument={loadReportFromHistory}
-                  tbmSummary={report?.tbmSummary}
-                  tbmTranscript={report?.tbmTranscript}
-                  imageQuality={imageQuality}
-                />
-              }
-              right={
-                <AnalysisPanel
-                  loading={loading}
-                  issues={report?.issues ?? []}
-                  chatMessages={report?.chat ?? []}
-                  onReupload={pickFileDialog}
-                  onModify={() => toast.info("수정 기능은 곧 출시됩니다", 2000)}
-                  currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
-                  currentFile={file}
-                  historicalFileName={historicalFileName}
-                  tbmSummary={report?.tbmSummary || ""}
-                  tbmTranscript={report?.tbmTranscript || ""}
-                />
-              }
-            />
-          </div>
+            </>
+          ) : (
+            <div className="flex-1 overflow-hidden">
+              <TBMTimeline
+                tbmRecords={tbmRecords}
+                loading={loadingTBMs}
+                onSelectTBM={(record) => {
+                  setLatestTBM({
+                    summary: record.tbmSummary,
+                    transcript: record.tbmTranscript,
+                    workType: record.tbmWorkType,
+                    extractedHazards: record.tbmExtractedHazards ? JSON.parse(record.tbmExtractedHazards) : [],
+                    extractedInspector: record.tbmExtractedInspector,
+                  });
+                  setActiveTab("document");
+                  toast.success("TBM이 선택되었습니다. 문서를 업로드하여 검증하세요.", 3000);
+                }}
+                onRefresh={loadTBMRecords}
+                onDelete={deleteTBM}
+              />
+            </div>
+          )}
         </>
       )}
 
@@ -1420,6 +1870,17 @@ export default function Page() {
           onRetry={errorDialog.onRetry}
         />
       )}
+      {/* Project Dashboard Modal */}
+      <ProjectDashboard
+        isOpen={showDashboard}
+        onClose={() => setShowDashboard(false)}
+        projectId={currentProjectId}
+        projectName={projects.find((p) => p.id === currentProjectId)?.name}
+        onOpenNewProject={() => {
+          setShowDashboard(false);
+          setIsProjectModalOpen(true);
+        }}
+      />
     </div>
   );
 }

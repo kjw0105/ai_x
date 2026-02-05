@@ -1,15 +1,16 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 
 import { useToast } from "@/contexts/ToastContext";
-import { ChatModal } from "../ChatModal";
 import { exportReportToPDF } from "@/lib/pdfExport";
 
 // Stage detection helper
+// Stage detection helper
 function getIssueStage(ruleId?: string): string {
     if (!ruleId) return "stage1-2";
+    if (ruleId.startsWith("photo_")) return "stage-photo"; // ✅ Visual Audit Stage
     if (ruleId.startsWith("pattern_")) return "stage4";
     if (ruleId.startsWith("cross_doc_")) return "stage3-cross";
     if (ruleId.startsWith("risk_matrix_")) return "stage3-risk";
@@ -19,6 +20,7 @@ function getIssueStage(ruleId?: string): string {
 
 function severityColor(sev: string, ruleId?: string) {
     const stage = getIssueStage(ruleId);
+    if (stage === "stage-photo") return "text-orange-600 dark:text-orange-400"; // Visual = Distinct Color
     if (stage === "stage3-structured") return "text-blue-600";
     if (stage === "stage3-risk") return "text-purple-600";
     if (stage === "stage3-cross") return "text-cyan-600";
@@ -30,6 +32,7 @@ function severityColor(sev: string, ruleId?: string) {
 
 function severityIcon(sev: string, ruleId?: string) {
     const stage = getIssueStage(ruleId);
+    if (stage === "stage-photo") return "camera_alt"; // 📸 Camera Icon
     if (stage === "stage3-structured") return "verified_user";
     if (stage === "stage3-risk") return "analytics";
     if (stage === "stage3-cross") return "timeline";
@@ -41,6 +44,7 @@ function severityIcon(sev: string, ruleId?: string) {
 
 function avatarBgColor(ruleId?: string) {
     const stage = getIssueStage(ruleId);
+    if (stage === "stage-photo") return "bg-orange-100 dark:bg-orange-900/40";
     if (stage === "stage3-structured") return "bg-blue-100";
     if (stage === "stage3-risk") return "bg-purple-100";
     if (stage === "stage3-cross") return "bg-cyan-100";
@@ -83,6 +87,12 @@ interface RiskCalculation {
     recommendation?: string;
 }
 
+interface ValidationStage {
+    id: string;
+    label: string;
+    icon: string;
+}
+
 interface AnalysisPanelProps {
     loading: boolean;
     issues: Issue[];
@@ -96,15 +106,37 @@ interface AnalysisPanelProps {
     tbmSummary?: string;
     tbmTranscript?: string;
     documentType?: string | null;
+    validationStep?: number;
+    showProgress?: boolean;
+    validationSteps?: ValidationStage[]; // Dynamic stages
+    initialHiddenIssueIds?: string[]; // Persist hidden issues across restarts
+    onHiddenIssuesChange?: (hiddenIds: string[]) => void; // Callback when hidden issues change
+    hasUnviewedIssues?: boolean; // Show indicator when analysis completes with issues
+    onMarkIssuesViewed?: () => void; // Callback when user views issues
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType }: AnalysisPanelProps) {
-    const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, onMarkIssuesViewed }: AnalysisPanelProps) {
+    // Default to 5-stage document validation if not provided
+    const defaultSteps: ValidationStage[] = [
+        { id: "stage1", label: "형식 검증", icon: "description" },
+        { id: "stage2", label: "논리 검증", icon: "rule" },
+        { id: "stage3", label: "교차 분석", icon: "compare_arrows" },
+        { id: "stage4", label: "패턴 감지", icon: "analytics" },
+        { id: "stage5", label: "위험 평가", icon: "shield" },
+    ];
+    const steps = validationSteps || defaultSteps;
+    const totalSteps = steps.length;
+    const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set(initialHiddenIssueIds));
     const [processingIssueId, setProcessingIssueId] = useState<string | null>(null);
     const toast = useToast();
     const [showRiskDetails, setShowRiskDetails] = useState(false);
     const [isExportingPDF, setIsExportingPDF] = useState(false);
     const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+
+    // Chat state
+    const [chatInput, setChatInput] = useState("");
+    const [isSendingChat, setIsSendingChat] = useState(false);
+    const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]);
 
     // Smart severity filter: Only show buttons for severities that exist in issues
     const availableSeverities = useMemo(() => {
@@ -119,24 +151,106 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     // Suggestion Modal State
     const [suggestion, setSuggestion] = useState<{ title: string; text: string } | null>(null);
 
-    // Chat UI (click-to-open)
+    // Notify parent when hidden issues change (for persistence)
+    useEffect(() => {
+        if (onHiddenIssuesChange) {
+            onHiddenIssuesChange(Array.from(hiddenIssueIds));
+        }
+    }, [hiddenIssueIds, onHiddenIssuesChange]);
+
+    // Ref for issues section - used for auto-scroll
+    const issuesSectionRef = useRef<HTMLDivElement>(null);
 
 
-    // Chat modal (replaces the disabled bottom input)
-    const [showChatModal, setShowChatModal] = useState(false);
+
+    // Chat functionality
+    const handleSendChat = async () => {
+        const text = chatInput.trim();
+        if (!text || isSendingChat) return;
+
+        setIsSendingChat(true);
+        setChatInput("");
+
+        // Add user message immediately
+        setLocalChatMessages((prev) => [...prev, { role: "user", text }]);
+
+        // Build report context for MCP tools
+        const reportContext = {
+            issues: issues.map(i => ({
+                severity: i.severity,
+                title: i.title,
+                message: i.message,
+                ruleId: i.ruleId,
+            })),
+        };
+
+        try {
+            const allMessages = [...chatMessages, ...localChatMessages, { role: "user" as const, text }];
+            const res = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messages: allMessages.map((m) => ({ role: m.role, text: m.text })),
+                    reportContext,
+                }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+            // Add AI response
+            setLocalChatMessages((prev) => [...prev, { role: "ai", text: data.reply }]);
+        } catch (e: any) {
+            toast.error(e?.message || "채팅 실패");
+            setLocalChatMessages((prev) => [
+                ...prev,
+                { role: "ai", text: "오류가 발생했어요. 잠시 후 다시 시도해 주세요." },
+            ]);
+        } finally {
+            setIsSendingChat(false);
+        }
+    };
 
     const reportExists = issues.length > 0 || chatMessages.length > 0;
+    const allChatMessages = [...chatMessages, ...localChatMessages];
     const statusLabel = loading ? "분석 중..." : reportExists ? "분석 완료" : "대기 중";
-    const exportButtonClassName = `flex items-center gap-2 px-4 py-2 font-bold rounded-lg transition-colors shadow-lg ${
-        isExportingPDF
-            ? "bg-slate-400 dark:bg-slate-600 text-white cursor-not-allowed"
-            : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white"
-    }`;
+    const exportButtonClassName = `flex items-center gap-2 px-4 py-2 font-bold rounded-lg transition-colors shadow-lg ${isExportingPDF
+        ? "bg-slate-400 dark:bg-slate-600 text-white cursor-not-allowed"
+        : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white"
+        }`;
 
     // Filter hidden issues and by severity
     const visibleIssues = issues.filter(i =>
         !hiddenIssueIds.has(i.id) && severityFilters.has(i.severity)
     );
+
+    // Auto-scroll to issues when analysis completes with new issues
+    useEffect(() => {
+        console.log(`[Auto-scroll] hasUnviewedIssues: ${hasUnviewedIssues}, visibleIssues.length: ${visibleIssues.length}, issuesSectionRef.current: ${!!issuesSectionRef.current}`);
+
+        if (hasUnviewedIssues && visibleIssues.length > 0 && issuesSectionRef.current) {
+            console.log('[Auto-scroll] Triggering scroll in 800ms...');
+            // Delay to ensure DOM is ready and progress modal is closed
+            const timeoutId = setTimeout(() => {
+                console.log('[Auto-scroll] Executing scrollIntoView');
+                try {
+                    issuesSectionRef.current?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center',
+                        inline: 'nearest'
+                    });
+                    console.log('[Auto-scroll] Scroll executed successfully');
+                } catch (error) {
+                    console.error('[Auto-scroll] Error during scroll:', error);
+                }
+                // Mark as viewed after scrolling
+                onMarkIssuesViewed?.();
+                console.log('[Auto-scroll] Marked as viewed');
+            }, 800);
+
+            return () => clearTimeout(timeoutId);
+        }
+    }, [hasUnviewedIssues, visibleIssues.length]);
 
     const toggleSeverityFilter = (severity: string) => {
         setSeverityFilters(prev => {
@@ -411,8 +525,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             <button
                                 onClick={() => toggleSeverityFilter("error")}
                                 className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("error")
-                                        ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
-                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                    ? "bg-red-100 text-red-700 border-2 border-red-300 dark:bg-red-900/30 dark:text-red-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
                                     }`}
                             >
                                 <span className="material-symbols-outlined text-sm">error</span>
@@ -423,8 +537,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             <button
                                 onClick={() => toggleSeverityFilter("warn")}
                                 className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("warn")
-                                        ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
-                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                    ? "bg-orange-100 text-orange-700 border-2 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
                                     }`}
                             >
                                 <span className="material-symbols-outlined text-sm">warning</span>
@@ -435,8 +549,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             <button
                                 onClick={() => toggleSeverityFilter("info")}
                                 className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${severityFilters.has("info")
-                                        ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
-                                        : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
+                                    ? "bg-blue-100 text-blue-700 border-2 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300"
+                                    : "bg-slate-100 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500"
                                     }`}
                             >
                                 <span className="material-symbols-outlined text-sm">info</span>
@@ -455,8 +569,67 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     <span className="text-xs font-medium text-slate-400 bg-slate-200/50 px-3 py-1 rounded-full">오늘</span>
                 </div>
 
+                {/* Loading State & Verification Progress */}
+                {(loading || showProgress) && (
+                    <div className="bg-white dark:bg-surface-dark p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <span className="material-symbols-outlined text-blue-500 animate-spin">sync</span>
+                                AI 정밀 분석 중...
+                            </h3>
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">
+                                {Math.round((validationStep / totalSteps) * 100)}%
+                            </span>
+                        </div>
+
+                        {/* Progress Steps */}
+                        <div className="relative">
+                            <div className="absolute left-2.5 top-0 bottom-0 w-0.5 bg-slate-100 dark:bg-slate-700" />
+                            <div className="space-y-4 relative">
+                                {steps.map((s, idx) => {
+                                    const stepNumber = idx + 1;
+                                    const isCompleted = validationStep > stepNumber;
+                                    const isCurrent = Math.floor(validationStep) === stepNumber;
+                                    const isPending = validationStep < stepNumber;
+
+                                    return (
+                                        <div key={s.id} className="flex items-center gap-3">
+                                            <div className={`relative z-10 flex items-center justify-center size-5 rounded-full border-2 transition-colors ${isCompleted ? "bg-green-500 border-green-500" :
+                                                isCurrent ? "bg-white border-blue-500" :
+                                                    "bg-white border-slate-200 dark:border-slate-600 dark:bg-slate-800"
+                                                }`}>
+                                                {isCompleted && <span className="material-symbols-outlined text-white text-[10px] font-bold">check</span>}
+                                                {isCurrent && <div className="size-2 bg-blue-500 rounded-full animate-pulse" />}
+                                            </div>
+                                            <span className={`text-sm font-medium transition-colors ${isCompleted ? "text-slate-500 dark:text-slate-400" :
+                                                isCurrent ? "text-blue-600 dark:text-blue-400 font-bold" :
+                                                    "text-slate-300 dark:text-slate-600"
+                                                }`}>
+                                                {s.label}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Skeleton Loader (only if loading and no progress shown yet) */}
+                {loading && !showProgress && (
+                    <div className="space-y-3 animate-pulse">
+                        <div className="flex gap-3">
+                            <div className="size-10 rounded-full bg-slate-200 dark:bg-slate-700" />
+                            <div className="flex-1 space-y-2">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/4" />
+                                <div className="h-24 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700" />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Chat Messages */}
-                {messages.map((msg, idx) => (
+                {allChatMessages.map((msg, idx) => (
                     <div key={idx} className="chat-message flex gap-3">
                         <div className="size-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-sm mt-1">
                             <span className="material-symbols-outlined text-blue-600 text-xl">smart_toy</span>
@@ -526,87 +699,82 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     </div>
                 )}
 
-                {/* Render Issues by Stage */}
-                {[
-                    { title: "Stage 1-2: 형식 및 논리 검증", issues: stage12Issues, color: "text-red-500 bg-red-50 border-red-200" },
-                    { title: "Stage 3: 구조화된 계획 검증", issues: stage3StructuredIssues, color: "text-blue-600 bg-blue-50 border-blue-200" },
-                    { title: "Stage 3: 위험도 분석", issues: stage3RiskIssues, color: "text-purple-600 bg-purple-50 border-purple-200" },
-                    { title: "Stage 3: 문서 간 분석", issues: stage3CrossIssues, color: "text-cyan-600 bg-cyan-50 border-cyan-200" },
-                    { title: "Stage 4: 행동 패턴 분석", issues: stage4Issues, color: "text-purple-600 bg-purple-50 border-purple-200" },
-                ].map((group, idx) => (
-                    group.issues.length > 0 && (
-                        <div key={idx}>
-                            <div className="flex justify-center mb-4">
-                                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${group.color}`}>
-                                    {group.title}
-                                </span>
+                {/* Render Issues by Stage - Card List View */}
+                <div ref={issuesSectionRef}>
+                    {[
+                        { title: "📸 시각적 증거 분석 (Photo Audit)", issues: visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage-photo"), color: "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800" },
+                        { title: "Stage 1-2: 형식 및 논리 검증", issues: stage12Issues, color: "text-red-500 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" },
+                        { title: "Stage 3: 구조화된 계획 검증", issues: stage3StructuredIssues, color: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" },
+                        { title: "Stage 3: 위험도 분석", issues: stage3RiskIssues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
+                        { title: "Stage 3: 문서 간 분석", issues: stage3CrossIssues, color: "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800" },
+                        { title: "Stage 4: 행동 패턴 분석", issues: stage4Issues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
+                    ].map((group, idx) => (
+                        group.issues.length > 0 && (
+                            <div key={idx} className="space-y-3">
+                                <div className="flex justify-center mb-3">
+                                    <span className={`text-xs font-bold px-3 py-1 rounded-full border ${group.color}`}>
+                                        {group.title}
+                                    </span>
+                                </div>
+
+                                {/* Card List - Mobile-Friendly */}
+                                <div className="space-y-2 px-2">
+                                    {group.issues.map((issue) => (
+                                        <button
+                                            key={issue.id}
+                                            onClick={() => {
+                                                setSelectedIssue(issue);
+                                                onMarkIssuesViewed?.();
+                                            }}
+                                            className="w-full text-left"
+                                        >
+                                            <div className={`p-3 rounded-xl border-2 transition-all hover:shadow-md ${
+                                                hasUnviewedIssues ? "ring-4 ring-blue-500 ring-offset-2 shadow-lg shadow-blue-500/50" : ""
+                                                } ${issue.severity === "error"
+                                                    ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700"
+                                                    : issue.severity === "warn"
+                                                        ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 hover:border-orange-300 dark:hover:border-orange-700"
+                                                        : "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700"
+                                                }`}>
+                                                <div className="flex items-start gap-3">
+                                                    {/* Icon */}
+                                                    <div className={`size-10 rounded-full flex items-center justify-center flex-shrink-0 ${avatarBgColor(issue.ruleId)}`}>
+                                                        <span className={`material-symbols-outlined text-xl ${avatarColor(issue.ruleId)}`}>
+                                                            {severityIcon(issue.severity, issue.ruleId)}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Content */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className={`font-bold text-sm ${severityColor(issue.severity, issue.ruleId)}`}>
+                                                                {issue.title}
+                                                            </h4>
+                                                            {issue.confidence !== undefined && (
+                                                                <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                                                    {issue.confidence}%
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                                                            {issue.message}
+                                                        </p>
+                                                        <div className="mt-2 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                                                            <span className="material-symbols-outlined text-sm">touch_app</span>
+                                                            <span>탭하여 자세히 보기</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="flex flex-wrap items-center justify-center gap-3">
-                                {group.issues.map((issue, i) => (
-                                    <button
-                                        key={issue.id}
-                                        onClick={() => setSelectedIssue(issue)}
-                                        className={`size-12 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center transition-transform hover:scale-105 ${avatarBgColor(issue.ruleId)}`}
-                                        title={`${issue.title} (클릭하여 상세 보기)`}
-                                        aria-label={`${issue.title} 상세 보기`}
-                                    >
-                                        <span className={`material-symbols-outlined text-2xl ${avatarColor(issue.ruleId)}`}>
-                                            {severityIcon(issue.severity, issue.ruleId)}
-                                        </span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )
-                ))}
-
-                <div className="h-4" />
-            </div>
-
-            {/* Input Area */}
-            <div className="p-6 bg-white dark:bg-surface-dark border-t border-slate-200 dark:border-slate-700">
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                    <button
-                        className="flex flex-col items-center justify-center gap-1 p-4 bg-slate-100 hover:bg-slate-200 rounded-2xl text-slate-600 font-bold transition-all"
-                        onClick={onReupload}
-                    >
-                        <span className="material-symbols-outlined text-3xl">add_a_photo</span>
-                        <span>다시 업로드</span>
-                    </button>
-
-                    <button
-                        className="flex flex-col items-center justify-center gap-1 p-4 bg-primary hover:bg-green-600 rounded-2xl text-white font-bold shadow-lg shadow-green-200 transition-all"
-                        onClick={onModify}
-                    >
-                        <span className="material-symbols-outlined text-3xl">check_circle</span>
-                        <span>수정 완료</span>
-                    </button>
+                        )
+                    ))}
                 </div>
 
-                {/* Click-to-open chat bubble (replaces the disabled input) */}
-                <button
-                    type="button"
-                    onClick={() => setShowChatModal(true)}
-                    className="relative w-full text-left bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-3xl p-4 transition shadow-sm"
-                >
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2 text-slate-800 dark:text-white font-black">
-                                <span className="material-symbols-outlined">chat_bubble</span>
-                                채팅 열기
-                            </div>
-                            <div className="text-sm text-slate-500 dark:text-slate-300 mt-1 truncate">
-                                눌러서 AI 안전도우미와 대화하기
-                            </div>
-                        </div>
-                        <div className="shrink-0 size-11 rounded-2xl bg-yellow-400 text-black flex items-center justify-center shadow-sm">
-                            <span className="material-symbols-outlined">arrow_forward</span>
-                        </div>
-                    </div>
-
-                    {/* speech-bubble tail */}
-                    <span className="pointer-events-none absolute -bottom-2 right-10 size-4 rotate-45 bg-slate-100 dark:bg-slate-800" />
-                </button>
+                <div className="h-4" />
             </div>
 
             {/* Suggestion Modal */}
@@ -642,79 +810,107 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             )}
 
             {selectedIssue && (
-  <div
-    className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-10"
-    onClick={() => setSelectedIssue(null)}
-  >
-    <div
-      className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div className="flex items-center gap-3">
-          <div className={`size-12 rounded-full flex items-center justify-center ${avatarBgColor(selectedIssue.ruleId)}`}>
-            <span className={`material-symbols-outlined text-2xl ${avatarColor(selectedIssue.ruleId)}`}>
-              {severityIcon(selectedIssue.severity, selectedIssue.ruleId)}
-            </span>
-          </div>
-          <div>
-            <h3 className={`text-lg font-black ${severityColor(selectedIssue.severity, selectedIssue.ruleId)}`}>
-              {selectedIssue.title}
-            </h3>
-            {selectedIssue.confidence !== undefined && (
-              <p className="text-xs text-slate-400 mt-1">
-                신뢰도 {selectedIssue.confidence}%
-              </p>
+                <div
+                    className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-10"
+                    onClick={() => setSelectedIssue(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className={`size-12 rounded-full flex items-center justify-center ${avatarBgColor(selectedIssue.ruleId)}`}>
+                                    <span className={`material-symbols-outlined text-2xl ${avatarColor(selectedIssue.ruleId)}`}>
+                                        {severityIcon(selectedIssue.severity, selectedIssue.ruleId)}
+                                    </span>
+                                </div>
+                                <div>
+                                    <h3 className={`text-lg font-black ${severityColor(selectedIssue.severity, selectedIssue.ruleId)}`}>
+                                        {selectedIssue.title}
+                                    </h3>
+                                    {selectedIssue.confidence !== undefined && (
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            신뢰도 {selectedIssue.confidence}%
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setSelectedIssue(null)}
+                                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"
+                                aria-label="문제 상세 닫기"
+                                title="닫기"
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-line mb-6">
+                            {selectedIssue.message}
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={() => {
+                                    handleConfirm(selectedIssue.id);
+                                    setSelectedIssue(null);
+                                }}
+                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
+                            >
+                                확인했어
+                            </button>
+
+                            <button
+                                onClick={() => handleFix(selectedIssue)}
+                                disabled={processingIssueId === selectedIssue.id}
+                                className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {processingIssueId === selectedIssue.id ? (
+                                    <>
+                                        <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+                                        생성 중...
+                                    </>
+                                ) : (
+                                    "수정해줘"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
-          </div>
-        </div>
 
-        <button
-          onClick={() => setSelectedIssue(null)}
-          className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"
-          aria-label="문제 상세 닫기"
-          title="닫기"
-        >
-          <span className="material-symbols-outlined">close</span>
-        </button>
-      </div>
-
-      <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-line mb-6">
-        {selectedIssue.message}
-      </p>
-
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          onClick={() => {
-            handleConfirm(selectedIssue.id);
-            setSelectedIssue(null);
-          }}
-          className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
-        >
-          확인했어
-        </button>
-
-        <button
-          onClick={() => handleFix(selectedIssue)}
-          disabled={processingIssueId === selectedIssue.id}
-          className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {processingIssueId === selectedIssue.id ? (
-            <>
-              <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-              생성 중...
-            </>
-          ) : (
-            "수정해줘"
-          )}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-            {/* Chat Modal */}
-            <ChatModal open={showChatModal} onClose={() => setShowChatModal(false)} />
+            {/* Chat Input - Always visible at bottom */}
+            <div className="p-4 bg-white dark:bg-surface-dark border-t border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-2">
+                    <input
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSendChat();
+                            }
+                        }}
+                        placeholder="AI 안전도우미에게 질문하기..."
+                        disabled={isSendingChat}
+                        className="flex-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+                    />
+                    <button
+                        onClick={handleSendChat}
+                        disabled={!chatInput.trim() || isSendingChat}
+                        className="size-10 rounded-xl bg-primary hover:bg-green-600 text-white disabled:opacity-40 disabled:hover:bg-primary transition-colors shadow-lg shadow-green-200 dark:shadow-none flex items-center justify-center shrink-0"
+                        aria-label="Send"
+                    >
+                        {isSendingChat ? (
+                            <span className="material-symbols-outlined text-lg animate-spin">refresh</span>
+                        ) : (
+                            <span className="material-symbols-outlined text-lg">send</span>
+                        )}
+                    </button>
+                </div>
+            </div>
         </div >
     );
 };

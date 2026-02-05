@@ -15,7 +15,8 @@ const REQUIRED_DIRS = [
     '2-stage1-format',
     '3-stage2-logic',
     '5-stage4-patterns',
-    '7-edge-cases'
+    '7-edge-cases',
+    '8-quality-tests'
 ];
 
 REQUIRED_DIRS.forEach(dir => {
@@ -30,7 +31,7 @@ REQUIRED_DIRS.forEach(dir => {
  * TEMPLATE 1: CLASSIC (Standard Table)
  */
 function renderClassic(data) {
-    const { date, siteName, workContent, workers, inspector, sig1, sig2, checklist, omitItems = [], ambiguousItems = [] } = data;
+    const { date, siteName, workContent, workers, inspector, sig1, sig2, checklist, omitItems = [], ambiguousItems = [], cssOverride = '' } = data;
 
     // Default items
     const allItems = [
@@ -94,6 +95,7 @@ function renderClassic(data) {
         .signature-section { margin-top: 50px; display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
         .signature-box { border: 1px solid #ddd; padding: 20px; border-radius: 4px; }
         .signature-line { border-top: 1px solid #333; margin-top: 40px; padding-top: 10px; text-align: center; color: #666; }
+        ${cssOverride}
       </style>
     </head>
     <body>
@@ -312,6 +314,13 @@ function renderMobile(data) {
 }
 
 /**
+ * TEMPLATE 4: BLANK (White Page)
+ */
+function renderBlank(data) {
+    return '<!DOCTYPE html><html><body style="background: white;"></body></html>';
+}
+
+/**
  * TEST CASES
  */
 const testCases = [
@@ -353,6 +362,19 @@ const testCases = [
     {
         filename: '7-edge-cases/context-weather-electrical.jpg', template: 'classic',
         options: { workContent: '우천시 전기작업', checklist: { elec_02: 'checked' } }
+    },
+
+    // 8. Quality Tests
+    {
+        filename: '8-quality-tests/quality-blurry.jpg', template: 'classic',
+        options: {
+            cssOverride: 'body { filter: blur(4px) contrast(0.8); }',
+            workContent: '흐릿한 문서 테스트'
+        }
+    },
+    {
+        filename: '8-quality-tests/quality-empty.jpg', template: 'blank',
+        options: {}
     }
 ];
 
@@ -375,7 +397,8 @@ async function generateImages() {
             sig2: testCase.options.sig2 || 'present',
             checklist: testCase.options.checklist || {},
             omitItems: testCase.options.omitItems || [],
-            ambiguousItems: testCase.options.ambiguousItems || []
+            ambiguousItems: testCase.options.ambiguousItems || [],
+            cssOverride: testCase.options.cssOverride || ''
         };
 
         let html = '';
@@ -388,6 +411,8 @@ async function generateImages() {
         } else if (testCase.template === 'mobile') {
             html = renderMobile(data);
             viewport = { width: 375, height: 812 }; // iPhone X
+        } else if (testCase.template === 'blank') {
+            html = renderBlank(data);
         }
 
         await page.setViewport(viewport);

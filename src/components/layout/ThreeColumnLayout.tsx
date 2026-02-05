@@ -12,12 +12,14 @@ export function ThreeColumnLayout({ left, center, right }: ThreeColumnLayoutProp
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [activePanel, setActivePanel] = useState<"analysis" | "issues">("analysis");
 
-  // Calculate widths based on collapsed state
+  // Calculate widths based on collapsed state and screen size
   const getWidths = () => {
     if (rightCollapsed) {
       return { center: "100%", right: "0%" };
     }
-    return { center: "70%", right: "30%" };
+    // More space for document viewer on smaller screens (below 1280px)
+    // Use 60/40 split instead of 70/30 for better readability
+    return { center: "60%", right: "40%" };
   };
 
   const widths = getWidths();
@@ -52,45 +54,66 @@ export function ThreeColumnLayout({ left, center, right }: ThreeColumnLayoutProp
       >
         {!rightCollapsed && (
           <div className="flex flex-col h-full overflow-hidden">
-            <div className="flex flex-col gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-              <div className="flex items-center justify-between">
+            <div className="flex flex-col border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <div className="flex items-center justify-between px-4 pt-3 pb-2">
                 <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
                   <span className="material-symbols-outlined text-lg">psychology</span>
                   분석 패널
                 </h3>
                 <button
                   onClick={() => setRightCollapsed(true)}
-                  className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
                   title="패널 숨기기"
                 >
-                  <span className="material-symbols-outlined text-lg">chevron_right</span>
+                  <span className="material-symbols-outlined text-lg text-slate-500 dark:text-slate-400">chevron_right</span>
                 </button>
               </div>
-              <div className="flex flex-col gap-2">
+
+              {/* Tab Navigation */}
+              <div className="flex border-b border-slate-200 dark:border-slate-700">
                 <button
                   onClick={() => setActivePanel("analysis")}
-                  className={`w-full px-3 py-2 rounded-lg text-sm font-bold transition-colors ${
+                  className={`flex-1 px-4 py-2.5 text-sm font-bold transition-all relative ${
                     activePanel === "analysis"
-                      ? "bg-blue-600 text-white"
-                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                      ? "text-blue-600 dark:text-blue-400"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                   }`}
                 >
-                  AI 분석
+                  <span className="flex items-center justify-center gap-1.5">
+                    <span className="material-symbols-outlined text-base">chat</span>
+                    AI 분석
+                  </span>
+                  {activePanel === "analysis" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400" />
+                  )}
                 </button>
                 <button
                   onClick={() => setActivePanel("issues")}
-                  className={`w-full px-3 py-2 rounded-lg text-sm font-bold transition-colors ${
+                  className={`flex-1 px-4 py-2.5 text-sm font-bold transition-all relative ${
                     activePanel === "issues"
-                      ? "bg-red-500 text-white"
-                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                   }`}
                 >
-                  발견된 문제
+                  <span className="flex items-center justify-center gap-1.5">
+                    <span className="material-symbols-outlined text-base">error</span>
+                    발견된 문제
+                  </span>
+                  {activePanel === "issues" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600 dark:bg-red-400" />
+                  )}
                 </button>
               </div>
             </div>
+
+            {/* Content Panels - Both mounted, visibility toggled */}
             <div className="flex-1 overflow-hidden">
-              {activePanel === "analysis" ? right : left}
+              <div className={`h-full ${activePanel === "analysis" ? "block" : "hidden"}`}>
+                {right}
+              </div>
+              <div className={`h-full ${activePanel === "issues" ? "block" : "hidden"}`}>
+                {left}
+              </div>
             </div>
           </div>
         )}

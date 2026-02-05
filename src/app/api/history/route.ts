@@ -51,3 +51,38 @@ export async function DELETE(req: Request) {
         return NextResponse.json({ error: "Failed to delete history" }, { status: 500 });
     }
 }
+
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        const { type, projectId, fileName, summary, transcript, tbmDuration,
+                workType, extractedHazards, extractedInspector, participants } = body;
+
+        if (type === "TBM") {
+            const report = await prisma.report.create({
+                data: {
+                    fileName: fileName || "TBM(작업 전 대화)",
+                    projectId: projectId || null,
+                    tbmSummary: summary || "",
+                    tbmTranscript: transcript || "",
+                    tbmDuration: tbmDuration || 0,
+                    tbmWorkType: workType || null,
+                    tbmExtractedHazards: extractedHazards || null,
+                    tbmExtractedInspector: extractedInspector || null,
+                    tbmParticipants: participants || null,
+                    documentType: "TBM",
+                    docDataJson: "{}",
+                    issuesJson: "[]",
+                    chatJson: JSON.stringify([{ role: "ai", text: summary || "" }]),
+                }
+            });
+            return NextResponse.json(report);
+        }
+
+        // Regular document logic (if needed in future)
+        return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+    } catch (e: any) {
+        console.error("History POST Error:", e);
+        return NextResponse.json({ error: "Failed to save history" }, { status: 500 });
+    }
+}

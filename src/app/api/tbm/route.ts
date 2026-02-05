@@ -21,10 +21,14 @@ function buildTBMSystemPrompt() {
 사용자가 녹음한 대화를 전사한 텍스트를 바탕으로 아래 형식으로 요약해라.
 한국어로, 현장 실무자가 바로 쓸 수 있게 간결하고 구조적으로.
 
-반드시 JSON으로만 출력해라. (설명/코드블록 금지)
+**중요: 반드시 유효한 JSON으로만 출력해라. 주석(//), 설명, 코드블록 사용 금지.**
 
 스키마:
 {
+  "workType": "string",  // 작업 종류 (예: "비계 조립", "용접 작업", "외벽 도장")
+  "extractedHazards": ["추락", "화재", ...],  // 논의된 위험요인 (핵심 키워드만)
+  "extractedInspector": "string|null",  // 담당자 이름 (명확히 언급된 경우만)
+  "participants": ["이름1", "이름2", ...],  // 참석자 이름들
   "work_overview": "string",
   "risks": ["string", "... (최대 5)"],
   "controls": ["string", "... (risks와 가능한 1:1 대응)"],
@@ -35,20 +39,18 @@ function buildTBMSystemPrompt() {
   "cautions": ["string", "... (최대 5)"]
 }
 
-프로젝트 컨텍스트 활용:
-- 사용자가 [프로젝트 컨텍스트]를 제공한 경우, 해당 정보를 참고하여:
-  * 프로젝트의 주요 위험요인이 TBM에서 언급되었는지 확인
-  * 필수 보호구가 체크되었는지 검토
-  * 핵심 절차가 논의되었는지 검토
-  * 누락된 중요 항목이 있다면 "7) 누락/불명확한 부분"에 명시
-- 프로젝트 컨텍스트와 TBM 내용이 불일치하면 객관적으로 기록
+필드 설명:
+- workType: 구체적인 작업명 (예: "비계 조립", "콘크리트 타설", "용접 작업")
+- extractedHazards: 핵심 위험요인만 (예: ["추락", "낙하물", "화재"])
+- extractedInspector: 담당자/책임자 이름 (명시되지 않으면 null)
+- participants: 참석자 이름 리스트
 
 프로젝트 컨텍스트 활용:
 - 사용자가 [프로젝트 컨텍스트]를 제공한 경우, 해당 정보를 참고하여:
   * 프로젝트의 주요 위험요인이 TBM에서 언급되었는지 확인
   * 필수 보호구가 체크되었는지 검토
   * 핵심 절차가 논의되었는지 검토
-  * 누락된 중요 항목이 있다면 "7) 누락/불명확한 부분"에 명시
+  * 누락된 중요 항목이 있다면 "unclear_points"에 명시
 - 프로젝트 컨텍스트와 TBM 내용이 불일치하면 객관적으로 기록
 
 주의:
@@ -182,24 +184,30 @@ export async function POST(req: Request) {
 
     // 3) Summarize with context
     console.log("[TBM] step=summarize start");
-    const summaryRes = await client.responses.create({
+    const summaryRes = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      input: [
+      messages: [
         { role: "system", content: buildTBMSystemPrompt() },
         {
           role: "user",
           content: `다음은 TBM 녹음 전사본이다. 이를 요약해라.\n\n[TRANSCRIPT]\n${transcript}${contextInfo}`,
         },
       ],
+      response_format: { type: "json_object" },
+      temperature: 0,
     });
     console.log("[TBM] step=summarize done");
 
-    const raw = safeText((summaryRes as any).output_text);
+    const raw = summaryRes.choices[0]?.message?.content ?? "{}";
 
     let parsed: any = null;
     try {
-      parsed = JSON.parse(raw);
-    } catch {
+      // Remove comments from JSON before parsing
+      const cleanedJson = raw.replace(/\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1');
+      parsed = JSON.parse(cleanedJson);
+    } catch (e) {
+      console.error("[TBM] JSON parse error:", e);
+      console.error("[TBM] Raw response:", raw);
       // fallback: 파싱 실패 시 raw 그대로 사용
     }
 
@@ -225,6 +233,10 @@ export async function POST(req: Request) {
       transcript,
       summary,
       cautions,
+      workType: parsed?.workType || null,
+      extractedHazards: parsed?.extractedHazards || [],
+      extractedInspector: parsed?.extractedInspector || null,
+      participants: parsed?.participants || [],
     });
   } catch (e: any) {
     console.error("/api/tbm error raw:", e);

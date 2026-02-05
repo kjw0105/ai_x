@@ -93,7 +93,7 @@ export default function TBMRecorderModal({
   }, [open, initialMode]);
 
   // ✅ 모달 열릴 때 마이크 준비 (record 탭일 때만)
-  
+
 
   // ✅ 모달 닫힐 때 정리
   useEffect(() => {
@@ -107,7 +107,7 @@ export default function TBMRecorderModal({
 
     try {
       recorderRef.current?.stop?.();
-    } catch {}
+    } catch { }
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
@@ -191,8 +191,8 @@ export default function TBMRecorderModal({
       const form = new FormData();
       const ext = guessExt(audioBlob.type || "audio/webm");
       const isFile = audioBlob instanceof File;
-const filename = isFile ? audioBlob.name : `tbm.${ext}`;
-form.append("audio", audioBlob, filename);
+      const filename = isFile ? audioBlob.name : `tbm.${ext}`;
+      form.append("audio", audioBlob, filename);
 
       if (projectId) form.append("projectId", projectId);
 
@@ -203,7 +203,7 @@ form.append("audio", audioBlob, filename);
         try {
           const j = JSON.parse(text);
           msg = j?.error || text;
-        } catch {}
+        } catch { }
         throw new Error(msg || `HTTP ${res.status}`);
       }
 
@@ -218,64 +218,64 @@ form.append("audio", audioBlob, filename);
   }
 
   const start = async () => {
-  console.log("[TBM] start clicked", { hasStream: !!stream });
+    console.log("[TBM] start clicked", { hasStream: !!stream });
 
-  // ✅ 버튼 클릭 시에만 마이크 체크 + 권한 요청 + stream 확보
-  let s = stream;
-  if (!s) {
-    const newStream = await ensureMicOrWarn();
-    if (!newStream) {
-      // (선택) 실패 시 업로드 탭으로 유도
-      setMode("upload");
-      return;
+    // ✅ 버튼 클릭 시에만 마이크 체크 + 권한 요청 + stream 확보
+    let s = stream;
+    if (!s) {
+      const newStream = await ensureMicOrWarn();
+      if (!newStream) {
+        // (선택) 실패 시 업로드 탭으로 유도
+        setMode("upload");
+        return;
+      }
+      s = newStream;
+      setStream(newStream);
     }
-    s = newStream;
-    setStream(newStream);
-  }
 
-  chunksRef.current = [];
-  voiceFramesRef.current = 0;
-  totalFramesRef.current = 0;
+    chunksRef.current = [];
+    voiceFramesRef.current = 0;
+    totalFramesRef.current = 0;
 
-  const options: MediaRecorderOptions = {};
-  if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-    options.mimeType = "audio/webm;codecs=opus";
-  } else if (MediaRecorder.isTypeSupported("audio/webm")) {
-    options.mimeType = "audio/webm";
-  } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-    options.mimeType = "audio/mp4";
-  }
-  (options as any).audioBitsPerSecond = 64000;
+    const options: MediaRecorderOptions = {};
+    if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+      options.mimeType = "audio/webm;codecs=opus";
+    } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+      options.mimeType = "audio/webm";
+    } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+      options.mimeType = "audio/mp4";
+    }
+    (options as any).audioBitsPerSecond = 64000;
 
-  const rec = new MediaRecorder(s, options);
-  recorderRef.current = rec;
+    const rec = new MediaRecorder(s, options);
+    recorderRef.current = rec;
 
-  startVoiceMeter(s);
+    startVoiceMeter(s);
 
-  const startedAt = performance.now();
-  setStartedAtMs(startedAt);
-  setIsRecording(true);
+    const startedAt = performance.now();
+    setStartedAtMs(startedAt);
+    setIsRecording(true);
 
-  rec.ondataavailable = (ev) => {
-    if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
+    rec.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
+    };
+
+    rec.onstop = async () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+
+      const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+      const durationMs = Math.max(0, performance.now() - startedAt);
+
+      onDone?.(blob, durationMs);
+      await postAudioToServer(blob, durationMs);
+
+      setIsRecording(false);
+      setStartedAtMs(null);
+    };
+
+    rec.start(250);
   };
-
-  rec.onstop = async () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-
-    const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
-    const durationMs = Math.max(0, performance.now() - startedAt);
-
-    onDone?.(blob, durationMs);
-    await postAudioToServer(blob, durationMs);
-
-    setIsRecording(false);
-    setStartedAtMs(null);
-  };
-
-  rec.start(250);
-};
 
 
   const stop = () => {
@@ -314,18 +314,16 @@ form.append("audio", audioBlob, filename);
           {/* ✅ 탭 */}
           <div className="flex bg-slate-100 dark:bg-slate-800 rounded-2xl p-1">
             <button
-              className={`flex-1 py-2 rounded-2xl font-black ${
-                mode === "record" ? "bg-slate-900 text-white" : "text-slate-600 dark:text-slate-300"
-              }`}
+              className={`flex-1 py-2 rounded-2xl font-black ${mode === "record" ? "bg-slate-900 text-white" : "text-slate-600 dark:text-slate-300"
+                }`}
               onClick={() => setMode("record")}
               disabled={isRecording || isPosting}
             >
               녹음
             </button>
             <button
-              className={`flex-1 py-2 rounded-2xl font-black ${
-                mode === "upload" ? "bg-slate-900 text-white" : "text-slate-600 dark:text-slate-300"
-              }`}
+              className={`flex-1 py-2 rounded-2xl font-black ${mode === "upload" ? "bg-slate-900 text-white" : "text-slate-600 dark:text-slate-300"
+                }`}
               onClick={() => setMode("upload")}
               disabled={isRecording || isPosting}
             >
@@ -335,14 +333,35 @@ form.append("audio", audioBlob, filename);
 
           {mode === "record" ? (
             <>
+              {!isRecording && !isPosting && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 text-sm text-blue-800 dark:text-blue-300">
+                  <div className="font-bold mb-1">📝 녹음 가이드</div>
+                  <div className="text-xs">
+                    1. &quot;녹음 시작&quot; 버튼을 클릭하세요<br />
+                    2. 작업 내용, 위험요인, 담당자를 말씀하세요<br />
+                    3. AI가 자동으로 정보를 추출합니다
+                  </div>
+                </div>
+              )}
+
               <RecordingHUD stream={stream} isRecording={isRecording} startedAtMs={startedAtMs} />
+
+              {isPosting && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3 text-sm text-yellow-800 dark:text-yellow-300">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin size-4 border-2 border-yellow-600 border-t-transparent rounded-full"></div>
+                    <span className="font-bold">AI가 녹음을 분석하는 중...</span>
+                  </div>
+                  <div className="text-xs mt-1">작업 종류, 위험요인, 담당자를 추출합니다</div>
+                </div>
+              )}
 
               <div className="flex gap-2">
                 {!isRecording ? (
                   <button
                     onClick={start}
                     disabled={isPosting}
-                    className="flex-1 px-4 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-black disabled:opacity-50"
+                    className="flex-1 px-4 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-black disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPosting ? "처리 중..." : "녹음 시작"}
                   </button>

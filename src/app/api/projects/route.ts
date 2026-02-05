@@ -27,7 +27,7 @@ export async function GET() {
 // POST: Create a new project with Context
 export async function POST(req: Request) {
     try {
-        const { name, description, contextText } = await req.json();
+        const { name, description, contextText, masterPlanJson, isStructured } = await req.json();
 
         if (!name) {
             return NextResponse.json({ error: "Project name is required" }, { status: 400 });
@@ -37,7 +37,9 @@ export async function POST(req: Request) {
             data: {
                 name,
                 description,
-                contextText: contextText ?? ""
+                contextText: contextText ?? "",
+                masterPlanJson: masterPlanJson ?? null,
+                isStructured: isStructured ?? false
             }
         });
 

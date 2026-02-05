@@ -7,9 +7,10 @@ interface ProjectDashboardProps {
     onClose: () => void;
     projectId: string | null;
     projectName?: string;
+    onOpenNewProject?: () => void;
 }
 
-export function ProjectDashboard({ isOpen, onClose, projectId, projectName }: ProjectDashboardProps) {
+export function ProjectDashboard({ isOpen, onClose, projectId, projectName, onOpenNewProject }: ProjectDashboardProps) {
     if (!isOpen) return null;
 
     return (
@@ -54,12 +55,26 @@ export function ProjectDashboard({ isOpen, onClose, projectId, projectName }: Pr
                     </div>
                 ) : (
                     <div className="text-center py-12">
-                        <span className="material-symbols-outlined text-6xl text-slate-300 dark:text-slate-600 mb-4">
-                            folder_off
-                        </span>
-                        <p className="text-slate-600 dark:text-slate-400">
-                            프로젝트를 선택하면 대시보드를 볼 수 있습니다
+                        <div className="inline-flex items-center justify-center size-20 bg-slate-100 dark:bg-slate-700/50 rounded-full mb-4">
+                            <span className="material-symbols-outlined text-4xl text-slate-400 dark:text-slate-500">
+                                folder_off
+                            </span>
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                            선택된 프로젝트가 없습니다
+                        </h3>
+                        <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-sm mx-auto">
+                            대시보드를 확인하려면 프로젝트를 선택하거나 새로운 프로젝트를 생성하세요.
                         </p>
+                        <button
+                            onClick={() => {
+                                onClose();
+                                onOpenNewProject?.();
+                            }}
+                            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 dark:shadow-none transition-all"
+                        >
+                            새 프로젝트 만들기
+                        </button>
                     </div>
                 )}
             </div>

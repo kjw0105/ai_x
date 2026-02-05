@@ -163,4 +163,48 @@ Common fields in safety documents:
 ## Testing Notes
 - Local dev: `npm run dev` → http://localhost:3000
 - Database: `npx prisma db push` to sync schema
-- Need sample safety documents to test validation stages
+- Test documents: `test-documents/` folder with 7 categories
+
+---
+
+## ✅ CRITICAL BUG FIXED - AI Extraction Working
+
+**Status**: RESOLVED (Fixed on Feb 4, 2026)
+
+### Issues Found & Fixed
+
+**Issue 1: Wrong OpenAI API Usage**
+- `callOpenAI()` was using deprecated `responses.create()` API
+- Incorrect image format: `{ type: "input_image", image_url: ... }`
+- Both OpenAI and Claude rejected invalid image data
+
+**Fix Applied** (`src/app/api/validate/route.ts:102-143`):
+- Changed to standard Chat Completions API: `chat.completions.create()`
+- Correct image format: `{ type: "image_url", image_url: { url: ..., detail: "high" } }`
+- AI extraction now works perfectly with text and images ✅
+
+**Issue 2: Overly Strict Validation Rules**
+- Rules flagged N/A as suspicious for confined space, excavation, fire, electrical, height work
+- N/A is **valid** when those activities aren't being performed
+- Created false positives on valid documents
+
+**Fix Applied** (`src/lib/validator.ts:369-428`):
+- Removed 5 overly strict "critical N/A" rules:
+  - `rule_critical_na_height`
+  - `rule_critical_na_fire`
+  - `rule_critical_na_confined`
+  - `rule_critical_na_excavation`
+  - `rule_critical_na_electrical`
+- N/A values now correctly accepted when activities aren't performed ✅
+
+### Verification
+
+Test with `test-documents/1-valid/valid-safety-checklist.pdf`:
+- ✅ Status: 200 (success)
+- ✅ All fields extracted correctly (date, inspector, site, checklist)
+- ✅ No false warnings
+- ✅ Only 1 info-level notice (risk factor identification - expected behavior)
+
+---
+
+**Ready for demo (Feb 8, 2026)** ✅
