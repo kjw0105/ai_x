@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 interface ExportData {
     fileName: string;
     projectName?: string;
@@ -19,9 +20,9 @@ interface ExportData {
 
 function getSeverityKorean(severity: string): string {
     const map: Record<string, string> = {
-        error: "심각",
+        error: "?�각",
         warn: "경고",
-        info: "정보",
+        info: "?�보",
     };
     return map[severity] || severity;
 }
@@ -56,7 +57,7 @@ function escapeHtml(unsafe: string | undefined | null): string {
 
 export async function exportReportToPDF(data: ExportData) {
     // DIAGNOSTIC CHECK 1: Log data being passed
-    console.log('[PDF Export] Starting PDF generation with data:', {
+    logger.log('[PDF Export] Starting PDF generation with data:', {
         fileName: data.fileName,
         projectName: data.projectName,
         issuesCount: data.issues.length,
@@ -69,7 +70,7 @@ export async function exportReportToPDF(data: ExportData) {
 
     // Log first few issues to verify they're being passed
     if (data.issues.length > 0) {
-        console.log('[PDF Export] Sample issues:', data.issues.slice(0, 3));
+        logger.log('[PDF Export] Sample issues:', data.issues.slice(0, 3));
     }
 
     // DIAGNOSTIC CHECK 2: Validate data
@@ -96,7 +97,7 @@ export async function exportReportToPDF(data: ExportData) {
         throw new Error('PDF Export Error: html2pdf.js did not load correctly');
     }
 
-    console.log('[PDF Export] html2pdf library loaded successfully');
+    logger.log('[PDF Export] html2pdf library loaded successfully');
 
     // Create HTML template
     const htmlContent = `
@@ -294,29 +295,29 @@ export async function exportReportToPDF(data: ExportData) {
         </head>
         <body>
             <div class="header">
-                <h1>안전 점검 보고서</h1>
-                <div class="subtitle">스마트 안전지킴이 - 경상남도 중소기업 지원 시스템</div>
+                <h1>?�전 ?��? 보고??/h1>
+                <div class="subtitle">?�마???�전지?�이 - 경상?�도 중소기업 지???�스??/div>
             </div>
 
             <div class="info-box">
                 <div class="info-row">
-                    <div class="info-label">파일명</div>
+                    <div class="info-label">?�일�?/div>
                     <div class="info-value">${escapeHtml(data.fileName)}</div>
                 </div>
                 ${data.projectName ? `
                 <div class="info-row">
-                    <div class="info-label">프로젝트</div>
+                    <div class="info-label">?�로?�트</div>
                     <div class="info-value">${escapeHtml(data.projectName)}</div>
                 </div>
                 ` : ''}
                 ${data.documentType ? `
                 <div class="info-row">
-                    <div class="info-label">문서 유형</div>
+                    <div class="info-label">문서 ?�형</div>
                     <div class="info-value">${escapeHtml(data.documentType)}</div>
                 </div>
                 ` : ''}
                 <div class="info-row">
-                    <div class="info-label">생성 날짜</div>
+                    <div class="info-label">?�성 ?�짜</div>
                     <div class="info-value">${data.createdAt.toLocaleString('ko-KR', {
                         year: 'numeric',
                         month: 'long',
@@ -328,14 +329,14 @@ export async function exportReportToPDF(data: ExportData) {
             </div>
 
             <div class="section">
-                <div class="section-title">검증 요약</div>
+                <div class="section-title">검�??�약</div>
                 <div class="summary-grid">
                     <div class="summary-card">
-                        <div class="summary-label">총 문제점</div>
+                        <div class="summary-label">�?문제??/div>
                         <div class="summary-value">${data.summary.totalIssues}</div>
                     </div>
                     <div class="summary-card">
-                        <div class="summary-label">심각한 문제</div>
+                        <div class="summary-label">?�각??문제</div>
                         <div class="summary-value" style="color: #ef4444;">${data.summary.criticalCount}</div>
                     </div>
                     <div class="summary-card">
@@ -343,25 +344,25 @@ export async function exportReportToPDF(data: ExportData) {
                         <div class="summary-value" style="color: #f97316;">${data.summary.warningCount}</div>
                     </div>
                     <div class="summary-card">
-                        <div class="summary-label">정보</div>
+                        <div class="summary-label">?�보</div>
                         <div class="summary-value" style="color: #3b82f6;">${data.summary.infoCount}</div>
                     </div>
                 </div>
             </div>
 
             <div class="section">
-                <div class="section-title">발견된 문제점</div>
+                <div class="section-title">발견??문제??/div>
                 ${data.issues.length === 0 ? `
                     <div class="no-issues">
-                        ✓ 발견된 문제가 없습니다. 모든 검증을 통과했습니다!
+                        ??발견??문제가 ?�습?�다. 모든 검증을 ?�과?�습?�다!
                     </div>
                 ` : `
                     <table class="issues-table">
                         <thead>
                             <tr>
                                 <th style="width: 50px;">#</th>
-                                <th style="width: 100px;">심각도</th>
-                                <th>문제 내용</th>
+                                <th style="width: 100px;">?�각??/th>
+                                <th>문제 ?�용</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -385,7 +386,7 @@ export async function exportReportToPDF(data: ExportData) {
             </div>
 
             <div class="footer">
-                <div>Generated by Smart Safety Guardian (스마트 안전지킴이)</div>
+                <div>Generated by Smart Safety Guardian (?�마???�전지?�이)</div>
                 <div style="margin-top: 5px;">Luna Team - GNU RISE AI+X Competition 2026</div>
             </div>
         </body>
@@ -411,7 +412,7 @@ export async function exportReportToPDF(data: ExportData) {
     loadingMsg.style.color = 'white';
     loadingMsg.style.fontSize = '20px';
     loadingMsg.style.fontWeight = 'bold';
-    loadingMsg.textContent = 'PDF 생성 중... 잠시만 기다려주세요';
+    loadingMsg.textContent = 'PDF ?�성 �?.. ?�시�?기다?�주?�요';
     overlay.appendChild(loadingMsg);
 
     // Create the actual PDF content container
@@ -433,27 +434,27 @@ export async function exportReportToPDF(data: ExportData) {
 
     overlay.appendChild(tempDiv);
 
-    console.log('[PDF Export] Created temp container, HTML length:', htmlContent.length);
-    console.log('[PDF Export] Appending overlay to document body...');
+    logger.log('[PDF Export] Created temp container, HTML length:', htmlContent.length);
+    logger.log('[PDF Export] Appending overlay to document body...');
 
     document.body.appendChild(overlay);
 
     // DIAGNOSTIC CHECK 3: Wait for DOM, fonts, and rendering
-    console.log('[PDF Export] Waiting for fonts and rendering...');
+    logger.log('[PDF Export] Waiting for fonts and rendering...');
 
     // Wait for fonts to load (including Google Fonts)
     if (document.fonts && document.fonts.ready) {
         await document.fonts.ready;
-        console.log('[PDF Export] System fonts loaded');
+        logger.log('[PDF Export] System fonts loaded');
     }
 
     // Additional wait for layout painting
     // NOTE: Font is now preloaded on app startup, so we can reduce wait time significantly
     await new Promise(resolve => setTimeout(resolve, 800)); // Reduced from 2500ms to 800ms (font preloaded!)
-    console.log('[PDF Export] Layout fully rendered (font preloaded)');
+    logger.log('[PDF Export] Layout fully rendered (font preloaded)');
 
     // Log actual dimensions being captured
-    console.log('[PDF Export] Element dimensions:', {
+    logger.log('[PDF Export] Element dimensions:', {
         scrollWidth: tempDiv.scrollWidth,
         scrollHeight: tempDiv.scrollHeight,
         offsetWidth: tempDiv.offsetWidth,
@@ -467,15 +468,15 @@ export async function exportReportToPDF(data: ExportData) {
 
     if (datePattern.test(data.fileName)) {
         // FileName already has date, don't add it again
-        const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+        const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-??-]/g, "_");
         finalFilename = `${cleanFileName}_report.pdf`;
-        console.log('[PDF Export] Filename already has date, using:', finalFilename);
+        logger.log('[PDF Export] Filename already has date, using:', finalFilename);
     } else {
         // Add date prefix
         const dateStr = data.createdAt.toISOString().split('T')[0];
-        const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+        const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-??-]/g, "_");
         finalFilename = `${dateStr}_${cleanFileName}_report.pdf`;
-        console.log('[PDF Export] Adding date prefix:', finalFilename);
+        logger.log('[PDF Export] Adding date prefix:', finalFilename);
     }
 
     // PDF options - optimized for content capture
@@ -498,14 +499,14 @@ export async function exportReportToPDF(data: ExportData) {
             height: tempDiv.scrollHeight,
             onclone: (clonedDoc: Document) => {
                 // Ensure cloned document has same styles and full height
-                console.log('[PDF Export] Document cloned for rendering');
+                logger.log('[PDF Export] Document cloned for rendering');
                 const clonedElement = clonedDoc.body.querySelector('div');
                 if (clonedElement) {
                     (clonedElement as HTMLElement).style.maxHeight = 'none';
                     (clonedElement as HTMLElement).style.height = 'auto';
                     (clonedElement as HTMLElement).style.overflow = 'visible';
                     (clonedElement as HTMLElement).style.position = 'relative';
-                    console.log('[PDF Export] Cloned element height:', (clonedElement as HTMLElement).scrollHeight);
+                    logger.log('[PDF Export] Cloned element height:', (clonedElement as HTMLElement).scrollHeight);
                 }
             }
         },
@@ -524,8 +525,8 @@ export async function exportReportToPDF(data: ExportData) {
 
     // Generate PDF
     try {
-        console.log('[PDF Export] Starting html2pdf conversion...');
-        console.log('[PDF Export] Options:', opt);
+        logger.log('[PDF Export] Starting html2pdf conversion...');
+        logger.log('[PDF Export] Options:', opt);
 
         // Use outputPdf to get the blob first for better error tracking
         const worker = html2pdf()
@@ -542,18 +543,18 @@ export async function exportReportToPDF(data: ExportData) {
         }
 
         if (!pdfBlob) {
-            loadingMsg.textContent = '✓ PDF 생성 완료';
+            loadingMsg.textContent = '??PDF ?�성 ?�료';
             loadingMsg.style.color = '#22c55e';
             setTimeout(() => {
                 if (document.body.contains(overlay)) {
                     document.body.removeChild(overlay);
-                    console.log('[PDF Export] Overlay cleaned up');
+                    logger.log('[PDF Export] Overlay cleaned up');
                 }
             }, 1000);
             return;
         }
 
-        console.log('[PDF Export] PDF blob generated successfully, size:', pdfBlob.size, 'bytes');
+        logger.log('[PDF Export] PDF blob generated successfully, size:', pdfBlob.size, 'bytes');
 
         // DIAGNOSTIC CHECK 4: Verify PDF is not empty
         if (pdfBlob.size === 0 || pdfBlob.size < 1000) {
@@ -570,36 +571,36 @@ export async function exportReportToPDF(data: ExportData) {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        console.log('[PDF Export] PDF download triggered successfully:', finalFilename);
+        logger.log('[PDF Export] PDF download triggered successfully:', finalFilename);
 
         // Update loading message to show success
-        loadingMsg.textContent = `✓ PDF 생성 완료! (${Math.round(pdfBlob.size / 1024)}KB)`;
+        loadingMsg.textContent = `??PDF ?�성 ?�료! (${Math.round(pdfBlob.size / 1024)}KB)`;
         loadingMsg.style.color = '#22c55e';
 
         // Remove overlay after short delay
         setTimeout(() => {
             if (document.body.contains(overlay)) {
                 document.body.removeChild(overlay);
-                console.log('[PDF Export] Overlay cleaned up');
+                logger.log('[PDF Export] Overlay cleaned up');
             }
         }, 1000);
     } catch (error: any) {
         // DIAGNOSTIC CHECK 5: Enhanced error logging
-        console.error('[PDF Export] CRITICAL ERROR during PDF generation:');
-        console.error('[PDF Export] Error type:', error.constructor.name);
-        console.error('[PDF Export] Error message:', error.message);
-        console.error('[PDF Export] Error stack:', error.stack);
-        console.error('[PDF Export] Full error object:', error);
+        logger.error('[PDF Export] CRITICAL ERROR during PDF generation:');
+        logger.error('[PDF Export] Error type:', error.constructor.name);
+        logger.error('[PDF Export] Error message:', error.message);
+        logger.error('[PDF Export] Error stack:', error.stack);
+        logger.error('[PDF Export] Full error object:', error);
 
         // Update loading message to show error
-        loadingMsg.textContent = '❌ PDF 생성 실패';
+        loadingMsg.textContent = '??PDF ?�성 ?�패';
         loadingMsg.style.color = '#ef4444';
 
         // Clean up on error
         setTimeout(() => {
             if (document.body.contains(overlay)) {
                 document.body.removeChild(overlay);
-                console.log('[PDF Export] Overlay cleaned up after error');
+                logger.log('[PDF Export] Overlay cleaned up after error');
             }
         }, 2000);
 

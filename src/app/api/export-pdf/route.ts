@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
@@ -8,7 +9,7 @@ interface ExportData {
   projectName?: string;
   documentType?: string | null;
 
-  // ✅ TBM
+  // ??TBM
   tbmSummary?: string;
   tbmTranscript?: string;
 
@@ -28,7 +29,7 @@ interface ExportData {
 }
 
 function getSeverityKorean(severity: string): string {
-  const map: Record<string, string> = { error: "심각", warn: "경고", info: "정보" };
+  const map: Record<string, string> = { error: "?�각", warn: "경고", info: "?�보" };
   return map[severity] || severity;
 }
 
@@ -63,7 +64,7 @@ function parseTBMSummary(summary: string): { title: string; content: string }[] 
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Match section headers like "1) 오늘 작업 개요" or "1. 오늘 작업 개요" or "**1) 오늘 작업 개요**"
+    // Match section headers like "1) ?�늘 ?�업 개요" or "1. ?�늘 ?�업 개요" or "**1) ?�늘 ?�업 개요**"
     const sectionMatch = trimmed.match(/^[*]*\d+[).]\s*(.+?)([*]*)$/);
 
     if (sectionMatch) {
@@ -155,27 +156,27 @@ function buildHTMLContent(data: ExportData): string {
 </head>
 <body>
   <div class="header">
-    <h1>안전 점검 보고서</h1>
-    <div class="subtitle">스마트 안전지킴이 - 경상남도 중소기업 지원 시스템</div>
+    <h1>?�전 ?��? 보고??/h1>
+    <div class="subtitle">?�마???�전지?�이 - 경상?�도 중소기업 지???�스??/div>
   </div>
 
   <div class="info-box">
     <div class="info-row">
-      <div class="info-label">파일명</div>
+      <div class="info-label">?�일�?/div>
       <div class="info-value">${escapeHtml(data.fileName)}</div>
     </div>
     ${data.projectName ? `
     <div class="info-row">
-      <div class="info-label">프로젝트</div>
+      <div class="info-label">?�로?�트</div>
       <div class="info-value">${escapeHtml(data.projectName)}</div>
     </div>` : ""}
     ${data.documentType ? `
     <div class="info-row">
-      <div class="info-label">문서 유형</div>
+      <div class="info-label">문서 ?�형</div>
       <div class="info-value">${escapeHtml(data.documentType)}</div>
     </div>` : ""}
     <div class="info-row">
-      <div class="info-label">생성 날짜</div>
+      <div class="info-label">?�성 ?�짜</div>
       <div class="info-value">${createdAt.toLocaleString("ko-KR", {
         year: "numeric",
         month: "long",
@@ -188,7 +189,7 @@ function buildHTMLContent(data: ExportData): string {
 
   ${data.documentType === "TBM" || tbmSummary.length > 0 || tbmTranscript.length > 0 ? `
   <div class="section">
-    <div class="section-title">TBM (작업 전 대화) 요약</div>
+    <div class="section-title">TBM (?�업 ???�?? ?�약</div>
     ${
       tbmSummary.length > 0
         ? (() => {
@@ -215,13 +216,13 @@ function buildHTMLContent(data: ExportData): string {
               `;
             }
           })()
-        : `<div class="muted">TBM 요약이 없습니다.</div>`
+        : `<div class="muted">TBM ?�약???�습?�다.</div>`
     }
     ${tbmTranscript.length > 0 ? `
     <div style="margin-top:25px;page-break-before:avoid;">
       <div style="font-weight:bold;color:#475569;margin-bottom:10px;font-size:15px;display:flex;align-items:center;gap:8px;">
-        <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#3b82f6;color:white;font-size:18px;">📝</span>
-        전사 내용 (Transcript)
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#3b82f6;color:white;font-size:18px;">?��</span>
+        ?�사 ?�용 (Transcript)
       </div>
       <div class="tbm-box" style="background:#f8fafc;max-height:300px;overflow-y:auto;">
         <div class="tbm-text" style="font-size:12px;color:#64748b;white-space:pre-wrap;">${escapeHtml(tbmTranscript)}</div>
@@ -232,14 +233,14 @@ function buildHTMLContent(data: ExportData): string {
   ` : ""}
 
   <div class="section">
-    <div class="section-title">검증 요약</div>
+    <div class="section-title">검�??�약</div>
     <div class="summary-grid">
       <div class="summary-card">
-        <div class="summary-label">총 문제점</div>
+        <div class="summary-label">�?문제??/div>
         <div class="summary-value">${data.summary.totalIssues}</div>
       </div>
       <div class="summary-card">
-        <div class="summary-label">심각한 문제</div>
+        <div class="summary-label">?�각??문제</div>
         <div class="summary-value" style="color:#ef4444;">${data.summary.criticalCount}</div>
       </div>
       <div class="summary-card">
@@ -247,23 +248,23 @@ function buildHTMLContent(data: ExportData): string {
         <div class="summary-value" style="color:#f97316;">${data.summary.warningCount}</div>
       </div>
       <div class="summary-card">
-        <div class="summary-label">정보</div>
+        <div class="summary-label">?�보</div>
         <div class="summary-value" style="color:#3b82f6;">${data.summary.infoCount}</div>
       </div>
     </div>
   </div>
 
   <div class="section">
-    <div class="section-title">발견된 문제점</div>
+    <div class="section-title">발견??문제??/div>
     ${issues.length === 0 ? `
-      <div class="no-issues">✓ 발견된 문제가 없습니다. 모든 검증을 통과했습니다!</div>
+      <div class="no-issues">??발견??문제가 ?�습?�다. 모든 검증을 ?�과?�습?�다!</div>
     ` : `
       <table class="issues-table">
         <thead>
           <tr>
             <th style="width:50px;">#</th>
-            <th style="width:100px;">심각도</th>
-            <th>문제 내용</th>
+            <th style="width:100px;">?�각??/th>
+            <th>문제 ?�용</th>
           </tr>
         </thead>
         <tbody>
@@ -293,7 +294,7 @@ function buildHTMLContent(data: ExportData): string {
   </div>
 
   <div class="footer">
-    <div>Generated by Smart Safety Guardian (스마트 안전지킴이)</div>
+    <div>Generated by Smart Safety Guardian (?�마???�전지?�이)</div>
     <div style="margin-top:5px;">Luna Team - GNU RISE AI+X Competition 2026</div>
   </div>
 </body>
@@ -305,7 +306,7 @@ export async function POST(req: Request) {
   try {
     const data: ExportData = await req.json();
 
-    console.log("[API Export PDF] Received request:", {
+    logger.log("[API Export PDF] Received request:", {
       fileName: data.fileName,
       documentType: data.documentType,
       tbmSummaryLen: (data.tbmSummary || "").length,
@@ -313,11 +314,11 @@ export async function POST(req: Request) {
       issuesCount: Array.isArray(data.issues) ? data.issues.length : 0,
     });
 
-    // ✅ Detailed TBM logging
+    // ??Detailed TBM logging
     if (data.tbmSummary && data.tbmSummary.length > 0) {
-      console.log("[API Export PDF] TBM Summary present:", data.tbmSummary.substring(0, 200) + "...");
+      logger.log("[API Export PDF] TBM Summary present:", data.tbmSummary.substring(0, 200) + "...");
     } else {
-      console.log("[API Export PDF] ⚠️ TBM Summary is EMPTY or missing");
+      logger.log("[API Export PDF] ?�️ TBM Summary is EMPTY or missing");
     }
 
     if (!data.fileName || !data.summary || !data.createdAt) {
@@ -339,7 +340,7 @@ export async function POST(req: Request) {
 
       generatePdf = htmlPdf?.generatePdf ?? htmlPdf?.default?.generatePdf ?? htmlPdf?.default ?? null;
     } catch (importError: any) {
-      console.error("[API Export PDF] Failed to load html-pdf-node:", importError);
+      logger.error("[API Export PDF] Failed to load html-pdf-node:", importError);
       return NextResponse.json(
         { error: "PDF generation dependency is missing. Please install html-pdf-node." },
         { status: 500 }
@@ -347,7 +348,7 @@ export async function POST(req: Request) {
     }
 
     if (!generatePdf) {
-      console.error("[API Export PDF] html-pdf-node did not expose generatePdf.");
+      logger.error("[API Export PDF] html-pdf-node did not expose generatePdf.");
       return NextResponse.json(
         { error: "PDF generation module is unavailable. Please verify html-pdf-node installation." },
         { status: 500 }
@@ -361,19 +362,19 @@ export async function POST(req: Request) {
       preferCSSPageSize: true,
     };
 
-    console.log("[API Export PDF] Generating PDF...");
+    logger.log("[API Export PDF] Generating PDF...");
     const pdfBuffer = await generatePdf({ content: htmlContent }, options);
-    console.log("[API Export PDF] PDF generated successfully, size:", pdfBuffer.length);
+    logger.log("[API Export PDF] PDF generated successfully, size:", pdfBuffer.length);
 
     const datePattern = /^\d{4}-\d{2}-\d{2}_/;
     let finalFilename: string;
 
     if (datePattern.test(data.fileName)) {
-      const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+      const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-??-]/g, "_");
       finalFilename = `${cleanFileName}_report.pdf`;
     } else {
       const dateStr = new Date(data.createdAt).toISOString().split("T")[0];
-      const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+      const cleanFileName = data.fileName.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9가-??-]/g, "_");
       finalFilename = `${dateStr}_${cleanFileName}_report.pdf`;
     }
 
@@ -385,7 +386,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (error: any) {
-    console.error("[API Export PDF] Error:", error);
+    logger.error("[API Export PDF] Error:", error);
     return NextResponse.json({ error: `PDF generation failed: ${error.message}` }, { status: 500 });
   }
 }
