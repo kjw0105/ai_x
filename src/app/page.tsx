@@ -371,7 +371,10 @@ export default function Page() {
 
   useEffect(() => {
     return () => {
-      if (validationAbortController.current) validationAbortController.current.abort();
+      if (validationAbortController.current) {
+        validationAbortController.current.abort();
+        validationAbortController.current = null; // ✅ Prevent memory leak
+      }
     };
   }, []);
 
@@ -523,28 +526,48 @@ export default function Page() {
     const pdf = await (pdfjs as any).getDocument({ data: buf }).promise;
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
+    // ✅ Create single canvas for all pages (canvas pooling)
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Failed to get canvas context");
+
     const images: string[] = [];
+    const skippedPages: number[] = [];
+
     for (let i = 1; i <= pdf.numPages; i++) {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      const page = await pdf.getPage(i);
-      // Reduced scale from 1.5 to 1.0 for lower initial size
-      const viewport = page.getViewport({ scale: 1.0 });
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) continue;
-      canvas.width = Math.floor(viewport.width);
-      canvas.height = Math.floor(viewport.height);
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
 
-      // ✅ Optimize image to reduce token usage
       try {
-        const optimized = await optimizeImage(dataUrl, 2048, 0.85);
-        images.push(optimized.dataUrl);
-      } catch (e) {
-        console.warn("Failed to optimize PDF page, using original", e);
-        images.push(dataUrl);
+        // ✅ Wrap in try-catch to handle corrupt pages
+        const page = await pdf.getPage(i);
+        // Reduced scale from 1.5 to 1.0 for lower initial size
+        const viewport = page.getViewport({ scale: 1.0 });
+
+        // ✅ Resize canvas for current page (reuse same canvas)
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+        // ✅ Optimize image to reduce token usage
+        try {
+          const optimized = await optimizeImage(dataUrl, 2048, 0.85);
+          images.push(optimized.dataUrl);
+        } catch (e) {
+          console.warn(`Failed to optimize PDF page ${i}, using original`, e);
+          images.push(dataUrl);
+        }
+      } catch (pageError) {
+        // ✅ Skip corrupt pages instead of crashing
+        console.warn(`Skipping corrupt PDF page ${i}:`, pageError);
+        skippedPages.push(i);
       }
+    }
+
+    // ✅ Log summary of skipped pages
+    if (skippedPages.length > 0) {
+      console.warn(`Skipped ${skippedPages.length} corrupt page(s): ${skippedPages.join(", ")}`);
     }
 
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -832,6 +855,8 @@ export default function Page() {
         setLoading(false);
         setShowProgress(false);
       }
+      // ✅ Clean up abort controller to prevent memory leak
+      validationAbortController.current = null;
     }
   }
 
