@@ -113,9 +113,11 @@ interface AnalysisPanelProps {
     onHiddenIssuesChange?: (hiddenIds: string[]) => void; // Callback when hidden issues change
     hasUnviewedIssues?: boolean; // Show indicator when analysis completes with issues
     onMarkIssuesViewed?: () => void; // Callback when user views issues
+    initialLocalChatMessages?: { role: "ai" | "user"; text: string }[]; // Persist local chat history
+    onLocalChatMessagesChange?: (messages: { role: "ai" | "user"; text: string }[]) => void; // Callback when chat messages change
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, onMarkIssuesViewed }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, onMarkIssuesViewed, initialLocalChatMessages = [], onLocalChatMessagesChange }: AnalysisPanelProps) {
     // Default to 5-stage document validation if not provided
     const defaultSteps: ValidationStage[] = [
         { id: "stage1", label: "형식 검증", icon: "description" },
@@ -136,7 +138,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     // Chat state
     const [chatInput, setChatInput] = useState("");
     const [isSendingChat, setIsSendingChat] = useState(false);
-    const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]);
+    const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>(initialLocalChatMessages);
 
     // Smart severity filter: Only show buttons for severities that exist in issues
     const availableSeverities = useMemo(() => {
@@ -157,6 +159,13 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             onHiddenIssuesChange(Array.from(hiddenIssueIds));
         }
     }, [hiddenIssueIds, onHiddenIssuesChange]);
+
+    // Notify parent when local chat messages change (for persistence)
+    useEffect(() => {
+        if (onLocalChatMessagesChange) {
+            onLocalChatMessagesChange(localChatMessages);
+        }
+    }, [localChatMessages, onLocalChatMessagesChange]);
 
     // Ref for issues section - used for auto-scroll
     const issuesSectionRef = useRef<HTMLDivElement>(null);
