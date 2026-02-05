@@ -328,6 +328,7 @@ export default function Page() {
   const [activeValidationType, setActiveValidationType] = useState<"document" | "photo">("document");
   const [hiddenIssueIds, setHiddenIssueIds] = useState<string[]>([]); // Persist dismissed issues
   const [hasUnviewedIssues, setHasUnviewedIssues] = useState(false); // Show indicator when analysis completes
+  const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]); // Persist local chat
 
   // Document validation stages (5 stages)
   const documentValidationSteps = [
@@ -548,16 +549,12 @@ export default function Page() {
         canvas.height = Math.floor(viewport.height);
 
         await page.render({ canvasContext: ctx, viewport }).promise;
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
 
-        // ✅ Optimize image to reduce token usage
-        try {
-          const optimized = await optimizeImage(dataUrl, 2048, 0.85);
-          images.push(optimized.dataUrl);
-        } catch (e) {
-          console.warn(`Failed to optimize PDF page ${i}, using original`, e);
-          images.push(dataUrl);
-        }
+        // ✅ Export with JPEG compression (0.85 quality for good balance)
+        // Note: Scale is already 1.0 and viewport auto-sizes to reasonable dimensions,
+        // so no additional optimization needed (prevents double compression)
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        images.push(dataUrl);
       } catch (pageError) {
         // ✅ Skip corrupt pages instead of crashing
         console.warn(`Skipping corrupt PDF page ${i}:`, pageError);
@@ -1022,18 +1019,18 @@ export default function Page() {
   async function loadTBMRecords() {
     setLoadingTBMs(true);
     try {
-      // Fetch TBMs for current project, or all TBMs if no project selected
-      const url = currentProjectId
-        ? `/api/history?projectId=${currentProjectId}`
-        : `/api/history`;
+      // ✅ Filter TBMs server-side for better performance
+      const params = new URLSearchParams({ documentType: "TBM" });
+      if (currentProjectId) params.set("projectId", currentProjectId);
+
+      const url = `/api/history?${params.toString()}`;
 
       const resp = await fetch(url);
       if (!resp.ok) {
         throw new Error(`Failed to fetch: ${resp.status}`);
       }
 
-      const allReports = await resp.json();
-      const tbms = allReports.filter((r: any) => r.documentType === "TBM");
+      const tbms = await resp.json();
 
       console.log(`[TBM Timeline] Loaded ${tbms.length} TBM records`);
       setTbmRecords(tbms);
@@ -1412,11 +1409,15 @@ export default function Page() {
 
   async function loadCurrentProjectState() {
     try {
-      const savedFile = await get(getProjectKey("file"));
-      const savedImages = await get(getProjectKey("images"));
-      const savedReport = await get(getProjectKey("report"));
-      const savedPage = await get(getProjectKey("page"));
-      const savedHiddenIssues = await get(getProjectKey("hiddenIssues"));
+      // ✅ Load all state in parallel for faster project switching
+      const [savedFile, savedImages, savedReport, savedPage, savedHiddenIssues, savedLocalChat] = await Promise.all([
+        get(getProjectKey("file")),
+        get(getProjectKey("images")),
+        get(getProjectKey("report")),
+        get(getProjectKey("page")),
+        get(getProjectKey("hiddenIssues")),
+        get(getProjectKey("localChat")),
+      ]);
 
       if (savedFile || savedReport) {
         setFile(savedFile || null);
@@ -1431,6 +1432,13 @@ export default function Page() {
           setHiddenIssueIds(savedHiddenIssues);
         } else {
           setHiddenIssueIds([]);
+        }
+
+        // Restore local chat messages
+        if (savedLocalChat) {
+          setLocalChatMessages(savedLocalChat);
+        } else {
+          setLocalChatMessages([]);
         }
 
         // Progress state is NOT restored - it's ephemeral and only relevant during active validation
@@ -1485,6 +1493,16 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hiddenIssueIds, currentProjectId]);
 
+  useEffect(() => {
+    // Persist local chat messages
+    if (localChatMessages.length > 0) {
+      set(getProjectKey("localChat"), localChatMessages);
+    } else {
+      del(getProjectKey("localChat"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localChatMessages, currentProjectId]);
+
   function handleClearFile() {
     // Show confirmation if file exists
     if (file) {
@@ -1501,6 +1519,7 @@ export default function Page() {
     del(getProjectKey("report"));
     del(getProjectKey("page"));
     del(getProjectKey("hiddenIssues"));
+    del(getProjectKey("localChat"));
   }
 
   function handleWelcomeCreateProject() {
@@ -1845,6 +1864,8 @@ export default function Page() {
                       onHiddenIssuesChange={setHiddenIssueIds}
                       hasUnviewedIssues={hasUnviewedIssues}
                       onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
+                      initialLocalChatMessages={localChatMessages}
+                      onLocalChatMessagesChange={setLocalChatMessages}
                     />
                   }
                 />

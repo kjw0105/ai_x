@@ -112,6 +112,10 @@ function assessHighRiskWork(checklist: ChecklistItem[]): RiskFactor[] {
   const factors: RiskFactor[] = [];
 
   for (const item of checklist) {
+    // ✅ Defensive null checks for malformed checklist items
+    if (!item || typeof item !== 'object') continue;
+    if (!item.id || !item.value) continue;
+
     if (item.value === "✔" && WORK_TYPE_BASE_RISK[item.id]) {
       const impact = WORK_TYPE_BASE_RISK[item.id];
       let severity: RiskFactor["severity"] = "medium";
@@ -121,7 +125,7 @@ function assessHighRiskWork(checklist: ChecklistItem[]): RiskFactor[] {
 
       factors.push({
         category: "고위험 작업",
-        description: `${item.nameKo} 실시 (${item.id})`,
+        description: `${item.nameKo || item.id} 실시 (${item.id})`,
         impact,
         severity,
       });
@@ -146,7 +150,12 @@ function assessViolations(checklist: ChecklistItem[]): RiskFactor[] {
     elec_02: ["elec_03"], // 전기작업 → 잠금장치
   };
 
-  const checkMap = new Map(checklist.map((item) => [item.id, item.value]));
+  // ✅ Filter out malformed items before creating map
+  const checkMap = new Map(
+    checklist
+      .filter((item) => item && typeof item === 'object' && item.id && item.value)
+      .map((item) => [item.id, item.value])
+  );
 
   for (const [workId, safetyIds] of Object.entries(requiredSafetyMeasures)) {
     const isWorkPerformed = checkMap.get(workId) === "✔";
@@ -219,8 +228,10 @@ function assessCompleteness(checklist: ChecklistItem[]): RiskFactor[] {
   }
 
   // N/A 과다 사용 체크
-  const naCount = checklist.filter((item) => item.value === "N/A").length;
-  const naRatio = naCount / checklist.length;
+  // ✅ Filter out malformed items before counting
+  const validItems = checklist.filter((item) => item && typeof item === 'object' && item.value);
+  const naCount = validItems.filter((item) => item.value === "N/A").length;
+  const naRatio = validItems.length > 0 ? naCount / validItems.length : 0;
 
   if (naRatio > 0.6) {
     factors.push({
