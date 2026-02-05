@@ -13,8 +13,8 @@ interface ProgressBarProps {
 
 export function ProgressBar({ currentStep, steps }: ProgressBarProps) {
     // Support fractional steps for smoother progress (e.g., 2.5 for 50% through step 2)
-    // Add 1 to currentStep because steps are 0-indexed but progress should show completion
-    const progress = Math.min(((currentStep + 1) / steps.length) * 100, 100);
+    // currentStep is 0-indexed: 0=stage 1, 1=stage 2, ..., steps.length=complete
+    const progress = Math.min((currentStep / steps.length) * 100, 100);
     const currentStepIndex = Math.floor(currentStep);
     const currentStepData = steps[currentStepIndex];
 

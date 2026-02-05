@@ -72,13 +72,21 @@ export function normalizeInspectorName(name: string): string {
 
 /**
  * Find all reports by inspector, handling name variations
- * Uses normalized name matching
+ * Uses normalized name matching with pagination
+ *
+ * @param inspectorName - Inspector name to search for
+ * @param projectId - Optional project filter
+ * @param limit - Maximum number of reports to return (default 50, max 100)
+ * @returns Array of reports with pagination limit applied
  */
 async function findReportsByInspector(
     inspectorName: string,
     projectId?: string,
-    limit: number = 20
+    limit: number = 50
 ) {
+    // Enforce maximum limit to prevent performance issues
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+
     // First, try exact match
     let reports = await prisma.report.findMany({
         where: {
@@ -86,7 +94,7 @@ async function findReportsByInspector(
             ...(projectId ? { projectId } : {}),
         },
         orderBy: { createdAt: "desc" },
-        take: limit,
+        take: safeLimit,
         select: {
             id: true,
             createdAt: true,
@@ -97,17 +105,21 @@ async function findReportsByInspector(
     });
 
     // If not enough exact matches, try normalized matching
+    // Only fetch more if we got fewer than 5 reports
     if (reports.length < 5) {
         const normalizedSearch = normalizeInspectorName(inspectorName);
 
-        // Get all reports and filter by normalized name
+        // Fetch reports with pagination limit (increased for filtering)
+        // Use 2x limit to account for filtering, but cap at 200
+        const fetchLimit = Math.min(safeLimit * 2, 200);
+
         const allReports = await prisma.report.findMany({
             where: {
                 inspectorName: { not: null },
                 ...(projectId ? { projectId } : {}),
             },
             orderBy: { createdAt: "desc" },
-            take: 100, // Get more to filter
+            take: fetchLimit,
             select: {
                 id: true,
                 createdAt: true,
@@ -122,7 +134,7 @@ async function findReportsByInspector(
                 r.inspectorName &&
                 normalizeInspectorName(r.inspectorName) === normalizedSearch
             )
-            .slice(0, limit);
+            .slice(0, safeLimit);
     }
 
     return reports;
@@ -153,19 +165,22 @@ function calculateTimeWeight(reportDate: Date, windowDays: number = 30): number 
  * @param inspectorName - Inspector name (will be normalized)
  * @param projectId - Optional project filter
  * @param thresholds - Optional custom thresholds
+ * @param limit - Maximum number of reports to analyze (default 50)
  * @returns Array of pattern warnings with confidence scores
  */
 export async function analyzeInspectorPatterns(
     inspectorName: string,
     projectId?: string,
-    thresholds: PatternThresholds = DEFAULT_THRESHOLDS
+    thresholds: PatternThresholds = DEFAULT_THRESHOLDS,
+    limit: number = 50
 ): Promise<PatternWarning[]> {
     const warnings: PatternWarning[] = [];
 
     if (!inspectorName) return warnings;
 
-    // Query recent reports using normalized name matching
-    const recentReports = await findReportsByInspector(inspectorName, projectId, 20);
+    // Query recent reports using normalized name matching with pagination
+    // Limit prevents performance issues with large datasets
+    const recentReports = await findReportsByInspector(inspectorName, projectId, limit);
 
     if (recentReports.length < thresholds.minimumReports) {
         // Not enough data for reliable pattern analysis

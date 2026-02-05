@@ -39,10 +39,14 @@ type Report = {
   chat: { role: "ai" | "user"; text: string }[];
   documentType?: string | null;
 
-  // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
-  // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
-  tbmSummary?: string;
-  tbmTranscript?: string;
+  // TBM-specific fields (matches database schema)
+  tbmSummary?: string;        // AI-generated structured TBM summary
+  tbmTranscript?: string;     // Full audio transcription
+  tbmDuration?: number;       // Recording duration in milliseconds
+  tbmWorkType?: string | null;           // 작업 종류
+  tbmExtractedHazards?: string | null;   // JSON array of hazards
+  tbmExtractedInspector?: string | null; // 담당자 이름
+  tbmParticipants?: string | null;       // JSON array of participants
 };
 
 interface ModalDialogProps {
@@ -641,24 +645,54 @@ export default function Page() {
         });
         if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
-        // ✅ Check image dimensions
-        const img = new Image();
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = dataUrl;
-        });
+        // ✅ Check image dimensions (off main thread using createImageBitmap when available)
+        let imgWidth: number, imgHeight: number;
 
-        if (img.width < 400 || img.height < 400) {
+        // Try createImageBitmap for off-main-thread decoding (modern browsers)
+        if (typeof createImageBitmap !== 'undefined') {
+          try {
+            const res = await fetch(dataUrl);
+            const blob = await res.blob();
+            if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+            const bitmap = await createImageBitmap(blob);
+            imgWidth = bitmap.width;
+            imgHeight = bitmap.height;
+            bitmap.close(); // Clean up immediately
+          } catch (e) {
+            console.warn("[Image] createImageBitmap failed, falling back to Image:", e);
+            // Fallback to Image element
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = dataUrl;
+            });
+            imgWidth = img.width;
+            imgHeight = img.height;
+          }
+        } else {
+          // Fallback for older browsers
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = dataUrl;
+          });
+          imgWidth = img.width;
+          imgHeight = img.height;
+        }
+
+        if (imgWidth < 400 || imgHeight < 400) {
           if (!signal.aborted) {
-            showError(ErrorMessages.IMAGE_LOW_RESOLUTION(img.width, img.height), () => pickFileDialog());
+            showError(ErrorMessages.IMAGE_LOW_RESOLUTION(imgWidth, imgHeight), () => pickFileDialog());
             setFile(null);
             setShowProgress(false);
           }
           return;
         }
 
-        console.log(`[Image] Validated: ${img.width}x${img.height}, ${(f.size / 1024).toFixed(1)}KB`);
+        console.log(`[Image] Validated: ${imgWidth}x${imgHeight}, ${(f.size / 1024).toFixed(1)}KB`);
 
         // ✅ Optimize image to reduce token usage
         try {
@@ -1400,8 +1434,11 @@ export default function Page() {
     toast.success("임시 마스터 문서가 삭제되었습니다");
   }
 
+  // Generate namespaced IndexedDB key to prevent collisions
+  // Format: "p:{projectId}:{key}" or "np:{key}" (no-project)
+  // Using ':' as delimiter prevents collisions with UUID format
   function getProjectKey(key: string) {
-    return currentProjectId ? `project_${currentProjectId}_${key}` : `no_project_${key}`;
+    return currentProjectId ? `p:${currentProjectId}:${key}` : `np:${key}`;
   }
 
   function clearDocumentState() {

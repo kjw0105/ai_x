@@ -22,8 +22,49 @@ import {
   verifyChecklistItem,
   checkSignaturePresence
 } from "@/lib/verificationTools";
+import { logger } from "@/lib/logger";
 
 type Provider = "openai" | "claude" | "auto";
+
+/**
+ * Standardized error response builder
+ * Ensures consistent error format across all endpoints
+ */
+function createErrorResponse(
+  error: string,
+  options: {
+    fileName?: string;
+    chatMessage?: string;
+    status?: number;
+    details?: string;
+    solution?: string;
+  } = {}
+) {
+  const {
+    fileName = "Untitled",
+    chatMessage,
+    status = 400,
+    details,
+    solution
+  } = options;
+
+  return NextResponse.json(
+    {
+      error,
+      fileName,
+      ...(details && { details }),
+      ...(solution && { solution }),
+      issues: [],
+      chat: [
+        {
+          role: "ai",
+          text: chatMessage || error
+        }
+      ]
+    },
+    { status }
+  );
+}
 
 // Helper to safely get OpenAI client
 function getOpenAI() {
@@ -41,140 +82,140 @@ function getAnthropic() {
 
 function buildSystemPrompt() {
   return `
-너는 산업안전 서류 검증 AI다. 정해진 스키마에 맞춰 정보를 "있는 그대로" 추출하라.
-판단하지 말고, 문서에 적힌 텍스트와 내용을 기반으로 값을 채워라.
+?�는 ?�업?�전 ?�류 검�?AI?? ?�해�??�키마에 맞춰 ?�보�?"?�는 그�?�? 추출?�라.
+?�단?��? 말고, 문서???�힌 ?�스?��? ?�용??기반?�로 값을 채워??
 
-출력은 반드시 "JSON만" 출력한다(설명/마크다운 금지).
-스키마:
+출력?� 반드??"JSON�? 출력?�다(?�명/마크?�운 금�?).
+?�키�?
 {
-  "docType": "산업안전 점검표" | "위험성 평가 보고서" | "작업 전 안전점검표" | "TBM" | "unknown",
+  "docType": "?�업?�전 ?��??? | "?�험???��? 보고?? | "?�업 ???�전?��??? | "TBM" | "unknown",
   "fields": {
-    "점검일자": string|null,   // 예: 2024-05-20, 식별 불가시 null
-    "현장명": string|null,
-    "작업내용": string|null,
-    "작업인원": string|null    // 예: "3명", "홍길동 외 2명" 등
+    "?��??�자": string|null,   // ?? 2024-05-20, ?�별 불�???null
+    "?�장�?: string|null,
+    "?�업?�용": string|null,
+    "?�업?�원": string|null    // ?? "3�?, "?�길????2�? ??
   },
   "signature": {
-    "담당": "present"|"missing"|"unknown", // 담당자/작업반장 등 실무자 서명
-    "소장": "present"|"missing"|"unknown"  // 관리책임자/소장 서명
+    "?�당": "present"|"missing"|"unknown", // ?�당???�업반장 ???�무???�명
+    "?�장": "present"|"missing"|"unknown"  // 관리책?�자/?�장 ?�명
   },
-  "inspectorName": string|null,  // 점검자/담당자 이름 (예: "김철수", "박안전")
-  "riskLevel": "high"|"medium"|"low"|null,  // 문서에 표시된 위험도 수준
-  "checklist": [  // 체크리스트 항목들 (있는 경우만)
+  "inspectorName": string|null,  // ?��????�당???�름 (?? "김철수", "박안??)
+  "riskLevel": "high"|"medium"|"low"|null,  // 문서???�시???�험???��?
+  "checklist": [  // 체크리스????��??(?�는 경우�?
     {
-      "id": string,     // 항목 ID (fall_01, ppe_03 등)
-      "category": string,  // 분류 (추락예방, 보호구, 전기안전 등)
-      "nameKo": string,    // 한국어 항목명
-      "value": "✔"|"✖"|"N/A"|null  // 체크 상태
+      "id": string,     // ??�� ID (fall_01, ppe_03 ??
+      "category": string,  // 분류 (추락?�방, 보호�? ?�기?�전 ??
+      "nameKo": string,    // ?�국????���?
+      "value": "??|"??|"N/A"|null  // 체크 ?�태
     }
   ],
   "chat": [
-     {"role":"ai", "text": "문서 요약 및 특이사항 한줄 코멘트"}
+     {"role":"ai", "text": "문서 ?�약 �??�이?�항 ?�줄 코멘??}
   ]
 }
 
-체크리스트 ID 규칙:
-- fall_01: 고소작업, fall_02: 추락방호장치, fall_03: 안전난간
-- ppe_01: 안전모착용, ppe_03: 안전대착용
-- fire_01: 화기작업, fire_02: 소화기비치
-- conf_01: 밀폐공간작업, conf_02: 산소농도측정, conf_03: 환기조치
-- exc_01: 굴착작업, exc_02: 흙막이설치, exc_03: 탈출사다리
-- elec_02: 전기작업, elec_03: 잠금장치
+체크리스??ID 규칙:
+- fall_01: 고소?�업, fall_02: 추락방호?�치, fall_03: ?�전?�간
+- ppe_01: ?�전모착?? ppe_03: ?�전?�착용
+- fire_01: ?�기?�업, fire_02: ?�화기비�?
+- conf_01: 밀?�공간작?? conf_02: ?�소?�도측정, conf_03: ?�기조치
+- exc_01: 굴착?�업, exc_02: ?�막?�설�? exc_03: ?�출?�다�?
+- elec_02: ?�기?�업, elec_03: ?�금?�치
 
 주의:
-- "issues" 필드는 생성하지 마라. (검증은 별도 로직으로 수행함)
-- 서명란이 비어있으면 "missing"으로 표시하라.
-- 내용을 찾을 수 없으면 null 또는 "unknown"을 사용하라.
-- 사용자가 "프로젝트 규칙" 또는 "마스터 플랜"을 제공한 경우(아래 Context), 그 규칙에 위배되는 사항이 있다면 특이사항(chat)에 언급하라.
-- chat 메시지는 비판단적(non-judgmental) 어조를 사용하라: "불일치가 존재함", "기록 누락됨" 등으로 표현하고, "위험함", "잘못됨" 같은 판단 표현은 피하라.
+- "issues" ?�드???�성?��? 마라. (검증�? 별도 로직?�로 ?�행??
+- ?�명?�??비어?�으�?"missing"?�로 ?�시?�라.
+- ?�용??찾을 ???�으�?null ?�는 "unknown"???�용?�라.
+- ?�용?��? "?�로?�트 규칙" ?�는 "마스???�랜"???�공??경우(?�래 Context), �?규칙???�배?�는 ?�항???�다�??�이?�항(chat)???�급?�라.
+- chat 메시지??비판?�적(non-judgmental) ?�조�??�용?�라: "불일치�? 존재??, "기록 ?�락?? ?�으�??�현?�고, "?�험??, "?�못?? 같�? ?�단 ?�현?� ?�하??
 `;
 }
 
 function buildPhotoValidationPrompt(contextText?: string) {
   let prompt = `
-너는 건설 현장 안전 검사관 AI다. 업로드된 현장 사진을 분석하여 안전 규정 위반 사항을 식별하라.
+?�는 건설 ?�장 ?�전 검?��? AI?? ?�로?�된 ?�장 ?�진??분석?�여 ?�전 규정 ?�반 ?�항???�별?�라.
 
-출력은 반드시 "JSON만" 출력한다(설명/마크다운 금지).
-스키마:
+출력?� 반드??"JSON�? 출력?�다(?�명/마크?�운 금�?).
+?�키�?
 {
-  "docType": "현장 사진",
+  "docType": "?�장 ?�진",
   "fields": {
-    "점검일자": null,
-    "현장명": null,
-    "작업내용": string,  // 사진에서 관찰된 작업 설명 (예: "고소작업", "전기작업", "굴착작업")
-    "작업인원": string|null  // 사진에 보이는 작업자 수 (예: "2명", "확인 불가")
+    "?��??�자": null,
+    "?�장�?: null,
+    "?�업?�용": string,  // ?�진?�서 관찰된 ?�업 ?�명 (?? "고소?�업", "?�기?�업", "굴착?�업")
+    "?�업?�원": string|null  // ?�진??보이???�업????(?? "2�?, "?�인 불�?")
   },
   "photoAnalysis": {
-    "workType": string,  // 작업 유형 (예: "고소작업", "밀폐공간작업", "전기작업")
-    "workersVisible": number,  // 확인된 작업자 수
-    "location": string,  // 작업 위치 설명 (예: "건물 외벽 3층", "지하 공간", "옥상")
-    "conditions": string[]  // 관찰된 현장 상황 (예: ["높이 3m 이상", "밀폐공간", "우천"])
+    "workType": string,  // ?�업 ?�형 (?? "고소?�업", "밀?�공간작??, "?�기?�업")
+    "workersVisible": number,  // ?�인???�업????
+    "location": string,  // ?�업 ?�치 ?�명 (?? "건물 ?�벽 3�?, "지??공간", "?�상")
+    "conditions": string[]  // 관찰된 ?�장 ?�황 (?? ["?�이 3m ?�상", "밀?�공�?, "?�천"])
   },
-  "safetyViolations": [  // 발견된 안전 위반 사항
+  "safetyViolations": [  // 발견???�전 ?�반 ?�항
     {
-      "id": string,  // 위반 ID (fall_helmet, ppe_vest 등)
-      "category": string,  // 분류 (개인보호구, 안전시설, 작업환경)
-      "violation": string,  // 위반 내용 (예: "안전모 미착용", "안전난간 미설치")
-      "severity": "high"|"medium"|"low",  // 위험도
-      "location": string,  // 사진 내 위치 (예: "화면 중앙 작업자", "왼쪽 상단 영역")
-      "evidence": string  // 구체적 근거 (예: "노란색 작업복 착용 작업자의 머리에 안전모가 보이지 않음")
+      "id": string,  // ?�반 ID (fall_helmet, ppe_vest ??
+      "category": string,  // 분류 (개인보호�? ?�전?�설, ?�업?�경)
+      "violation": string,  // ?�반 ?�용 (?? "?�전�?미착??, "?�전?�간 미설�?)
+      "severity": "high"|"medium"|"low",  // ?�험??
+      "location": string,  // ?�진 ???�치 (?? "?�면 중앙 ?�업??, "?�쪽 ?�단 ?�역")
+      "evidence": string  // 구체??근거 (?? "?��????�업�?착용 ?�업?�의 머리???�전모�? 보이지 ?�음")
     }
   ],
-  "safetyCompliance": [  // 준수 사항
+  "safetyCompliance": [  // 준???�항
     {
-      "item": string,  // 준수 항목 (예: "안전조끼 착용", "안전대 체결")
-      "evidence": string  // 준수 근거
+      "item": string,  // 준????�� (?? "?�전조끼 착용", "?�전?� 체결")
+      "evidence": string  // 준??근거
     }
   ],
-  "checklist": [  // 안전 체크리스트 (사진 기반 자동 평가)
+  "checklist": [  // ?�전 체크리스??(?�진 기반 ?�동 ?��?)
     {
-      "id": string,  // 항목 ID
+      "id": string,  // ??�� ID
       "category": string,  // 분류
-      "nameKo": string,  // 항목명
-      "value": "✔"|"✖"|"N/A"  // 평가 결과
+      "nameKo": string,  // ??���?
+      "value": "??|"??|"N/A"  // ?��? 결과
     }
   ],
   "chat": [
-    {"role":"ai", "text": "사진 분석 요약 및 주요 발견 사항"}
+    {"role":"ai", "text": "?�진 분석 ?�약 �?주요 발견 ?�항"}
   ]
 }
 
-분석 가이드라인:
+분석 가?�드?�인:
 
-1. 개인보호구(PPE) 확인:
-   - 안전모(ppe_01): 필수 착용, 색상/형태 확인
-   - 안전조끼(ppe_02): 야광/고가시성 조끼 착용 여부
-   - 안전대(ppe_03): 고소작업 시 필수, 걸이 연결 확인
-   - 안전화(ppe_04): 작업화 착용 여부
-   - 안전장갑(ppe_05): 작업 유형에 맞는 장갑 착용
+1. 개인보호�?PPE) ?�인:
+   - ?�전�?ppe_01): ?�수 착용, ?�상/?�태 ?�인
+   - ?�전조끼(ppe_02): ?�광/고�??�성 조끼 착용 ?��?
+   - ?�전?�(ppe_03): 고소?�업 ???�수, 걸이 ?�결 ?�인
+   - ?�전??ppe_04): ?�업??착용 ?��?
+   - ?�전?�갑(ppe_05): ?�업 ?�형??맞는 ?�갑 착용
 
-2. 안전시설 확인:
-   - 추락방지: 안전난간(fall_03), 추락방호망(fall_02)
-   - 전기안전: 절연장갑, 잠금장치(elec_03)
-   - 화기작업: 소화기 비치(fire_02), 불꽃 감시자
-   - 밀폐공간: 환기장치(conf_03), 산소농도계(conf_02)
-   - 굴착작업: 흙막이(exc_02), 탈출사다리(exc_03)
+2. ?�전?�설 ?�인:
+   - 추락방�?: ?�전?�간(fall_03), 추락방호�?fall_02)
+   - ?�기?�전: ?�연?�갑, ?�금?�치(elec_03)
+   - ?�기?�업: ?�화�?비치(fire_02), 불꽃 감시??
+   - 밀?�공�? ?�기?�치(conf_03), ?�소?�도�?conf_02)
+   - 굴착?�업: ?�막??exc_02), ?�출?�다�?exc_03)
 
-3. 작업환경 평가:
-   - 작업 높이: 2m 이상 = 고소작업(fall_01)
-   - 밀폐공간: 환기 불량 공간 = 밀폐공간작업(conf_01)
-   - 전기 노출: 감전 위험 = 전기작업(elec_02)
-   - 굴착 깊이: 1.5m 이상 = 굴착작업(exc_01)
+3. ?�업?�경 ?��?:
+   - ?�업 ?�이: 2m ?�상 = 고소?�업(fall_01)
+   - 밀?�공�? ?�기 불량 공간 = 밀?�공간작??conf_01)
+   - ?�기 ?�출: 감전 ?�험 = ?�기?�업(elec_02)
+   - 굴착 깊이: 1.5m ?�상 = 굴착?�업(exc_01)
 
-4. 위반 심각도 기준:
-   - high: 즉시 생명 위협 (추락, 감전, 질식 등)
-   - medium: 중대 부상 가능 (낙하물, 화상 등)
-   - low: 경미한 부상 가능 (찰과상, 타박상 등)
+4. ?�반 ?�각??기�?:
+   - high: 즉시 ?�명 ?�협 (추락, 감전, 질식 ??
+   - medium: 중�? 부??가??(?�하�? ?�상 ??
+   - low: 경�???부??가??(찰과?? ?�박상 ??
 
-주의사항:
-- 사진에서 **명확히 확인 가능한 사항만** 보고하라
-- 불확실한 경우 "확인 불가" 또는 "N/A"로 표시
-- 위반 사항은 구체적 근거와 위치를 함께 기술
-- 비판단적 어조 유지: "～가 관찰됨", "～확인되지 않음"
+주의?�항:
+- ?�진?�서 **명확???�인 가?�한 ?�항�?* 보고?�라
+- 불확?�한 경우 "?�인 불�?" ?�는 "N/A"�??�시
+- ?�반 ?�항?� 구체??근거?� ?�치�??�께 기술
+- 비판?�적 ?�조 ?��?: "～�? 관찰됨", "～확?�되지 ?�음"
 `;
 
   if (contextText) {
-    prompt += `\n\n[PROJECT CONTEXT / MASTER SAFETY PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 사진 분석 시 이 규칙을 기준으로 위반 여부를 판단하라:\n${contextText}`;
+    prompt += `\n\n[PROJECT CONTEXT / MASTER SAFETY PLAN]\n?�음?� ???�장??마스???�전 계획?�다. ?�진 분석 ????규칙??기�??�로 ?�반 ?��?�??�단?�라:\n${contextText}`;
   }
 
   return prompt;
@@ -185,7 +226,7 @@ function safeJsonParse(text: string) {
   try {
     return JSON.parse(trimmed);
   } catch {
-    // JSON만 달라고 해도 앞뒤로 말이 붙는 경우 대비
+    // JSON�??�라�??�도 ?�뒤�?말이 붙는 경우 ?��?
     const start = trimmed.indexOf("{");
     const end = trimmed.lastIndexOf("}");
     if (start >= 0 && end > start) {
@@ -199,7 +240,7 @@ function sanitizeDocData(raw: unknown) {
   return parseDocExtraction(raw);
 }
 
-// ✅ NEW: Extraction with Structured Outputs (guaranteed valid JSON)
+// ??NEW: Extraction with Structured Outputs (guaranteed valid JSON)
 async function callOpenAIStructured(opts: {
   pdfText?: string;
   pageImages?: string[] | null;
@@ -208,20 +249,20 @@ async function callOpenAIStructured(opts: {
   let sysPrompt = buildSystemPrompt();
 
   if (opts.contextText) {
-    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 이 내용을 참고하여 위반 사항이나 불일치 점이 있으면 지적하라:\n${opts.contextText}`;
+    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n?�음?� ???�장??마스???�전 계획?�다. ???�용??참고?�여 ?�반 ?�항?�나 불일�??�이 ?�으�?지?�하??\n${opts.contextText}`;
   }
 
   // Add confidence tracking instruction
-  sysPrompt += `\n\n중요: extractionConfidence 필드에 추출 신뢰도를 반드시 포함하세요:
-- overall: "high" (모든 필드 명확), "medium" (일부 불확실), "low" (여러 필드 불확실)
-- uncertainFields: 추출이 불확실한 필드 목록 (예: ["점검일자", "점검자"])`;
+  sysPrompt += `\n\n중요: extractionConfidence ?�드??추출 ?�뢰?��? 반드???�함?�세??
+- overall: "high" (모든 ?�드 명확), "medium" (?��? 불확??, "low" (?�러 ?�드 불확??
+- uncertainFields: 추출??불확?�한 ?�드 목록 (?? ["?��??�자", "?��???])`;
 
   // Build content array
   const content: any[] = [];
   content.push({ type: "text", text: sysPrompt });
 
   if (opts.pdfText && opts.pdfText.trim().length >= 50) {
-    content.push({ type: "text", text: `추출 텍스트:\n${opts.pdfText}` });
+    content.push({ type: "text", text: `추출 ?�스??\n${opts.pdfText}` });
   }
 
   if (opts.pageImages?.length) {
@@ -236,7 +277,7 @@ async function callOpenAIStructured(opts: {
     }
   }
 
-  console.log("[Structured Extraction] Calling OpenAI with structured outputs...");
+  logger.log("[Structured Extraction] Calling OpenAI with structured outputs...");
 
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
@@ -257,7 +298,7 @@ async function callOpenAIStructured(opts: {
   const responseText = response.choices[0]?.message?.content ?? "{}";
   const extraction: DocumentExtraction = JSON.parse(responseText);
 
-  console.log("[Structured Extraction] Success! Confidence:", extraction.extractionConfidence.overall);
+  logger.log("[Structured Extraction] Success! Confidence:", extraction.extractionConfidence.overall);
 
   return extraction;
 }
@@ -267,14 +308,14 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
   let sysPrompt = buildSystemPrompt();
 
   if (opts.contextText) {
-    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 이 내용을 참고하여 위반 사항이나 불일치 점이 있으면 지적하라:\n${opts.contextText}`;
+    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n?�음?� ???�장??마스???�전 계획?�다. ???�용??참고?�여 ?�반 ?�항?�나 불일�??�이 ?�으�?지?�하??\n${opts.contextText}`;
   }
 
   const content: any[] = [];
   content.push({ type: "text", text: sysPrompt });
 
   if (opts.pdfText && opts.pdfText.trim().length >= 50) {
-    content.push({ type: "text", text: `추출 텍스트:\n${opts.pdfText}` });
+    content.push({ type: "text", text: `추출 ?�스??\n${opts.pdfText}` });
   }
 
   if (opts.pageImages?.length) {
@@ -308,20 +349,20 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
 async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null; contextText?: string }) {
   const content: any[] = [];
 
-  // 시스템 프롬프트는 첫 텍스트 블록에 함께 넣는 방식으로 간단히 처리
+  // ?�스???�롬?�트??�??�스??블록???�께 ?�는 방식?�로 간단??처리
   let sysPrompt = buildSystemPrompt();
   if (opts.contextText) {
-    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n다음은 이 현장의 마스터 안전 계획이다. 이 내용을 참고하여 위반 사항이나 불일치 점이 있으면 지적하라:\n${opts.contextText}`;
+    sysPrompt += `\n\n[PROJECT CONTEXT / MASTER PLAN]\n?�음?� ???�장??마스???�전 계획?�다. ???�용??참고?�여 ?�반 ?�항?�나 불일�??�이 ?�으�?지?�하??\n${opts.contextText}`;
   }
   content.push({ type: "text", text: sysPrompt });
 
   if (opts.pdfText && opts.pdfText.trim().length >= 50) {
-    content.push({ type: "text", text: `추출 텍스트:\n${opts.pdfText}` });
+    content.push({ type: "text", text: `추출 ?�스??\n${opts.pdfText}` });
   }
 
   if (opts.pageImages?.length) {
     for (const img of opts.pageImages) {
-      // data:image/jpeg;base64,... 에서 base64만 분리
+      // data:image/jpeg;base64,... ?�서 base64�?분리
       const base64 = img.split(",")[1] ?? "";
       content.push({
         type: "image",
@@ -331,12 +372,12 @@ async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null
   }
 
   const msg = await getAnthropic().messages.create({
-    model: "claude-sonnet-4-5-20250929", // 너 계정에서 가능한 모델로 바꿔도 됨
+    model: "claude-sonnet-4-5-20250929", // ??계정?�서 가?�한 모델�?바꿔????
     max_tokens: 1500,
     messages: [{ role: "user", content }],
   });
 
-  // Claude 응답은 content 배열로 오니까 text만 합치기
+  // Claude ?�답?� content 배열�??�니�?text�??�치�?
   const outText =
     msg.content
       .filter((c: any) => c.type === "text")
@@ -346,7 +387,7 @@ async function callClaude(opts: { pdfText?: string; pageImages?: string[] | null
   return safeJsonParse(outText);
 }
 
-// ✅ NEW: Verification step with self-correction tools
+// ??NEW: Verification step with self-correction tools
 async function verifyExtraction(
   extraction: DocumentExtraction,
   pdfText: string,
@@ -354,7 +395,7 @@ async function verifyExtraction(
 ): Promise<DocumentExtraction> {
   // Check if verification is needed
   if (!shouldVerifyExtraction(extraction)) {
-    console.log("[Verification] High confidence - skipping verification");
+    logger.log("[Verification] High confidence - skipping verification");
     return extraction;
   }
 
@@ -364,19 +405,19 @@ async function verifyExtraction(
   // - Extra latency (2+ additional API calls)
   // - Token cost (GPT-4o-mini calls with no benefit)
   // - No accuracy improvement (results not applied)
-  console.log("[Verification] Low confidence detected, but verification disabled (correction not implemented)");
-  console.log("[Verification] Uncertain fields:", extraction.extractionConfidence.uncertainFields);
+  logger.log("[Verification] Low confidence detected, but verification disabled (correction not implemented)");
+  logger.log("[Verification] Uncertain fields:", extraction.extractionConfidence.uncertainFields);
   return extraction;
 
   /* DISABLED: Verification calls without correction (wasteful)
-  console.log("[Verification] Low confidence - running verification tools");
-  console.log("[Verification] Uncertain fields:", extraction.extractionConfidence.uncertainFields);
+  logger.log("[Verification] Low confidence - running verification tools");
+  logger.log("[Verification] Uncertain fields:", extraction.extractionConfidence.uncertainFields);
 
   // Build verification messages
   const verificationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     {
       role: "system",
-      content: "너는 문서 추출 품질 검증 전문가다. 추출 결과를 검토하고 필요하면 재추출 도구를 사용하여 누락된 정보를 보완하라. 모든 도구 사용 후 '검증 완료'라고 응답하라."
+      content: "?�는 문서 추출 ?�질 검�??�문가?? 추출 결과�?검?�하�??�요?�면 ?�추�??�구�??�용?�여 ?�락???�보�?보완?�라. 모든 ?�구 ?�용 ??'검�??�료'?�고 ?�답?�라."
     },
     {
       role: "user",
@@ -399,7 +440,7 @@ async function verifyExtraction(
 
     // Handle tool calls
     if (message?.tool_calls && message.tool_calls.length > 0) {
-      console.log(`[Verification] AI calling ${message.tool_calls.length} tool(s)`);
+      logger.log(`[Verification] AI calling ${message.tool_calls.length} tool(s)`);
 
       verificationMessages.push(message);
 
@@ -408,7 +449,7 @@ async function verifyExtraction(
         const { name, arguments: argsStr } = (toolCall as any).function;
         const args = JSON.parse(argsStr);
 
-        console.log(`[Verification] Tool: ${name}`, args);
+        logger.log(`[Verification] Tool: ${name}`, args);
 
         let toolResult = "";
 
@@ -429,7 +470,7 @@ async function verifyExtraction(
             break;
 
           default:
-            toolResult = `알 수 없는 도구: ${name}`;
+            toolResult = `?????�는 ?�구: ${name}`;
         }
 
         verificationMessages.push({
@@ -448,17 +489,17 @@ async function verifyExtraction(
       });
 
       const verificationResult = finalVerification.choices[0]?.message?.content || "";
-      console.log("[Verification] Result:", verificationResult);
+      logger.log("[Verification] Result:", verificationResult);
 
       // TODO: Parse verification result and apply corrections to extraction
       // For now, return original extraction (tools are informational)
     } else {
-      console.log("[Verification] No tool calls needed - extraction confirmed good");
+      logger.log("[Verification] No tool calls needed - extraction confirmed good");
     }
 
     return extraction;
   } catch (error) {
-    console.warn("[Verification] Failed, using original extraction:", error);
+    logger.warn("[Verification] Failed, using original extraction:", error);
     return extraction;
   }
   */
@@ -475,13 +516,13 @@ export async function POST(req: Request) {
     if (!hasText && !hasImages) {
       return NextResponse.json(
         {
-          error: "문서에 내용이 없거나 읽을 수 없습니다",
+          error: "문서???�용???�거???�을 ???�습?�다",
           fileName: fileName ?? "Untitled",
           issues: [],
           chat: [
             {
               role: "ai",
-              text: "업로드된 문서가 비어있거나 내용을 읽을 수 없습니다. 올바른 안전 점검 문서를 업로드해주세요."
+              text: "?�로?�된 문서가 비어?�거???�용???�을 ???�습?�다. ?�바�??�전 ?��? 문서�??�로?�해주세??"
             }
           ]
         },
@@ -493,22 +534,22 @@ export async function POST(req: Request) {
 
     const normalizedText = (pdfText ?? "").replace(/\s+/g, " ").trim();
     const looksLikeGeneratedReport =
-      normalizedText.includes("검증 요약") ||
+      normalizedText.includes("검�??�약") ||
       normalizedText.includes("AI 분석") ||
-      normalizedText.includes("AI 안전도우미") ||
-      normalizedText.includes("스마트 안전지킴이") ||
-      normalizedText.includes("검증 결과");
+      normalizedText.includes("AI ?�전?�우�?) ||
+      normalizedText.includes("?�마???�전지?�이") ||
+      normalizedText.includes("검�?결과");
 
     if (looksLikeGeneratedReport) {
       return NextResponse.json(
         {
-          error: "검증 결과 리포트는 업로드 대상이 아닙니다",
+          error: "검�?결과 리포?�는 ?�로???�?�이 ?�닙?�다",
           fileName: fileName ?? "Untitled",
           issues: [],
           chat: [
             {
               role: "ai",
-              text: "이 파일은 검증 결과 리포트로 보입니다. 원본 안전 점검 문서를 업로드해주세요."
+              text: "???�일?� 검�?결과 리포?�로 보입?�다. ?�본 ?�전 ?��? 문서�??�로?�해주세??"
             }
           ]
         },
@@ -536,7 +577,7 @@ export async function POST(req: Request) {
             masterPlan = JSON.parse(project.masterPlanJson) as MasterSafetyPlan;
             projectIsStructured = true;
           } catch (e) {
-            console.error("Failed to parse master plan JSON:", e);
+            logger.error("Failed to parse master plan JSON:", e);
           }
         }
       }
@@ -545,23 +586,23 @@ export async function POST(req: Request) {
       contextText = tempContextText;
     }
 
-    // ✅ PHOTO VALIDATION: Special handling for site photos
-    console.log("[Route] Document type received:", documentType);
-    console.log("[Route] Is SITE_PHOTO?", documentType === "SITE_PHOTO");
+    // ??PHOTO VALIDATION: Special handling for site photos
+    logger.log("[Route] Document type received:", documentType);
+    logger.log("[Route] Is SITE_PHOTO?", documentType === "SITE_PHOTO");
 
     if (documentType === "SITE_PHOTO") {
-      console.log("\n========== PHOTO VALIDATION MODE ==========");
+      logger.log("\n========== PHOTO VALIDATION MODE ==========");
 
       if (!hasImages) {
         return NextResponse.json(
           {
-            error: "현장 사진 검증에는 이미지가 필요합니다",
+            error: "?�장 ?�진 검증에???��?지가 ?�요?�니??,
             fileName: fileName ?? "Untitled",
             issues: [],
             chat: [
               {
                 role: "ai",
-                text: "현장 사진을 업로드해주세요. 이미지 파일이 필요합니다."
+                text: "?�장 ?�진???�로?�해주세?? ?��?지 ?�일???�요?�니??"
               }
             ]
           },
@@ -624,18 +665,18 @@ export async function POST(req: Request) {
           photoAnalysis = safeJsonParse(outText);
         }
 
-        console.log("[Photo Analysis] Complete:", JSON.stringify(photoAnalysis, null, 2));
+        logger.log("[Photo Analysis] Complete:", JSON.stringify(photoAnalysis, null, 2));
 
         // Convert photo analysis to standard format
         const extraction: DocumentExtraction = {
-          docType: "현장 사진",
+          docType: "?�장 ?�진",
           fields: photoAnalysis.fields || {},
-          signature: { 담당: "unknown", 소장: "unknown" },
+          signature: { ?�당: "unknown", ?�장: "unknown" },
           inspectorName: null,
           riskLevel: null,
           checklist: photoAnalysis.checklist || [],
           chat: photoAnalysis.chat || [
-            { role: "ai", text: "현장 사진 분석이 완료되었습니다." }
+            { role: "ai", text: "?�장 ?�진 분석???�료?�었?�니??" }
           ],
           extractionConfidence: {
             overall: "high",
@@ -651,9 +692,9 @@ export async function POST(req: Request) {
             photoIssues.push({
               severity: violation.severity === "high" ? "error" : violation.severity === "medium" ? "warn" : "info",
               title: violation.violation,
-              message: `${violation.evidence}\n\n위치: ${violation.location}`,
+              message: `${violation.evidence}\n\n?�치: ${violation.location}`,
               ruleId: `photo_${violation.id}`,
-              path: `사진분석.${violation.category}`,
+              path: `?�진분석.${violation.category}`,
             });
           }
         }
@@ -679,8 +720,8 @@ export async function POST(req: Request) {
           documentType: "SITE_PHOTO",
         });
       } catch (e: any) {
-        console.error("[Photo Analysis] Error:", e);
-        console.error("[Photo Analysis] Error details:", {
+        logger.error("[Photo Analysis] Error:", e);
+        logger.error("[Photo Analysis] Error details:", {
           message: e.message,
           stack: e.stack,
           documentType,
@@ -688,13 +729,13 @@ export async function POST(req: Request) {
         });
         return NextResponse.json(
           {
-            error: `사진 분석 중 오류가 발생했습니다: ${e.message}`,
+            error: `?�진 분석 �??�류가 발생?�습?�다: ${e.message}`,
             fileName,
             issues: [],
             chat: [
               {
                 role: "ai",
-                text: `사진 분석에 실패했습니다.\n\n오류: ${e.message}\n\n참고: 스캔된 문서 이미지를 업로드하시는 경우, 문서 종류 선택 시 "현장 사진"이 아닌 실제 문서 유형(예: "산업안전 점검표")을 선택해주세요.`
+                text: `?�진 분석???�패?�습?�다.\n\n?�류: ${e.message}\n\n참고: ?�캔??문서 ?��?지�??�로?�하?�는 경우, 문서 종류 ?�택 ??"?�장 ?�진"???�닌 ?�제 문서 ?�형(?? "?�업?�전 ?��???)???�택?�주?�요.`
               }
             ]
           },
@@ -703,8 +744,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // ✅ Phase 1: Structured Extraction (Guaranteed Valid JSON)
-    console.log("\n========== PHASE 1: STRUCTURED EXTRACTION ==========");
+    // ??Phase 1: Structured Extraction (Guaranteed Valid JSON)
+    logger.log("\n========== PHASE 1: STRUCTURED EXTRACTION ==========");
     let extraction: DocumentExtraction;
 
     if (p === "openai" || p === "auto") {
@@ -712,12 +753,12 @@ export async function POST(req: Request) {
       try {
         extraction = await callOpenAIStructured({ pdfText, pageImages, contextText });
       } catch (e) {
-        console.warn("[Extraction] Structured extraction failed, falling back to Claude:", e);
+        logger.warn("[Extraction] Structured extraction failed, falling back to Claude:", e);
         // Fallback to Claude (without structured outputs)
         const result = await callClaude({ pdfText, pageImages, contextText });
         const sanitized = sanitizeDocData(result);
         if ("error" in sanitized) {
-          return NextResponse.json({ error: sanitized.error }, { status: 400 });
+          return createErrorResponse(sanitized.error, { fileName });
         }
         // Map to DocumentExtraction format
         extraction = {
@@ -733,7 +774,7 @@ export async function POST(req: Request) {
       const result = await callClaude({ pdfText, pageImages, contextText });
       const sanitized = sanitizeDocData(result);
       if ("error" in sanitized) {
-        return NextResponse.json({ error: sanitized.error }, { status: 400 });
+        return createErrorResponse(sanitized.error, { fileName });
       }
       extraction = {
         ...sanitized.data,
@@ -744,12 +785,12 @@ export async function POST(req: Request) {
       } as DocumentExtraction;
     }
 
-    console.log("[Phase 1] Extraction complete. Confidence:", extraction.extractionConfidence.overall);
+    logger.log("[Phase 1] Extraction complete. Confidence:", extraction.extractionConfidence.overall);
 
-    // ✅ Phase 2: Verification (Conditional, Self-Correcting)
-    console.log("\n========== PHASE 2: VERIFICATION ==========");
+    // ??Phase 2: Verification (Conditional, Self-Correcting)
+    logger.log("\n========== PHASE 2: VERIFICATION ==========");
     const verified = await verifyExtraction(extraction, pdfText ?? "", pageImages);
-    console.log("[Phase 2] Verification complete");
+    logger.log("[Phase 2] Verification complete");
 
     // Convert DocumentExtraction to DocData format for validation
     const extracted: any = {
@@ -766,23 +807,23 @@ export async function POST(req: Request) {
     // If docType is "unknown" and no safety-related fields are found, reject the document
     const isSafetyDocument =
       extracted.docType !== "unknown" ||
-      (extracted.fields?.점검일자 ?? false) ||
-      (extracted.fields?.현장명 ?? false) ||
-      (extracted.fields?.작업내용 ?? false) ||
-      (extracted.signature?.담당 && extracted.signature.담당 !== "unknown") ||
-      (extracted.signature?.소장 && extracted.signature.소장 !== "unknown") ||
+      (extracted.fields?.?��??�자 ?? false) ||
+      (extracted.fields?.?�장�??? false) ||
+      (extracted.fields?.?�업?�용 ?? false) ||
+      (extracted.signature?.?�당 && extracted.signature.?�당 !== "unknown") ||
+      (extracted.signature?.?�장 && extracted.signature.?�장 !== "unknown") ||
       (extracted.checklist?.length ?? 0) > 0;
 
     if (!isSafetyDocument) {
-      // ✅ Better error message for images
+      // ??Better error message for images
       const wasImage = pageImages && pageImages.length > 0;
       const errorMessage = wasImage
-        ? "업로드된 이미지에서 안전 점검 문서 내용을 찾을 수 없습니다. 이미지가 선명하고 문서 전체가 잘 보이는지 확인해주세요. 흐릿하거나 일부만 촬영된 경우 다시 촬영해주세요."
-        : "업로드된 문서는 안전 점검 관련 문서가 아닌 것으로 보입니다. 산업안전 점검표, 위험성 평가 보고서, TBM 결과 등 안전 점검 문서를 업로드해주세요.";
+        ? "?�로?�된 ?��?지?�서 ?�전 ?��? 문서 ?�용??찾을 ???�습?�다. ?��?지가 ?�명?�고 문서 ?�체가 ??보이?��? ?�인?�주?�요. ?�릿?�거???��?�?촬영??경우 ?�시 촬영?�주?�요."
+        : "?�로?�된 문서???�전 ?��? 관??문서가 ?�닌 것으�?보입?�다. ?�업?�전 ?��??? ?�험???��? 보고?? TBM 결과 ???�전 ?��? 문서�??�로?�해주세??";
 
       return NextResponse.json(
         {
-          error: "안전 점검 문서가 아닌 것으로 판단됩니다",
+          error: "?�전 ?��? 문서가 ?�닌 것으�??�단?�니??,
           fileName: fileName ?? "Untitled",
           issues: [],
           chat: [
@@ -797,14 +838,17 @@ export async function POST(req: Request) {
     }
 
     const validationIssues = validateDocument(extracted);
+
+    // Map user-selected document type (frontend enum) to AI-detected type (Korean names)
     const documentTypeMap: Record<string, DocData["docType"]> = {
-      SAFETY_CHECKLIST: "산업안전 점검표",
-      RISK_ASSESSMENT: "위험성 평가 보고서",
-      PRE_WORK_CHECKLIST: "작업 전 안전점검표",
+      SAFETY_CHECKLIST: "?�업?�전 ?��???,
+      RISK_ASSESSMENT: "?�험???��? 보고??,
+      PRE_WORK_CHECKLIST: "?�업 ???�전?��???,
       TBM: "TBM",
+      SITE_PHOTO: "?�장 ?�진",
       OTHER: "unknown",
     };
-    const selectedDocType = documentTypeMap[documentType as keyof typeof documentTypeMap];
+    const selectedDocType = documentType ? documentTypeMap[documentType as keyof typeof documentTypeMap] : undefined;
     const mismatchIssues: ValidationIssue[] = [];
 
     if (documentType) {
@@ -812,23 +856,23 @@ export async function POST(req: Request) {
         if (extracted.docType !== "unknown") {
           mismatchIssues.push({
             severity: "warn",
-            title: "문서 유형 선택이 실제 내용과 다릅니다",
-            message: `선택하신 문서 유형은 "기타 문서"이지만, AI 분석 결과는 "${extracted.docType}"로 인식되었습니다. 올바른 유형을 선택했는지 확인해주세요.`,
+            title: "문서 ?�형 ?�택???�제 ?�용�??�릅?�다",
+            message: `?�택?�신 문서 ?�형?� "기�? 문서"?��?�? AI 분석 결과??"${extracted.docType}"�??�식?�었?�니?? ?�바�??�형???�택?�는지 ?�인?�주?�요.`,
             ruleId: "user_doc_type_mismatch",
           });
         }
       } else if (selectedDocType && extracted.docType !== "unknown" && extracted.docType !== selectedDocType) {
         mismatchIssues.push({
           severity: "warn",
-          title: "문서 유형 선택이 실제 내용과 다릅니다",
-          message: `선택하신 문서 유형은 "${selectedDocType}"이지만, AI 분석 결과는 "${extracted.docType}"로 인식되었습니다. 문서 유형을 다시 선택해주세요.`,
+          title: "문서 ?�형 ?�택???�제 ?�용�??�릅?�다",
+          message: `?�택?�신 문서 ?�형?� "${selectedDocType}"?��?�? AI 분석 결과??"${extracted.docType}"�??�식?�었?�니?? 문서 ?�형???�시 ?�택?�주?�요.`,
           ruleId: "user_doc_type_mismatch",
         });
       } else if (selectedDocType && extracted.docType === "unknown") {
         mismatchIssues.push({
           severity: "info",
-          title: "문서 유형 확인이 필요합니다",
-          message: "선택하신 문서 유형이 있지만 문서 내용에서 유형을 확정하기 어렵습니다. 문서가 올바른지 확인해주세요.",
+          title: "문서 ?�형 ?�인???�요?�니??,
+          message: "?�택?�신 문서 ?�형???��?�?문서 ?�용?�서 ?�형???�정?�기 ?�렵?�니?? 문서가 ?�바른�? ?�인?�주?�요.",
           ruleId: "user_doc_type_uncertain",
         });
       }
@@ -840,7 +884,7 @@ export async function POST(req: Request) {
       try {
         structuredIssues = validateAgainstStructuredPlan(extracted, masterPlan);
       } catch (e) {
-        console.warn("Structured validation failed:", e);
+        logger.warn("Structured validation failed:", e);
         // Non-critical, continue without structured validation
       }
     }
@@ -851,7 +895,7 @@ export async function POST(req: Request) {
       const riskCalculation = calculateRiskLevel(extracted);
       riskIssues = riskCalculationToIssues(riskCalculation);
     } catch (e) {
-      console.warn("Risk calculation failed:", e);
+      logger.warn("Risk calculation failed:", e);
       // Non-critical, continue without risk analysis
     }
 
@@ -867,7 +911,7 @@ export async function POST(req: Request) {
         );
         patternIssues = patternWarningsToIssues(patternWarnings);
       } catch (e) {
-        console.warn("Pattern analysis failed:", e);
+        logger.warn("Pattern analysis failed:", e);
         // Non-critical, continue without pattern warnings
       }
     }
@@ -879,7 +923,7 @@ export async function POST(req: Request) {
         const crossIssues = await analyzeCrossDocumentIssues(projectId, reportId);
         crossDocIssues = crossDocumentIssuesToValidationIssues(crossIssues);
       } catch (e) {
-        console.warn("Cross-document analysis failed:", e);
+        logger.warn("Cross-document analysis failed:", e);
         // Non-critical, continue without cross-document analysis
       }
     }
@@ -888,11 +932,11 @@ export async function POST(req: Request) {
     let tbmIssues: typeof validationIssues = [];
     if (latestTBM && latestTBM.extractedHazards && latestTBM.extractedHazards.length > 0) {
       try {
-        console.log("[Stage 3d] Running TBM cross-validation...");
+        logger.log("[Stage 3d] Running TBM cross-validation...");
         tbmIssues = validateAgainstTBM(extracted, latestTBM);
-        console.log(`[Stage 3d] TBM validation found ${tbmIssues.length} issues`);
+        logger.log(`[Stage 3d] TBM validation found ${tbmIssues.length} issues`);
       } catch (e) {
-        console.warn("[Stage 3d] TBM validation failed:", e);
+        logger.warn("[Stage 3d] TBM validation failed:", e);
         // Non-critical, continue without TBM validation
       }
     }
@@ -926,7 +970,7 @@ export async function POST(req: Request) {
         }
       });
     } catch (e) {
-      console.warn("History save failed (likely read-only DB on Vercel):", e);
+      logger.warn("History save failed (likely read-only DB on Vercel):", e);
       // Continue without failing the user response
     }
 
@@ -950,21 +994,33 @@ export async function POST(req: Request) {
       reportId: savedReport.id
     });
   } catch (e: any) {
-    console.error("Validation Error:", e);
+    logger.error("Validation Error:", e);
     const msg = e?.message ?? "validate failed";
+    const fileName = (await req.json().catch(() => ({})))?.fileName;
 
     // API Key missing errors
     if (msg.includes("API_KEY is not set")) {
-      return NextResponse.json(
+      return createErrorResponse(
+        "API Key ?�정???�요?�니??",
         {
-          error: "API Key 설정이 필요합니다.",
+          fileName,
           details: msg,
-          solution: ".env.local 파일에 API Key를 추가해주세요."
-        },
-        { status: 500 } // Server misconfiguration -> 500 implies admin action needed
+          solution: ".env.local ?�일??API Key�?추�??�주?�요.",
+          status: 500,
+          chatMessage: "?�버 ?�정 ?�류�??�해 검증을 ?�행?????�습?�다. 관리자?�게 문의?�주?�요."
+        }
       );
     }
 
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Generic server error
+    return createErrorResponse(
+      "검�?�??�류가 발생?�습?�다",
+      {
+        fileName,
+        details: msg,
+        status: 500,
+        chatMessage: `검�?처리 �??�상�?못한 ?�류가 발생?�습?�다.\n\n?�류 ?�용: ${msg}\n\n문제가 계속?�면 관리자?�게 문의?�주?�요.`
+      }
+    );
   }
 }
