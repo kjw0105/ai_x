@@ -358,6 +358,17 @@ async function verifyExtraction(
     return extraction;
   }
 
+  // TODO: Implement verification correction logic
+  // Currently, verification calls are made but results are discarded (wasteful).
+  // Until correction step is implemented, skip verification to avoid:
+  // - Extra latency (2+ additional API calls)
+  // - Token cost (GPT-4o-mini calls with no benefit)
+  // - No accuracy improvement (results not applied)
+  console.log("[Verification] Low confidence detected, but verification disabled (correction not implemented)");
+  console.log("[Verification] Uncertain fields:", extraction.extractionConfidence.uncertainFields);
+  return extraction;
+
+  /* DISABLED: Verification calls without correction (wasteful)
   console.log("[Verification] Low confidence - running verification tools");
   console.log("[Verification] Uncertain fields:", extraction.extractionConfidence.uncertainFields);
 
@@ -450,6 +461,7 @@ async function verifyExtraction(
     console.warn("[Verification] Failed, using original extraction:", error);
     return extraction;
   }
+  */
 }
 
 export async function POST(req: Request) {
