@@ -70,6 +70,7 @@ interface Issue {
   message: string;
   ruleId?: string;
   confidence?: number;
+  isAIFixable?: boolean; // Whether AI can suggest a fix (false for photos, signatures)
 }
 
 interface IssuesListProps {
@@ -183,27 +184,29 @@ export function IssuesList({ issues, loading, onConfirm, onFix, processingIssueI
                   {issue.message}
                 </p>
 
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className={`grid gap-1.5 ${issue.isAIFixable === false ? 'grid-cols-1' : 'grid-cols-2'}`}>
                   <button
                     onClick={() => handleConfirm(issue.id)}
                     className="py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold"
                   >
                     확인했어
                   </button>
-                  <button
-                    onClick={() => handleFix(issue)}
-                    disabled={processingIssueId === issue.id}
-                    className="py-2 bg-primary hover:bg-green-600 text-white rounded-lg text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1"
-                  >
-                    {processingIssueId === issue.id ? (
-                      <>
-                        <span className="animate-spin material-symbols-outlined text-xs">refresh</span>
-                        생성 중
-                      </>
-                    ) : (
-                      "수정해줘"
-                    )}
-                  </button>
+                  {issue.isAIFixable !== false && (
+                    <button
+                      onClick={() => handleFix(issue)}
+                      disabled={processingIssueId === issue.id}
+                      className="py-2 bg-primary hover:bg-green-600 text-white rounded-lg text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      {processingIssueId === issue.id ? (
+                        <>
+                          <span className="animate-spin material-symbols-outlined text-xs">refresh</span>
+                          생성 중
+                        </>
+                      ) : (
+                        "수정해줘"
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
