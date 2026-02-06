@@ -614,7 +614,6 @@ export default function Page() {
     }
 
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    console.log(`[renderPdfPages] Setting ${images.length} page images`);
     setPageImages(images);
     return images;
   }
@@ -674,11 +673,8 @@ export default function Page() {
       let images: string[] = [];
 
       if (f.type === "application/pdf") {
-        console.log("[Validation] Starting PDF processing...");
         images = await renderPdfPages(f, signal);
-        console.log(`[Validation] PDF pages rendered: ${images.length} pages`);
         text = await extractPdfText(f, signal);
-        console.log(`[Validation] PDF text extracted: ${text.length} chars`);
       } else if (f.type.startsWith("image/")) {
         // ✅ Basic image validation
         if (f.size < 10000) {
@@ -826,7 +822,6 @@ export default function Page() {
         }, 400);
       }
 
-      console.log(`[Validation] Calling API with ${imagesToSend.length} images, documentType=${documentType}`);
       const res = await fetch("/api/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -853,7 +848,6 @@ export default function Page() {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       const data = (await res.json()) as Report;
-      console.log(`[Validation] API response received: status=${res.status}, issues=${data.issues?.length ?? 0}`);
       if (latestTBM?.summary) {
         const first = data.chat?.[0]?.text || "";
         const merged = `${first}\n\n[TBM 요약]\n${latestTBM.summary}`.trim();
@@ -913,14 +907,12 @@ export default function Page() {
       const tbmSummaryValue = data.tbmSummary?.trim();
       const tbmTranscriptValue = data.tbmTranscript?.trim();
       // ✅ 일반 문서 리포트: TBM 선택이 없으면 TBM 필드는 비움
-      console.log("[Validation] Setting report...");
       setReport({
         ...data,
         documentType: documentType,
         tbmSummary: tbmSummaryValue ? data.tbmSummary : undefined,
         tbmTranscript: tbmTranscriptValue ? data.tbmTranscript : undefined,
       });
-      console.log("[Validation] Report set successfully");
 
       // Set indicator if there are issues to review
       if (data.issues && data.issues.length > 0) {
@@ -945,11 +937,9 @@ export default function Page() {
         setReport(null);
       }
     } finally {
-      console.log(`[Validation] Finally block - signal.aborted=${signal.aborted}`);
       if (!signal.aborted) {
         setLoading(false);
         setShowProgress(false);
-        console.log("[Validation] Loading states cleared");
       }
       // ✅ Clean up abort controller only if it's still ours (prevents race condition
       // where a newer validation's controller gets nulled by an older run's finally)
