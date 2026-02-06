@@ -22,8 +22,49 @@ import {
   verifyChecklistItem,
   checkSignaturePresence
 } from "@/lib/verificationTools";
+import { logger } from "@/lib/logger";
 
 type Provider = "openai" | "claude" | "auto";
+
+/**
+ * Standardized error response builder
+ * Ensures consistent error format across all endpoints
+ */
+function createErrorResponse(
+  error: string,
+  options: {
+    fileName?: string;
+    chatMessage?: string;
+    status?: number;
+    details?: string;
+    solution?: string;
+  } = {}
+) {
+  const {
+    fileName = "Untitled",
+    chatMessage,
+    status = 400,
+    details,
+    solution
+  } = options;
+
+  return NextResponse.json(
+    {
+      error,
+      fileName,
+      ...(details && { details }),
+      ...(solution && { solution }),
+      issues: [],
+      chat: [
+        {
+          role: "ai",
+          text: chatMessage || error
+        }
+      ]
+    },
+    { status }
+  );
+}
 
 // Helper to safely get OpenAI client
 function getOpenAI() {
@@ -465,8 +506,20 @@ async function verifyExtraction(
 }
 
 export async function POST(req: Request) {
+  // Parse request body once at the start - body can only be consumed once
+  let requestBody: any;
   try {
-    const { provider, fileName, pdfText, pageImages, projectId, documentType, tempContextText, latestTBM } = await req.json();
+    requestBody = await req.json();
+  } catch (parseError) {
+    return createErrorResponse("잘못된 요청 형식입니다", {
+      status: 400,
+      chatMessage: "요청 데이터를 파싱할 수 없습니다. 올바른 JSON 형식인지 확인해주세요."
+    });
+  }
+
+  const { provider, fileName, pdfText, pageImages, projectId, documentType, tempContextText, latestTBM } = requestBody;
+
+  try {
 
     // VALIDATION: Check if document has sufficient content
     const hasText = pdfText && pdfText.trim().length >= 50;
@@ -545,11 +598,61 @@ export async function POST(req: Request) {
       contextText = tempContextText;
     }
 
-    // ✅ PHOTO VALIDATION: Special handling for site photos
+    // ✅ PRE-CLASSIFICATION: For images with auto-detect, determine if it's a document or site photo
     console.log("[Route] Document type received:", documentType);
     console.log("[Route] Is SITE_PHOTO?", documentType === "SITE_PHOTO");
+    console.log("[Route] Has text?", hasText, "Has images?", hasImages);
 
-    if (documentType === "SITE_PHOTO") {
+    // Auto-detect for images: classify before extraction
+    let effectiveDocumentType = documentType;
+
+    if (documentType === null && hasImages && !hasText) {
+      // Image-only upload with auto-detect - need to classify first
+      console.log("\n========== IMAGE PRE-CLASSIFICATION ==========");
+
+      try {
+        const classificationPrompt = `You are analyzing an image to determine its type. Look at the image and classify it into ONE of these categories:
+
+1. "SCANNED_DOCUMENT" - A scanned or photographed safety document, checklist, form, or paperwork. Has visible text, tables, checkboxes, signatures, or form fields.
+
+2. "SITE_PHOTO" - A photograph of a construction site, work area, or workers. Shows actual physical environment, people working, equipment, or site conditions. NOT a photo of a document.
+
+Respond with ONLY a JSON object:
+{
+  "classification": "SCANNED_DOCUMENT" or "SITE_PHOTO",
+  "confidence": "high" or "medium" or "low",
+  "reason": "brief explanation"
+}`;
+
+        const content: any[] = [
+          { type: "text", text: classificationPrompt },
+          { type: "image_url", image_url: { url: pageImages[0], detail: "low" } } // Use low detail for speed
+        ];
+
+        const classifyResponse = await getOpenAI().chat.completions.create({
+          model: "gpt-4o-mini", // Use mini for speed and cost
+          messages: [{ role: "user", content }],
+          max_tokens: 150,
+          temperature: 0,
+        });
+
+        const classifyResult = safeJsonParse(classifyResponse.choices[0]?.message?.content ?? "");
+        console.log("[Pre-Classification] Result:", classifyResult);
+
+        if (classifyResult?.classification === "SITE_PHOTO") {
+          console.log("[Pre-Classification] Detected as SITE_PHOTO, routing to photo validation");
+          effectiveDocumentType = "SITE_PHOTO";
+        } else {
+          console.log("[Pre-Classification] Detected as SCANNED_DOCUMENT, continuing with document extraction");
+        }
+      } catch (classifyError) {
+        console.warn("[Pre-Classification] Failed, defaulting to document extraction:", classifyError);
+        // Continue with document extraction as fallback
+      }
+    }
+
+    // ✅ PHOTO VALIDATION: Special handling for site photos
+    if (effectiveDocumentType === "SITE_PHOTO") {
       console.log("\n========== PHOTO VALIDATION MODE ==========");
 
       if (!hasImages) {
@@ -654,6 +757,7 @@ export async function POST(req: Request) {
               message: `${violation.evidence}\n\n위치: ${violation.location}`,
               ruleId: `photo_${violation.id}`,
               path: `사진분석.${violation.category}`,
+              isAIFixable: false, // Photo issues are informational - can't edit an image
             });
           }
         }
@@ -804,10 +908,12 @@ export async function POST(req: Request) {
       TBM: "TBM",
       OTHER: "unknown",
     };
-    const selectedDocType = documentTypeMap[documentType as keyof typeof documentTypeMap];
+    // Use effectiveDocumentType for mismatch checking (handles auto-detected types)
+    const selectedDocType = documentTypeMap[effectiveDocumentType as keyof typeof documentTypeMap];
     const mismatchIssues: ValidationIssue[] = [];
 
-    if (documentType) {
+    // Only check for mismatch if user explicitly selected a type (not auto-detected)
+    if (documentType && documentType === effectiveDocumentType) {
       if (selectedDocType === "unknown") {
         if (extracted.docType !== "unknown") {
           mismatchIssues.push({
@@ -919,7 +1025,7 @@ export async function POST(req: Request) {
           issuesJson: JSON.stringify(allIssues),
           chatJson: extractedChat,
           projectId: projectId ?? null,
-          documentType: documentType ?? null,
+          documentType: effectiveDocumentType ?? null, // Use effectiveDocumentType for auto-detected types
           // Stage 4: Save inspector name and checklist for pattern analysis
           inspectorName: extracted.inspectorName ?? null,
           checklistJson: extracted.checklist ? JSON.stringify(extracted.checklist) : null,
@@ -950,21 +1056,34 @@ export async function POST(req: Request) {
       reportId: savedReport.id
     });
   } catch (e: any) {
-    console.error("Validation Error:", e);
+    logger.error("Validation Error:", e);
     const msg = e?.message ?? "validate failed";
+    // Use fileName from requestBody (already parsed at start)
+    const errorFileName = requestBody?.fileName;
 
     // API Key missing errors
     if (msg.includes("API_KEY is not set")) {
-      return NextResponse.json(
+      return createErrorResponse(
+        "API Key 설정이 필요합니다",
         {
-          error: "API Key 설정이 필요합니다.",
+          fileName: errorFileName,
           details: msg,
-          solution: ".env.local 파일에 API Key를 추가해주세요."
-        },
-        { status: 500 } // Server misconfiguration -> 500 implies admin action needed
+          solution: ".env.local 파일에 API Key를 추가해주세요.",
+          status: 500,
+          chatMessage: "서버 설정 오류로 인해 검증을 수행할 수 없습니다. 관리자에게 문의해주세요."
+        }
       );
     }
 
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Generic server error
+    return createErrorResponse(
+      "검증 중 오류가 발생했습니다",
+      {
+        fileName: errorFileName,
+        details: msg,
+        status: 500,
+        chatMessage: `검증 처리 중 예상치 못한 오류가 발생했습니다.\n\n오류 내용: ${msg}\n\n문제가 계속되면 관리자에게 문의해주세요.`
+      }
+    );
   }
 }

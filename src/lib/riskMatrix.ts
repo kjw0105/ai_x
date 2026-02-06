@@ -53,8 +53,24 @@ const VIOLATION_RISK_INCREASE: Record<string, number> = {
   elec_03: 15, // 잠금장치 미사용 (감전 위험)
 };
 
-// 서명 누락 시 위험도 증가
+// Risk scoring constants
 const SIGNATURE_MISSING_RISK = 10;
+
+// Risk level thresholds (score ranges)
+const RISK_THRESHOLD_CRITICAL = 61; // 61+ = critical
+const RISK_THRESHOLD_HIGH = 41;     // 41-60 = high
+const RISK_THRESHOLD_MEDIUM = 21;   // 21-40 = medium
+                                     // 0-20 = low
+
+// Risk inconsistency detection
+const RISK_INCONSISTENCY_THRESHOLD = 2; // Level difference threshold
+
+// Checklist analysis thresholds
+const CHECKLIST_EMPTY_IMPACT = 15;      // Impact when checklist is completely empty
+const CHECKLIST_NA_RATIO_THRESHOLD = 0.6; // 60% N/A = suspicious
+const CHECKLIST_NA_IMPACT = 10;          // Impact when excessive N/A usage
+const CHECKLIST_NULL_IMPACT_PER_ITEM = 3; // Impact per unfi lled item
+const CHECKLIST_NULL_HIGH_THRESHOLD = 3;  // 3+ null items = high severity
 
 /**
  * 문서 데이터를 분석하여 객관적 위험도를 계산합니다.
@@ -112,6 +128,10 @@ function assessHighRiskWork(checklist: ChecklistItem[]): RiskFactor[] {
   const factors: RiskFactor[] = [];
 
   for (const item of checklist) {
+    // ✅ Defensive null checks for malformed checklist items
+    if (!item || typeof item !== 'object') continue;
+    if (!item.id || !item.value) continue;
+
     if (item.value === "✔" && WORK_TYPE_BASE_RISK[item.id]) {
       const impact = WORK_TYPE_BASE_RISK[item.id];
       let severity: RiskFactor["severity"] = "medium";
@@ -121,7 +141,7 @@ function assessHighRiskWork(checklist: ChecklistItem[]): RiskFactor[] {
 
       factors.push({
         category: "고위험 작업",
-        description: `${item.nameKo} 실시 (${item.id})`,
+        description: `${item.nameKo || item.id} 실시 (${item.id})`,
         impact,
         severity,
       });
@@ -146,7 +166,12 @@ function assessViolations(checklist: ChecklistItem[]): RiskFactor[] {
     elec_02: ["elec_03"], // 전기작업 → 잠금장치
   };
 
-  const checkMap = new Map(checklist.map((item) => [item.id, item.value]));
+  // ✅ Filter out malformed items before creating map
+  const checkMap = new Map(
+    checklist
+      .filter((item) => item && typeof item === 'object' && item.id && item.value)
+      .map((item) => [item.id, item.value])
+  );
 
   for (const [workId, safetyIds] of Object.entries(requiredSafetyMeasures)) {
     const isWorkPerformed = checkMap.get(workId) === "✔";
@@ -212,21 +237,23 @@ function assessCompleteness(checklist: ChecklistItem[]): RiskFactor[] {
     factors.push({
       category: "완성도",
       description: "체크리스트 항목 없음",
-      impact: 15,
+      impact: CHECKLIST_EMPTY_IMPACT,
       severity: "high",
     });
     return factors;
   }
 
   // N/A 과다 사용 체크
-  const naCount = checklist.filter((item) => item.value === "N/A").length;
-  const naRatio = naCount / checklist.length;
+  // ✅ Filter out malformed items before counting
+  const validItems = checklist.filter((item) => item && typeof item === 'object' && item.value);
+  const naCount = validItems.filter((item) => item.value === "N/A").length;
+  const naRatio = validItems.length > 0 ? naCount / validItems.length : 0;
 
-  if (naRatio > 0.6) {
+  if (naRatio > CHECKLIST_NA_RATIO_THRESHOLD) {
     factors.push({
       category: "완성도",
       description: `N/A 과다 표시 (${Math.round(naRatio * 100)}%)`,
-      impact: 10,
+      impact: CHECKLIST_NA_IMPACT,
       severity: "medium",
     });
   }
@@ -237,8 +264,8 @@ function assessCompleteness(checklist: ChecklistItem[]): RiskFactor[] {
     factors.push({
       category: "완성도",
       description: `미작성 항목 ${nullCount}개`,
-      impact: nullCount * 3,
-      severity: nullCount > 3 ? "high" : "medium",
+      impact: nullCount * CHECKLIST_NULL_IMPACT_PER_ITEM,
+      severity: nullCount > CHECKLIST_NULL_HIGH_THRESHOLD ? "high" : "medium",
     });
   }
 
@@ -255,9 +282,9 @@ function assessCompleteness(checklist: ChecklistItem[]): RiskFactor[] {
  * - 61+: Critical (매우 높음)
  */
 function scoreToRiskLevel(score: number): RiskLevel {
-  if (score >= 61) return "critical";
-  if (score >= 41) return "high";
-  if (score >= 21) return "medium";
+  if (score >= RISK_THRESHOLD_CRITICAL) return "critical";
+  if (score >= RISK_THRESHOLD_HIGH) return "high";
+  if (score >= RISK_THRESHOLD_MEDIUM) return "medium";
   return "low";
 }
 
@@ -269,8 +296,8 @@ function checkInconsistency(calculated: RiskLevel, documented: RiskLevel): boole
   const calcIndex = levels.indexOf(calculated);
   const docIndex = levels.indexOf(documented);
 
-  // 2단계 이상 차이나면 불일치로 판단
-  return Math.abs(calcIndex - docIndex) >= 2;
+  // N단계 이상 차이나면 불일치로 판단
+  return Math.abs(calcIndex - docIndex) >= RISK_INCONSISTENCY_THRESHOLD;
 }
 
 /**

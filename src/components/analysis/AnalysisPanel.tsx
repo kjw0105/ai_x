@@ -69,6 +69,7 @@ interface Issue {
     ruleId?: string; // Stage 2-5: Link to specific rule
     confidence?: number; // Stage 4
     score?: number; // Stage 4
+    isAIFixable?: boolean; // Whether AI can suggest a fix (false for photos, signatures)
 }
 
 interface RiskFactor {
@@ -112,10 +113,13 @@ interface AnalysisPanelProps {
     initialHiddenIssueIds?: string[]; // Persist hidden issues across restarts
     onHiddenIssuesChange?: (hiddenIds: string[]) => void; // Callback when hidden issues change
     hasUnviewedIssues?: boolean; // Show indicator when analysis completes with issues
+    isAnimating?: boolean; // Brief pulse animation when issues arrive
     onMarkIssuesViewed?: () => void; // Callback when user views issues
+    initialLocalChatMessages?: { role: "ai" | "user"; text: string }[]; // Persist local chat history
+    onLocalChatMessagesChange?: (messages: { role: "ai" | "user"; text: string }[]) => void; // Callback when chat messages change
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, onMarkIssuesViewed }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed, initialLocalChatMessages = [], onLocalChatMessagesChange }: AnalysisPanelProps) {
     // Default to 5-stage document validation if not provided
     const defaultSteps: ValidationStage[] = [
         { id: "stage1", label: "형식 검증", icon: "description" },
@@ -136,7 +140,12 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     // Chat state
     const [chatInput, setChatInput] = useState("");
     const [isSendingChat, setIsSendingChat] = useState(false);
-    const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]);
+    const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>(initialLocalChatMessages);
+
+    // Sync localChatMessages when initialLocalChatMessages changes (e.g., project switch, async restore)
+    useEffect(() => {
+        setLocalChatMessages(initialLocalChatMessages);
+    }, [initialLocalChatMessages]);
 
     // Smart severity filter: Only show buttons for severities that exist in issues
     const availableSeverities = useMemo(() => {
@@ -157,6 +166,13 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             onHiddenIssuesChange(Array.from(hiddenIssueIds));
         }
     }, [hiddenIssueIds, onHiddenIssuesChange]);
+
+    // Notify parent when local chat messages change (for persistence)
+    useEffect(() => {
+        if (onLocalChatMessagesChange) {
+            onLocalChatMessagesChange(localChatMessages);
+        }
+    }, [localChatMessages, onLocalChatMessagesChange]);
 
     // Ref for issues section - used for auto-scroll
     const issuesSectionRef = useRef<HTMLDivElement>(null);
@@ -712,7 +728,52 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 )}
 
                 {/* Render Issues by Stage - Card List View */}
-                <div ref={issuesSectionRef}>
+                <div
+                    ref={issuesSectionRef}
+                    className={`transition-all duration-500 rounded-xl ${isAnimating ? "ring-4 ring-blue-500 shadow-lg shadow-blue-500/50 bg-blue-50 dark:bg-blue-900/30" : ""}`}
+                >
+                    {/* Issues Header */}
+                    {visibleIssues.length > 0 && (
+                        <div className={`px-4 py-3 mb-3 rounded-xl transition-all duration-500 ${isAnimating ? "bg-blue-200 dark:bg-blue-800/50 border-2 border-blue-400" : "bg-slate-100 dark:bg-slate-800"}`}>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-sm font-bold text-slate-800 dark:text-white">발견된 문제</h3>
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold text-white ${
+                                        issues.filter(i => i.severity === "error").length > 0 ? "bg-red-500" :
+                                        issues.filter(i => i.severity === "warn").length > 0 ? "bg-orange-500" : "bg-blue-500"
+                                    } ${isAnimating ? "animate-bounce" : ""}`}>
+                                        {visibleIssues.length}
+                                    </span>
+                                    {hasUnviewedIssues && (
+                                        <span className="relative flex h-2 w-2">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {issues.filter(i => i.severity === "error").length > 0 && (
+                                        <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                                            <span className="material-symbols-outlined text-sm">error</span>
+                                            {issues.filter(i => i.severity === "error").length}
+                                        </span>
+                                    )}
+                                    {issues.filter(i => i.severity === "warn").length > 0 && (
+                                        <span className="flex items-center gap-1 text-xs text-orange-600 dark:text-orange-400">
+                                            <span className="material-symbols-outlined text-sm">warning</span>
+                                            {issues.filter(i => i.severity === "warn").length}
+                                        </span>
+                                    )}
+                                    {issues.filter(i => i.severity === "info").length > 0 && (
+                                        <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                                            <span className="material-symbols-outlined text-sm">info</span>
+                                            {issues.filter(i => i.severity === "info").length}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {[
                         { title: "📸 시각적 증거 분석 (Photo Audit)", issues: visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage-photo"), color: "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800" },
                         { title: "Stage 1-2: 형식 및 논리 검증", issues: stage12Issues, color: "text-red-500 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" },
@@ -741,7 +802,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                             className="w-full text-left"
                                         >
                                             <div className={`p-3 rounded-xl border-2 transition-all hover:shadow-md ${
-                                                hasUnviewedIssues ? "ring-4 ring-blue-500 ring-offset-2 shadow-lg shadow-blue-500/50" : ""
+                                                isAnimating ? "ring-2 ring-blue-500 ring-offset-1 shadow-lg shadow-blue-500/30" : ""
                                                 } ${issue.severity === "error"
                                                     ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700"
                                                     : issue.severity === "warn"
@@ -863,7 +924,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             {selectedIssue.message}
                         </p>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className={`grid gap-2 ${selectedIssue.isAIFixable === false ? 'grid-cols-1' : 'grid-cols-2'}`}>
                             <button
                                 onClick={() => {
                                     handleConfirm(selectedIssue.id);
@@ -874,20 +935,22 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                 확인했어
                             </button>
 
-                            <button
-                                onClick={() => handleFix(selectedIssue)}
-                                disabled={processingIssueId === selectedIssue.id}
-                                className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {processingIssueId === selectedIssue.id ? (
-                                    <>
-                                        <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                        생성 중...
-                                    </>
-                                ) : (
-                                    "수정해줘"
-                                )}
-                            </button>
+                            {selectedIssue.isAIFixable !== false && (
+                                <button
+                                    onClick={() => handleFix(selectedIssue)}
+                                    disabled={processingIssueId === selectedIssue.id}
+                                    className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {processingIssueId === selectedIssue.id ? (
+                                        <>
+                                            <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+                                            생성 중...
+                                        </>
+                                    ) : (
+                                        "수정해줘"
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

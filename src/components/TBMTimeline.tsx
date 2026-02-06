@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface TBMRecord {
   id: string;
@@ -20,14 +22,29 @@ interface TBMTimelineProps {
   onSelectTBM: (record: TBMRecord) => void;
   onRefresh: () => void;
   onDelete?: (id: string) => void;
+  onDeleteAll?: () => void;
 }
 
-export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefresh, onDelete }: TBMTimelineProps) {
+export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefresh, onDelete, onDeleteAll }: TBMTimelineProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: "single" | "all"; id?: string } | null>(null);
+  // Track if we've ever finished loading - prevents showing empty state before first load completes
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   useEffect(() => {
-    console.log("[TBMTimeline] Received records:", tbmRecords.length, tbmRecords);
-  }, [tbmRecords]);
+    console.log("[TBMTimeline] Received records:", tbmRecords.length, "loading:", loading);
+    // Mark as loaded once when loading finishes (regardless of whether records exist)
+    if (!loading && !hasLoadedOnce) {
+      setHasLoadedOnce(true);
+    }
+  }, [tbmRecords, loading, hasLoadedOnce]);
+
+  // Clear expandedId if the expanded record no longer exists
+  useEffect(() => {
+    if (expandedId && !tbmRecords.some(r => r.id === expandedId)) {
+      setExpandedId(null);
+    }
+  }, [tbmRecords, expandedId]);
 
   const parseJsonField = (field: string | null): any[] => {
     if (!field) return [];
@@ -65,43 +82,119 @@ export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefres
     return "bg-gray-100 text-gray-800";
   };
 
-  if (loading) {
+  // Track if we're mounted in browser for portal
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Render the confirmation dialog via portal to avoid DOM tree conflicts
+  // when the main content switches between timeline and empty state
+  const renderConfirmDialog = () => {
+    if (!confirmDelete || !mounted) return null;
+
+    return createPortal(
+      <ConfirmDialog
+        key={`confirm-${confirmDelete.type}-${confirmDelete.id || 'all'}`}
+        isOpen={true}
+        onClose={() => setConfirmDelete(null)}
+        closeOnConfirm={false}
+        onConfirm={() => {
+          // Capture values before clearing state
+          const deleteType = confirmDelete?.type;
+          const deleteId = confirmDelete?.id;
+
+          // Clear expanded state
+          if (deleteType === "single" && deleteId && expandedId === deleteId) {
+            setExpandedId(null);
+          } else if (deleteType === "all") {
+            setExpandedId(null);
+          }
+
+          // Close dialog FIRST, then execute delete
+          // This ensures the portal is cleanly unmounted before DOM changes from delete
+          setConfirmDelete(null);
+
+          // Execute delete after dialog state is cleared
+          setTimeout(() => {
+            if (deleteType === "single" && deleteId) {
+              onDelete?.(deleteId);
+            } else if (deleteType === "all") {
+              onDeleteAll?.();
+            }
+          }, 0);
+        }}
+        title={confirmDelete.type === "all" ? "전체 삭제 확인" : "삭제 확인"}
+        message={
+          confirmDelete.type === "all"
+            ? `총 ${tbmRecords.length}개의 TBM 기록을 모두 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`
+            : "이 TBM 기록을 삭제하시겠습니까?"
+        }
+        confirmText="삭제"
+        cancelText="취소"
+        variant="danger"
+      />,
+      document.body
+    );
+  };
+
+  // Show loading state if loading OR if we haven't loaded once yet
+  if (loading || !hasLoadedOnce) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-gray-500">TBM 기록을 불러오는 중...</div>
-      </div>
+      <>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-gray-500">TBM 기록을 불러오는 중...</div>
+        </div>
+        {renderConfirmDialog()}
+      </>
     );
   }
 
   if (tbmRecords.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <div className="text-6xl mb-4">🎤</div>
-        <h3 className="text-xl font-semibold text-gray-800 mb-2">TBM 기록이 없습니다</h3>
-        <p className="text-gray-600 mb-4">
-          상단의 마이크 버튼을 클릭하여 작업 전 안전회의를 녹음하세요.
-          <br />
-          AI가 자동으로 작업 종류, 위험요인, 담당자를 추출합니다.
-        </p>
-        <div className="text-sm text-gray-500">
-          💡 녹음 후 이 탭으로 자동 이동됩니다
+      <>
+        <div className="flex flex-col items-center justify-center h-full text-center p-8">
+          <div className="text-6xl mb-4">🎤</div>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">TBM 기록이 없습니다</h3>
+          <p className="text-gray-600 mb-4">
+            상단의 마이크 버튼을 클릭하여 작업 전 안전회의를 녹음하세요.
+            <br />
+            AI가 자동으로 작업 종류, 위험요인, 담당자를 추출합니다.
+          </p>
+          <div className="text-sm text-gray-500">
+            💡 녹음 후 이 탭으로 자동 이동됩니다
+          </div>
         </div>
-      </div>
+        {renderConfirmDialog()}
+      </>
     );
   }
 
   return (
+    <>
     <div className="h-full overflow-y-auto p-6 bg-gray-50">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">TBM 타임라인</h2>
-          <button
-            onClick={onRefresh}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition"
-            title="목록 새로고침"
-          >
-            <span className="material-symbols-outlined text-xl">refresh</span>
-          </button>
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white">TBM 타임라인</h2>
+          <div className="flex items-center gap-2">
+            {onDeleteAll && tbmRecords.length > 0 && (
+              <button
+                onClick={() => setConfirmDelete({ type: "all" })}
+                className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition flex items-center gap-1"
+                title="모든 기록 삭제"
+              >
+                <span className="material-symbols-outlined text-lg">delete_sweep</span>
+                <span className="hidden sm:inline">전체 삭제</span>
+              </button>
+            )}
+            <button
+              onClick={onRefresh}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+              title="목록 새로고침"
+            >
+              <span className="material-symbols-outlined text-xl">refresh</span>
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -131,26 +224,27 @@ export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefres
                         {record.tbmWorkType || "작업 전 안전회의"}
                       </h3>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       {onDelete && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm("이 TBM 기록을 삭제하시겠습니까?")) {
-                              onDelete(record.id);
-                            }
+                            setConfirmDelete({ type: "single", id: record.id });
                           }}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition"
+                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
                           title="삭제"
                         >
-                          <span className="material-symbols-outlined text-lg">delete</span>
+                          <span className="material-symbols-outlined text-xl">delete</span>
                         </button>
                       )}
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : record.id)}
-                        className="text-gray-500 hover:text-gray-700 transition"
+                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                        title={isExpanded ? "접기" : "펼치기"}
                       >
-                        {isExpanded ? "▲" : "▼"}
+                        <span className="material-symbols-outlined text-xl">
+                          {isExpanded ? "expand_less" : "expand_more"}
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -242,5 +336,7 @@ export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefres
         </div>
       </div>
     </div>
+    {renderConfirmDialog()}
+    </>
   );
 }

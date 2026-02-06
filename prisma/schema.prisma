@@ -46,6 +46,12 @@ model Report {
   // Relation to Project context
   projectId   String?
   project     Project? @relation(fields: [projectId], references: [id])
+
+  // ✅ Performance indexes for common queries
+  @@index([projectId])
+  @@index([createdAt])
+  @@index([inspectorName])
+  @@index([documentType])
 }
 
 model Project {

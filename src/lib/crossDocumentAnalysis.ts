@@ -64,6 +64,8 @@ export async function analyzeCrossDocumentIssues(
     where: {
       projectId,
       createdAt: { gte: thirtyDaysAgo },
+      // Exclude current report from analysis to avoid self-comparison
+      ...(currentReportId ? { id: { not: currentReportId } } : {}),
     },
     orderBy: { createdAt: "asc" },
     take: 100,

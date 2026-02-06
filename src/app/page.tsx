@@ -39,10 +39,14 @@ type Report = {
   chat: { role: "ai" | "user"; text: string }[];
   documentType?: string | null;
 
-  // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
-  // ✅ TBM 전용: PDF export/AI 재분석에서 쓰기 좋게 별도 필드로 보관
-  tbmSummary?: string;
-  tbmTranscript?: string;
+  // TBM-specific fields (matches database schema)
+  tbmSummary?: string;        // AI-generated structured TBM summary
+  tbmTranscript?: string;     // Full audio transcription
+  tbmDuration?: number;       // Recording duration in milliseconds
+  tbmWorkType?: string | null;           // 작업 종류
+  tbmExtractedHazards?: string | null;   // JSON array of hazards
+  tbmExtractedInspector?: string | null; // 담당자 이름
+  tbmParticipants?: string | null;       // JSON array of participants
 };
 
 interface ModalDialogProps {
@@ -325,9 +329,11 @@ export default function Page() {
   const [showProgress, setShowProgress] = useState(false);
   const [imageQuality, setImageQuality] = useState<ImageQuality | null>(null);
   const [errorDialog, setErrorDialog] = useState<{ error: ErrorDetails; onRetry?: () => void } | null>(null);
-  const [activeValidationType, setActiveValidationType] = useState<"document" | "photo">("document");
+  const [activeValidationType, setActiveValidationType] = useState<"document" | "photo" | "auto">("document");
   const [hiddenIssueIds, setHiddenIssueIds] = useState<string[]>([]); // Persist dismissed issues
   const [hasUnviewedIssues, setHasUnviewedIssues] = useState(false); // Show indicator when analysis completes
+  const [issuesAnimating, setIssuesAnimating] = useState(false); // Brief pulse animation when issues arrive
+  const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]); // Persist local chat
 
   // Document validation stages (5 stages)
   const documentValidationSteps = [
@@ -345,8 +351,19 @@ export default function Page() {
     { id: "stage3", label: "결과 생성", icon: "check_circle" },
   ];
 
+  // Auto-detect validation stages (for images with auto-detect - neutral steps)
+  const autoDetectValidationSteps = [
+    { id: "stage1", label: "파일 분류", icon: "category" },
+    { id: "stage2", label: "내용 분석", icon: "search" },
+    { id: "stage3", label: "결과 생성", icon: "check_circle" },
+  ];
+
   // Use appropriate stages based on validation type
-  const validationSteps = activeValidationType === "photo" ? photoValidationSteps : documentValidationSteps;
+  const validationSteps = activeValidationType === "photo"
+    ? photoValidationSteps
+    : activeValidationType === "auto"
+    ? autoDetectValidationSteps
+    : documentValidationSteps;
 
   const [projects, setProjects] = useState<any[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
@@ -361,7 +378,8 @@ export default function Page() {
   // TBM Timeline states
   const [activeTab, setActiveTab] = useState<"document" | "tbm">("document");
   const [tbmRecords, setTbmRecords] = useState<any[]>([]);
-  const [loadingTBMs, setLoadingTBMs] = useState(false);
+  const [loadingTBMs, setLoadingTBMs] = useState(true); // Start true to show loading on first visit
+  const [tbmInitialLoadDone, setTbmInitialLoadDone] = useState(false);
 
   // Confirmation dialog states
   const [confirmClearFile, setConfirmClearFile] = useState(false);
@@ -371,7 +389,10 @@ export default function Page() {
 
   useEffect(() => {
     return () => {
-      if (validationAbortController.current) validationAbortController.current.abort();
+      if (validationAbortController.current) {
+        validationAbortController.current.abort();
+        validationAbortController.current = null; // ✅ Prevent memory leak
+      }
     };
   }, []);
 
@@ -434,15 +455,43 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, currentProjectId]);
 
-  async function fetchProjects() {
+  async function fetchProjects(retryCount = 0) {
     setIsLoadingProjects(true);
+    const MAX_RETRIES = 2;
+    const TIMEOUT_MS = 10000; // 10 second timeout
+    let shouldRetry = false;
+
     try {
-      const res = await fetch("/api/projects");
-      if (res.ok) setProjects(await res.json());
-    } catch (e) {
-      console.error("Failed to fetch projects", e);
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const res = await fetch("/api/projects", { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        setProjects(await res.json());
+      } else {
+        console.error("Failed to fetch projects: HTTP", res.status);
+      }
+    } catch (e: any) {
+      // Check if it was a timeout/abort
+      if (e.name === "AbortError") {
+        console.warn(`fetchProjects timeout (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+        // Retry on timeout (dev server might be warming up)
+        if (retryCount < MAX_RETRIES) {
+          shouldRetry = true;
+        }
+      } else {
+        console.error("Failed to fetch projects", e);
+      }
     } finally {
-      setIsLoadingProjects(false);
+      if (shouldRetry) {
+        // Schedule retry - keep loading state true
+        setTimeout(() => fetchProjects(retryCount + 1), 1000);
+      } else {
+        setIsLoadingProjects(false);
+      }
     }
   }
 
@@ -523,28 +572,44 @@ export default function Page() {
     const pdf = await (pdfjs as any).getDocument({ data: buf }).promise;
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
+    // ✅ Create single canvas for all pages (canvas pooling)
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Failed to get canvas context");
+
     const images: string[] = [];
+    const skippedPages: number[] = [];
+
     for (let i = 1; i <= pdf.numPages; i++) {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      const page = await pdf.getPage(i);
-      // Reduced scale from 1.5 to 1.0 for lower initial size
-      const viewport = page.getViewport({ scale: 1.0 });
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) continue;
-      canvas.width = Math.floor(viewport.width);
-      canvas.height = Math.floor(viewport.height);
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
 
-      // ✅ Optimize image to reduce token usage
       try {
-        const optimized = await optimizeImage(dataUrl, 2048, 0.85);
-        images.push(optimized.dataUrl);
-      } catch (e) {
-        console.warn("Failed to optimize PDF page, using original", e);
+        // ✅ Wrap in try-catch to handle corrupt pages
+        const page = await pdf.getPage(i);
+        // Reduced scale from 1.5 to 1.0 for lower initial size
+        const viewport = page.getViewport({ scale: 1.0 });
+
+        // ✅ Resize canvas for current page (reuse same canvas)
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        // ✅ Export with JPEG compression (0.85 quality for good balance)
+        // Note: Scale is already 1.0 and viewport auto-sizes to reasonable dimensions,
+        // so no additional optimization needed (prevents double compression)
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
         images.push(dataUrl);
+      } catch (pageError) {
+        // ✅ Skip corrupt pages instead of crashing
+        console.warn(`Skipping corrupt PDF page ${i}:`, pageError);
+        skippedPages.push(i);
       }
+    }
+
+    // ✅ Log summary of skipped pages
+    if (skippedPages.length > 0) {
+      console.warn(`Skipped ${skippedPages.length} corrupt page(s): ${skippedPages.join(", ")}`);
     }
 
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -582,9 +647,17 @@ export default function Page() {
     validationAbortController.current = controller;
     const signal = controller.signal;
 
-    // Set validation type based on document type
+    // Set validation type based on document type and file type
     const isPhotoValidation = documentType === "SITE_PHOTO";
-    setActiveValidationType(isPhotoValidation ? "photo" : "document");
+    const isImageFile = f.type.startsWith("image/");
+    const isAutoDetectImage = documentType === null && isImageFile;
+
+    // Use "auto" progress for image auto-detection (shows neutral steps)
+    // Use "photo" for explicit site photo selection
+    // Use "document" for PDFs or explicit document type selection
+    setActiveValidationType(
+      isPhotoValidation ? "photo" : isAutoDetectImage ? "auto" : "document"
+    );
 
     setLoading(true);
     setShowProgress(true);
@@ -621,24 +694,54 @@ export default function Page() {
         });
         if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
-        // ✅ Check image dimensions
-        const img = new Image();
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = dataUrl;
-        });
+        // ✅ Check image dimensions (off main thread using createImageBitmap when available)
+        let imgWidth: number, imgHeight: number;
 
-        if (img.width < 400 || img.height < 400) {
+        // Try createImageBitmap for off-main-thread decoding (modern browsers)
+        if (typeof createImageBitmap !== 'undefined') {
+          try {
+            const res = await fetch(dataUrl);
+            const blob = await res.blob();
+            if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+            const bitmap = await createImageBitmap(blob);
+            imgWidth = bitmap.width;
+            imgHeight = bitmap.height;
+            bitmap.close(); // Clean up immediately
+          } catch (e) {
+            console.warn("[Image] createImageBitmap failed, falling back to Image:", e);
+            // Fallback to Image element
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = dataUrl;
+            });
+            imgWidth = img.width;
+            imgHeight = img.height;
+          }
+        } else {
+          // Fallback for older browsers
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = dataUrl;
+          });
+          imgWidth = img.width;
+          imgHeight = img.height;
+        }
+
+        if (imgWidth < 400 || imgHeight < 400) {
           if (!signal.aborted) {
-            showError(ErrorMessages.IMAGE_LOW_RESOLUTION(img.width, img.height), () => pickFileDialog());
+            showError(ErrorMessages.IMAGE_LOW_RESOLUTION(imgWidth, imgHeight), () => pickFileDialog());
             setFile(null);
             setShowProgress(false);
           }
           return;
         }
 
-        console.log(`[Image] Validated: ${img.width}x${img.height}, ${(f.size / 1024).toFixed(1)}KB`);
+        console.log(`[Image] Validated: ${imgWidth}x${imgHeight}, ${(f.size / 1024).toFixed(1)}KB`);
 
         // ✅ Optimize image to reduce token usage
         try {
@@ -671,17 +774,17 @@ export default function Page() {
         if (images.length > 1) imagesToSend.push(images[images.length - 1]);
       }
 
-      // Different progress for photos vs documents
-      if (isPhotoValidation) {
-        // Photo validation: 3 fast stages
-        // Stage 1: 이미지 분석 (Image analysis)
+      // Different progress for photos/auto-detect vs documents
+      if (isPhotoValidation || isAutoDetectImage) {
+        // Photo/Auto validation: 3 stages
+        // Stage 1: 이미지 분석 / 파일 분류
         await new Promise((r) => setTimeout(r, 150));
         setValidationStep(1);
-        console.log("[Photo Validation] Stage 1/3 - Image analysis");
+        console.log(`[${isPhotoValidation ? "Photo" : "Auto"} Validation] Stage 1/3 - ${isAutoDetectImage ? "File classification" : "Image analysis"}`);
 
-        // Stage 2: 안전 검증 (Safety validation) - animate during API call
+        // Stage 2: 안전 검증 / 내용 분석 - animate during API call
         await new Promise((r) => setTimeout(r, 150));
-        console.log("[Photo Validation] Stage 2/3 - Safety validation (animating...)");
+        console.log(`[${isPhotoValidation ? "Photo" : "Auto"} Validation] Stage 2/3 - ${isAutoDetectImage ? "Content analysis" : "Safety validation"} (animating...)`);
         let progressValue = 1.0;
         progressInterval = setInterval(() => {
           progressValue += 0.15;
@@ -779,14 +882,16 @@ export default function Page() {
         throw new Error((data as any).error || "서버 오류가 발생했습니다");
       }
 
-      // Final stage: Complete
-      if (isPhotoValidation) {
-        // Photo Stage 3: 결과 생성 (Result generation complete)
-        setValidationStep(2);
-        console.log("[Photo Validation] Stage 3/3 complete - Result generation done");
+      // Final stage: Complete (set to totalSteps to show 100% progress)
+      if (isPhotoValidation || isAutoDetectImage) {
+        // Photo/Auto Stage 3: 결과 생성 (Result generation complete)
+        // Set to 3 so progress shows 3/3 = 100%
+        setValidationStep(3);
+        console.log(`[${isPhotoValidation ? "Photo" : "Auto"} Validation] Stage 3/3 complete - Result generation done`);
       } else {
         // Document Stage 5: 위험 평가 (Risk assessment complete)
-        setValidationStep(4);
+        // Set to 5 so progress shows 5/5 = 100%
+        setValidationStep(5);
         console.log("[Validation] Stage 5/5 complete - Risk assessment done");
       }
 
@@ -812,6 +917,9 @@ export default function Page() {
       if (data.issues && data.issues.length > 0) {
         console.log(`[Validation Complete] Setting hasUnviewedIssues=true, issues count: ${data.issues.length}`);
         setHasUnviewedIssues(true);
+        // Trigger pulse animation for 6 seconds
+        setIssuesAnimating(true);
+        setTimeout(() => setIssuesAnimating(false), 6000);
       }
 
       // Brief pause to show 100% completion before hiding progress
@@ -831,6 +939,11 @@ export default function Page() {
       if (!signal.aborted) {
         setLoading(false);
         setShowProgress(false);
+      }
+      // ✅ Clean up abort controller only if it's still ours (prevents race condition
+      // where a newer validation's controller gets nulled by an older run's finally)
+      if (validationAbortController.current === controller) {
+        validationAbortController.current = null;
       }
     }
   }
@@ -1004,18 +1117,18 @@ export default function Page() {
   async function loadTBMRecords() {
     setLoadingTBMs(true);
     try {
-      // Fetch TBMs for current project, or all TBMs if no project selected
-      const url = currentProjectId
-        ? `/api/history?projectId=${currentProjectId}`
-        : `/api/history`;
+      // ✅ Filter TBMs server-side for better performance
+      const params = new URLSearchParams({ documentType: "TBM" });
+      if (currentProjectId) params.set("projectId", currentProjectId);
+
+      const url = `/api/history?${params.toString()}`;
 
       const resp = await fetch(url);
       if (!resp.ok) {
         throw new Error(`Failed to fetch: ${resp.status}`);
       }
 
-      const allReports = await resp.json();
-      const tbms = allReports.filter((r: any) => r.documentType === "TBM");
+      const tbms = await resp.json();
 
       console.log(`[TBM Timeline] Loaded ${tbms.length} TBM records`);
       setTbmRecords(tbms);
@@ -1029,15 +1142,50 @@ export default function Page() {
 
   async function deleteTBM(id: string) {
     try {
-      const resp = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
-      if (!resp.ok) throw new Error("Failed to delete TBM");
+      // Optimistically remove from UI first to prevent DOM errors
+      setTbmRecords(prev => prev.filter(r => r.id !== id));
 
-      // Refresh the list
-      await loadTBMRecords();
+      const resp = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
+      if (!resp.ok) {
+        // Revert on failure - reload the list
+        await loadTBMRecords();
+        throw new Error("Failed to delete TBM");
+      }
+
       toast.success("TBM 기록이 삭제되었습니다", 2000);
     } catch (e) {
       console.error("Failed to delete TBM:", e);
       toast.error("삭제에 실패했습니다", 2000);
+    }
+  }
+
+  async function deleteAllTBMs() {
+    const count = tbmRecords.length;
+    if (count === 0) return;
+
+    try {
+      // Optimistically clear UI
+      setTbmRecords([]);
+
+      // Delete all TBM records
+      const deletePromises = tbmRecords.map(record =>
+        fetch(`/api/history?id=${record.id}`, { method: "DELETE" })
+      );
+
+      const results = await Promise.all(deletePromises);
+      const failedCount = results.filter(r => !r.ok).length;
+
+      if (failedCount > 0) {
+        // Some failed - reload to get accurate state
+        await loadTBMRecords();
+        toast.error(`${failedCount}개 기록 삭제 실패`, 2000);
+      } else {
+        toast.success(`${count}개의 TBM 기록이 삭제되었습니다`, 2000);
+      }
+    } catch (e) {
+      console.error("Failed to delete all TBMs:", e);
+      await loadTBMRecords();
+      toast.error("전체 삭제에 실패했습니다", 2000);
     }
   }
 
@@ -1378,8 +1526,11 @@ export default function Page() {
     toast.success("임시 마스터 문서가 삭제되었습니다");
   }
 
+  // Generate namespaced IndexedDB key to prevent collisions
+  // Format: "p:{projectId}:{key}" or "np:{key}" (no-project)
+  // Using ':' as delimiter prevents collisions with UUID format
   function getProjectKey(key: string) {
-    return currentProjectId ? `project_${currentProjectId}_${key}` : `no_project_${key}`;
+    return currentProjectId ? `p:${currentProjectId}:${key}` : `np:${key}`;
   }
 
   function clearDocumentState() {
@@ -1394,11 +1545,15 @@ export default function Page() {
 
   async function loadCurrentProjectState() {
     try {
-      const savedFile = await get(getProjectKey("file"));
-      const savedImages = await get(getProjectKey("images"));
-      const savedReport = await get(getProjectKey("report"));
-      const savedPage = await get(getProjectKey("page"));
-      const savedHiddenIssues = await get(getProjectKey("hiddenIssues"));
+      // ✅ Load all state in parallel for faster project switching
+      const [savedFile, savedImages, savedReport, savedPage, savedHiddenIssues, savedLocalChat] = await Promise.all([
+        get(getProjectKey("file")),
+        get(getProjectKey("images")),
+        get(getProjectKey("report")),
+        get(getProjectKey("page")),
+        get(getProjectKey("hiddenIssues")),
+        get(getProjectKey("localChat")),
+      ]);
 
       if (savedFile || savedReport) {
         setFile(savedFile || null);
@@ -1413,6 +1568,13 @@ export default function Page() {
           setHiddenIssueIds(savedHiddenIssues);
         } else {
           setHiddenIssueIds([]);
+        }
+
+        // Restore local chat messages
+        if (savedLocalChat) {
+          setLocalChatMessages(savedLocalChat);
+        } else {
+          setLocalChatMessages([]);
         }
 
         // Progress state is NOT restored - it's ephemeral and only relevant during active validation
@@ -1467,6 +1629,16 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hiddenIssueIds, currentProjectId]);
 
+  useEffect(() => {
+    // Persist local chat messages
+    if (localChatMessages.length > 0) {
+      set(getProjectKey("localChat"), localChatMessages);
+    } else {
+      del(getProjectKey("localChat"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localChatMessages, currentProjectId]);
+
   function handleClearFile() {
     // Show confirmation if file exists
     if (file) {
@@ -1483,6 +1655,7 @@ export default function Page() {
     del(getProjectKey("report"));
     del(getProjectKey("page"));
     del(getProjectKey("hiddenIssues"));
+    del(getProjectKey("localChat"));
   }
 
   function handleWelcomeCreateProject() {
@@ -1547,6 +1720,10 @@ export default function Page() {
         onClose={() => setShowDashboard(false)}
         projectId={currentProjectId}
         projectName={projects.find((p) => p.id === currentProjectId)?.name}
+        onOpenNewProject={() => {
+          setShowDashboard(false);
+          setIsProjectModalOpen(true);
+        }}
       />
 
       <DocumentTypeSelector
@@ -1584,7 +1761,8 @@ export default function Page() {
           setTbmOpen(false);
           dismissWelcome();
 
-          // Auto-switch to TBM Timeline tab
+          // Auto-switch to TBM Timeline tab (set loading first to prevent flash)
+          setLoadingTBMs(true);
           setActiveTab("tbm");
           console.log("[TBM onComplete] Switched to TBM tab");
 
@@ -1696,7 +1874,11 @@ export default function Page() {
               📄 문서 검증
             </button>
             <button
-              onClick={() => setActiveTab("tbm")}
+              onClick={() => {
+                // Set loading true immediately to prevent flash of "no records" state
+                setLoadingTBMs(true);
+                setActiveTab("tbm");
+              }}
               className={`px-4 py-2 rounded-t-lg font-medium transition ${activeTab === "tbm"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
@@ -1711,7 +1893,15 @@ export default function Page() {
               <div className="hidden lg:flex flex-1 min-h-0 w-full">
                 {file || report ? (
                   <ThreeColumnLayout
-                    left={<IssuesList issues={report?.issues ?? []} loading={loading} />}
+                    left={
+                      <IssuesList
+                        issues={report?.issues ?? []}
+                        loading={loading}
+                        hasUnviewedIssues={hasUnviewedIssues}
+                        isAnimating={issuesAnimating}
+                        onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
+                      />
+                    }
                     center={
                       <DocumentViewer
                         file={file}
@@ -1826,7 +2016,10 @@ export default function Page() {
                       initialHiddenIssueIds={hiddenIssueIds}
                       onHiddenIssuesChange={setHiddenIssueIds}
                       hasUnviewedIssues={hasUnviewedIssues}
+                      isAnimating={issuesAnimating}
                       onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
+                      initialLocalChatMessages={localChatMessages}
+                      onLocalChatMessagesChange={setLocalChatMessages}
                     />
                   }
                 />
@@ -1850,6 +2043,7 @@ export default function Page() {
                 }}
                 onRefresh={loadTBMRecords}
                 onDelete={deleteTBM}
+                onDeleteAll={deleteAllTBMs}
               />
             </div>
           )}
@@ -1877,17 +2071,7 @@ export default function Page() {
           onRetry={errorDialog.onRetry}
         />
       )}
-      {/* Project Dashboard Modal */}
-      <ProjectDashboard
-        isOpen={showDashboard}
-        onClose={() => setShowDashboard(false)}
-        projectId={currentProjectId}
-        projectName={projects.find((p) => p.id === currentProjectId)?.name}
-        onOpenNewProject={() => {
-          setShowDashboard(false);
-          setIsProjectModalOpen(true);
-        }}
-      />
+      {/* Note: ProjectDashboard is rendered once earlier in the component tree (line ~1619) */}
     </div>
   );
 }

@@ -19,11 +19,17 @@ export async function GET(req: Request) {
             return NextResponse.json(report);
         }
 
-        // Fetch list (top 100, filtered by project if specified)
+        // Fetch list (top 100, filtered by project and/or documentType if specified)
         const projectId = searchParams.get("projectId");
+        const documentType = searchParams.get("documentType");
+
+        // ✅ Build where clause dynamically to support filtering by documentType
+        const where: any = {};
+        if (projectId) where.projectId = projectId;
+        if (documentType) where.documentType = documentType;
 
         const reports = await prisma.report.findMany({
-            where: projectId ? { projectId } : undefined,
+            where: Object.keys(where).length > 0 ? where : undefined,
             take: 100,
             orderBy: { createdAt: "desc" }
         });
