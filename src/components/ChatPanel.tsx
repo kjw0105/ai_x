@@ -111,28 +111,56 @@ export function ChatPanel({
 
     setIsExportingPDF(true);
 
-    const exportData = {
-  fileName: currentFile?.name ?? historicalFileName ?? "report",
-  projectName: currentProjectName,
-  documentType: documentType ?? null,     // ✅ TBM인지 서버가 알아야 함
-  createdAt: new Date().toISOString(),
-  issues: issues.map(i => ({
-    severity: i.severity,
-    title: i.title,
-    message: i.message,
-    ruleId: i.ruleId,
-  })),
-  summary: {
-    totalIssues: issues.length,
-    criticalCount: issues.filter(i => i.severity === "error").length,
-    warningCount: issues.filter(i => i.severity === "warn").length,
-    infoCount: issues.filter(i => i.severity === "info").length,
-  },
+    // Get the first AI message as aiSummary (executive overview)
+    const aiSummary = messages.find(m => m.role === "ai")?.text || "";
 
-  // ✅ 핵심: 최상위로 보내야 함
-  tbmSummary,
-  tbmTranscript,
-};
+    const exportData = {
+      fileName: currentFile?.name ?? historicalFileName ?? "report",
+      projectName: currentProjectName,
+      documentType: documentType ?? null,
+      createdAt: new Date().toISOString(),
+      issues: issues.map(i => ({
+        severity: i.severity,
+        title: i.title,
+        message: i.message,
+        ruleId: i.ruleId,
+      })),
+      summary: {
+        totalIssues: issues.length,
+        criticalCount: issues.filter(i => i.severity === "error").length,
+        warningCount: issues.filter(i => i.severity === "warn").length,
+        infoCount: issues.filter(i => i.severity === "info").length,
+      },
+      tbmSummary,
+      tbmTranscript,
+
+      // NEW fields for comprehensive report
+      aiSummary: aiSummary || undefined,
+
+      // Extracted document data from reportContext
+      extractedData: reportContext ? {
+        docType: reportContext.docType,
+        fields: reportContext.fields,
+        signature: reportContext.signature,
+        inspectorName: reportContext.inspectorName,
+        riskLevel: reportContext.riskLevel,
+      } : undefined,
+
+      // Checklist from reportContext
+      checklist: reportContext?.checklist?.map((c: any) => ({
+        id: c.id,
+        category: c.category || "일반",
+        nameKo: c.nameKo,
+        value: c.value,
+      })) || undefined,
+
+      // Cross-validation (if photo issues exist)
+      crossValidation: issues.some(i => i.ruleId?.startsWith("photo_")) ? {
+        comparedWith: "최근 점검표",
+        mismatches: issues.filter(i => i.ruleId?.startsWith("photo_") && i.severity === "error").length,
+        warnings: issues.filter(i => i.ruleId?.startsWith("photo_") && i.severity === "warn").length,
+      } : undefined,
+    };
 
 
     try {

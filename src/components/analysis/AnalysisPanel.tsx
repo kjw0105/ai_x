@@ -365,6 +365,9 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         console.log('[AnalysisPanel] TBM Summary content:', tbmSummary ? tbmSummary.substring(0, 100) + "..." : "(empty)");
         console.log('[AnalysisPanel] TBM Transcript length:', (tbmTranscript || "").length);
 
+        // Get the first AI message as aiSummary (executive overview)
+        const aiSummary = chatMessages.find(m => m.role === "ai")?.text || "";
+
         const exportData = {
             fileName: currentFile?.name ?? historicalFileName ?? (tbmSummary ? "TBM(작업 전 대화)" : "report"),
             projectName: currentProjectName,
@@ -384,6 +387,44 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             },
             tbmSummary: tbmSummary || "",
             tbmTranscript: tbmTranscript || "",
+
+            // NEW fields for comprehensive report
+            aiSummary: aiSummary || undefined,
+
+            // Extracted document data from reportContext
+            extractedData: reportContext ? {
+                docType: reportContext.docType,
+                fields: reportContext.fields,
+                signature: reportContext.signature,
+                inspectorName: reportContext.inspectorName,
+                riskLevel: reportContext.riskLevel,
+            } : undefined,
+
+            // Checklist from reportContext
+            checklist: reportContext?.checklist?.map((c: any) => ({
+                id: c.id,
+                category: c.category || "일반",
+                nameKo: c.nameKo,
+                value: c.value,
+            })) || undefined,
+
+            // Risk score (if available)
+            riskScore: riskCalculation ? {
+                score: riskCalculation.riskScore,
+                level: riskCalculation.calculatedRisk,
+                factors: riskCalculation.factors?.map(f => ({
+                    name: f.category,
+                    points: f.impact,
+                    description: f.description,
+                })),
+            } : undefined,
+
+            // Cross-validation (if photo issues exist)
+            crossValidation: issues.some(i => i.ruleId?.startsWith("photo_")) ? {
+                comparedWith: "최근 점검표",
+                mismatches: issues.filter(i => i.ruleId?.startsWith("photo_") && i.severity === "error").length,
+                warnings: issues.filter(i => i.ruleId?.startsWith("photo_") && i.severity === "warn").length,
+            } : undefined,
         };
 
         try {
