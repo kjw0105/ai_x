@@ -1621,6 +1621,10 @@ export default function Page() {
         onClose={() => setShowDashboard(false)}
         projectId={currentProjectId}
         projectName={projects.find((p) => p.id === currentProjectId)?.name}
+        onOpenNewProject={() => {
+          setShowDashboard(false);
+          setIsProjectModalOpen(true);
+        }}
       />
 
       <DocumentTypeSelector
@@ -1953,17 +1957,7 @@ export default function Page() {
           onRetry={errorDialog.onRetry}
         />
       )}
-      {/* Project Dashboard Modal */}
-      <ProjectDashboard
-        isOpen={showDashboard}
-        onClose={() => setShowDashboard(false)}
-        projectId={currentProjectId}
-        projectName={projects.find((p) => p.id === currentProjectId)?.name}
-        onOpenNewProject={() => {
-          setShowDashboard(false);
-          setIsProjectModalOpen(true);
-        }}
-      />
+      {/* Note: ProjectDashboard is rendered once earlier in the component tree (line ~1619) */}
     </div>
   );
 }

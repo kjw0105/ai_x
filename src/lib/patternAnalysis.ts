@@ -178,6 +178,9 @@ export async function analyzeInspectorPatterns(
 
     if (!inspectorName) return warnings;
 
+    // Store normalized name for use in pattern warnings
+    const normalizedName = normalizeInspectorName(inspectorName);
+
     // Query recent reports using normalized name matching with pagination
     // Limit prevents performance issues with large datasets
     const recentReports = await findReportsByInspector(inspectorName, projectId, limit);
@@ -190,18 +193,21 @@ export async function analyzeInspectorPatterns(
     // Check for "always ✔" pattern with time weighting
     const alwaysCheckPattern = detectAlwaysCheckPattern(recentReports, thresholds);
     if (alwaysCheckPattern) {
+        alwaysCheckPattern.inspectorName = inspectorName; // Set actual inspector name
         warnings.push(alwaysCheckPattern);
     }
 
     // Check for copy-paste behavior
     const copyPastePattern = detectCopyPastePattern(recentReports, thresholds);
     if (copyPastePattern) {
+        copyPastePattern.inspectorName = inspectorName; // Set actual inspector name
         warnings.push(copyPastePattern);
     }
 
     // Check for rapid completion pattern (many reports in short time)
     const rapidPattern = detectRapidCompletionPattern(recentReports, thresholds);
     if (rapidPattern) {
+        rapidPattern.inspectorName = inspectorName; // Set actual inspector name
         warnings.push(rapidPattern);
     }
 
