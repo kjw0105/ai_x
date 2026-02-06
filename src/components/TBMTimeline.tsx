@@ -14,6 +14,23 @@ interface TBMRecord {
   tbmExtractedInspector: string | null;
   tbmParticipants: string | null;
   tbmDuration: number | null;
+  tbmCompletenessJson?: string | null;
+}
+
+interface CompletenessScore {
+  score: number;
+  level: "excellent" | "adequate" | "insufficient";
+  breakdown?: {
+    workDescription: boolean;
+    hazardIdentification: boolean;
+    controlMeasures: boolean;
+    ppeDiscussion: boolean;
+    roleAssignment: boolean;
+    emergencyPlan: boolean;
+    workerParticipation: boolean;
+  };
+  missingTopics?: string[];
+  suggestions?: string[];
 }
 
 interface TBMTimelineProps {
@@ -80,6 +97,41 @@ export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefres
     if (hazard.includes("밀폐") || hazard.includes("질식")) return "bg-purple-100 text-purple-800";
     if (hazard.includes("충돌") || hazard.includes("협착")) return "bg-blue-100 text-blue-800";
     return "bg-gray-100 text-gray-800";
+  };
+
+  const parseCompleteness = (json: string | null | undefined): CompletenessScore | null => {
+    if (!json) return null;
+    try {
+      return JSON.parse(json) as CompletenessScore;
+    } catch {
+      return null;
+    }
+  };
+
+  const getCompletenessColor = (level: string) => {
+    switch (level) {
+      case "excellent":
+        return "bg-green-100 text-green-800 border-green-300";
+      case "adequate":
+        return "bg-yellow-100 text-yellow-800 border-yellow-300";
+      case "insufficient":
+        return "bg-red-100 text-red-800 border-red-300";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-300";
+    }
+  };
+
+  const getCompletenessLevelKo = (level: string) => {
+    switch (level) {
+      case "excellent":
+        return "우수";
+      case "adequate":
+        return "적정";
+      case "insufficient":
+        return "미흡";
+      default:
+        return level;
+    }
   };
 
   // Track if we're mounted in browser for portal
@@ -202,6 +254,7 @@ export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefres
             const hazards = parseJsonField(record.tbmExtractedHazards);
             const participants = parseJsonField(record.tbmParticipants);
             const isExpanded = expandedId === record.id;
+            const completeness = parseCompleteness(record.tbmCompletenessJson);
 
             return (
               <div
@@ -217,6 +270,12 @@ export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefres
                         {record.tbmDuration && (
                           <span className="text-xs text-gray-500">
                             ⏱️ {formatDuration(record.tbmDuration)}
+                          </span>
+                        )}
+                        {/* Completeness Badge */}
+                        {completeness && (
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${getCompletenessColor(completeness.level)}`}>
+                            {completeness.score}점 ({getCompletenessLevelKo(completeness.level)})
                           </span>
                         )}
                       </div>
@@ -318,6 +377,45 @@ export default function TBMTimeline({ tbmRecords, loading, onSelectTBM, onRefres
                             </span>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Completeness Analysis */}
+                    {completeness && (completeness.missingTopics?.length || completeness.suggestions?.length) && (
+                      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <h4 className="text-sm font-semibold text-amber-800 mb-2 flex items-center gap-1">
+                          <span>📊</span> TBM 완성도 분석
+                          <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${getCompletenessColor(completeness.level)}`}>
+                            {completeness.score}점
+                          </span>
+                        </h4>
+
+                        {completeness.missingTopics && completeness.missingTopics.length > 0 && (
+                          <div className="mb-2">
+                            <p className="text-xs font-medium text-amber-700 mb-1">누락된 항목:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {completeness.missingTopics.map((topic, idx) => (
+                                <span key={idx} className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded">
+                                  {topic}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {completeness.suggestions && completeness.suggestions.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-amber-700 mb-1">개선 제안:</p>
+                            <ul className="text-xs text-amber-700 space-y-1">
+                              {completeness.suggestions.map((suggestion, idx) => (
+                                <li key={idx} className="flex items-start gap-1">
+                                  <span className="text-amber-500">•</span>
+                                  <span>{suggestion}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
 

@@ -176,6 +176,21 @@ export interface ReportContext {
   } | null;
 
   patternWarnings?: string[] | null;
+
+  // TBM context for cross-validation and chat enrichment
+  tbmContext?: {
+    workType: string | null;
+    extractedHazards: string[];
+    extractedInspector: string | null;
+    participants: string[];
+    summary: string;
+    completenessScore?: {
+      score: number;
+      level: string;
+      missingTopics: string[];
+      suggestions: string[];
+    };
+  } | null;
 }
 
 // ----------------------------------------------------------------------------

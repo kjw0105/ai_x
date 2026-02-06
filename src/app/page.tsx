@@ -1100,6 +1100,7 @@ export default function Page() {
           extractedHazards: JSON.stringify(r?.extractedHazards ?? []),
           extractedInspector: r?.extractedInspector ?? null,
           participants: JSON.stringify(r?.participants ?? []),
+          completenessScore: r?.completenessScore ?? null,
         }),
       });
       if (!resp.ok) {
@@ -1953,6 +1954,13 @@ export default function Page() {
                           riskLevel: (report as any).riskLevel,
                           checklist: (report as any).checklist,
                           issues: report.issues,
+                          tbmContext: latestTBM ? {
+                            workType: latestTBM.workType || null,
+                            extractedHazards: latestTBM.extractedHazards || [],
+                            extractedInspector: latestTBM.extractedInspector || null,
+                            participants: [],
+                            summary: latestTBM.summary,
+                          } : null,
                         } : null}
                       />
 
@@ -2045,6 +2053,13 @@ export default function Page() {
                           projectName: projects.find((p) => p.id === currentProjectId)?.name || null,
                           masterPlanSummary: null,
                         },
+                        tbmContext: latestTBM ? {
+                          workType: latestTBM.workType || null,
+                          extractedHazards: latestTBM.extractedHazards || [],
+                          extractedInspector: latestTBM.extractedInspector || null,
+                          participants: [],
+                          summary: latestTBM.summary,
+                        } : null,
                       } : null}
                     />
                   }

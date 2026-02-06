@@ -230,7 +230,35 @@ export function ChatPanel({
 
   if (allMessages.length === 0) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full bg-white dark:bg-slate-800">
+        {/* Show PDF Export header even when no messages yet, if there's content to export */}
+        {reportExists && (currentFile || historicalFileName || tbmSummary) && (
+          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">분석 결과</h4>
+            <button
+              onClick={handleExportPDF}
+              disabled={isExportingPDF}
+              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors shadow-sm ${
+                isExportingPDF
+                  ? "bg-slate-400 dark:bg-slate-600 text-white cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white"
+              }`}
+              title={isExportingPDF ? "PDF 생성 중..." : "PDF로 보고서 내보내기"}
+            >
+              {isExportingPDF ? (
+                <>
+                  <span className="material-symbols-outlined text-sm animate-spin">refresh</span>
+                  <span className="hidden sm:inline">생성 중...</span>
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-sm">download</span>
+                  <span className="hidden sm:inline">PDF 내보내기</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
         <div className="flex-1 flex flex-col items-center justify-center p-8">
           <div className="text-center max-w-xs">
             <span className="material-symbols-outlined text-6xl text-slate-300 dark:text-slate-600 mb-4">
@@ -251,7 +279,7 @@ export function ChatPanel({
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-800">
       {/* Header with PDF Export */}
-      {reportExists && (currentFile || historicalFileName) && (
+      {reportExists && (currentFile || historicalFileName || tbmSummary) && (
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
           <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">분석 결과</h4>
           <button

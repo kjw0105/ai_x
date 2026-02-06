@@ -102,6 +102,37 @@ function buildSystemPrompt(reportContext: ReportContext | null): string {
     }
   }
 
+  // Add TBM context for richer safety consultation
+  if (reportContext?.tbmContext) {
+    const tbm = reportContext.tbmContext;
+    systemPrompt += `\n\n[TBM 정보 - 오늘 작업 전 안전회의]`;
+    if (tbm.workType) {
+      systemPrompt += `\n- 작업 유형: ${tbm.workType}`;
+    }
+    if (tbm.extractedHazards && tbm.extractedHazards.length > 0) {
+      systemPrompt += `\n- 논의된 위험요인: ${tbm.extractedHazards.join(", ")}`;
+    }
+    if (tbm.extractedInspector) {
+      systemPrompt += `\n- 담당자: ${tbm.extractedInspector}`;
+    }
+    if (tbm.participants && tbm.participants.length > 0) {
+      systemPrompt += `\n- 참석자: ${tbm.participants.join(", ")} (총 ${tbm.participants.length}명)`;
+    }
+    if (tbm.completenessScore) {
+      const levelKo = tbm.completenessScore.level === "excellent" ? "우수" :
+                      tbm.completenessScore.level === "adequate" ? "적정" : "미흡";
+      systemPrompt += `\n- TBM 완성도: ${tbm.completenessScore.score}점 (${levelKo})`;
+      if (tbm.completenessScore.missingTopics && tbm.completenessScore.missingTopics.length > 0) {
+        systemPrompt += `\n- 누락 항목: ${tbm.completenessScore.missingTopics.join(", ")}`;
+      }
+    }
+    if (tbm.summary) {
+      // Truncate to avoid too long context
+      const summaryPreview = tbm.summary.length > 300 ? tbm.summary.substring(0, 300) + "..." : tbm.summary;
+      systemPrompt += `\n- 요약: ${summaryPreview}`;
+    }
+  }
+
   return systemPrompt;
 }
 

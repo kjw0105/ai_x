@@ -160,7 +160,7 @@ export async function runContextualSafetyReview(
       const completion = await options.openaiClient.chat.completions.create({
         model: "gpt-5.1",
         messages: [{ role: "user", content: fullPrompt }],
-        max_tokens: 800,
+        max_completion_tokens: 800,
         temperature: 0,
       });
       responseText = completion.choices[0]?.message?.content ?? "";

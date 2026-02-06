@@ -293,7 +293,7 @@ async function callOpenAIStructured(opts: {
       type: "json_schema",
       json_schema: DOCUMENT_EXTRACTION_SCHEMA
     },
-    max_tokens: 1500,
+    max_completion_tokens: 1500,
     temperature: 0,
   });
 
@@ -340,7 +340,7 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
         content: content
       }
     ],
-    max_tokens: 1500,
+    max_completion_tokens: 1500,
     temperature: 0,
   });
 
@@ -634,7 +634,7 @@ Respond with ONLY a JSON object:
         const classifyResponse = await getOpenAI().chat.completions.create({
           model: "gpt-5.1", // Use mini for speed and cost
           messages: [{ role: "user", content }],
-          max_tokens: 150,
+          max_completion_tokens: 150,
           temperature: 0,
         });
 
@@ -696,7 +696,7 @@ Respond with ONLY a JSON object:
           const response = await getOpenAI().chat.completions.create({
             model: "gpt-5.1",
             messages: [{ role: "user", content }],
-            max_tokens: 2000,
+            max_completion_tokens: 2000,
             temperature: 0,
           });
 
@@ -1066,12 +1066,15 @@ Respond with ONLY a JSON object:
       }
     }
 
-    // Stage 3d: TBM Cross-Validation
+    // Stage 3d: TBM Cross-Validation (AI-powered with legacy fallback)
     let tbmIssues: typeof validationIssues = [];
     if (latestTBM && latestTBM.extractedHazards && latestTBM.extractedHazards.length > 0) {
       try {
-        console.log("[Stage 3d] Running TBM cross-validation...");
-        tbmIssues = validateAgainstTBM(extracted, latestTBM);
+        console.log("[Stage 3d] Running AI-powered TBM cross-validation...");
+        tbmIssues = await validateAgainstTBM(extracted, latestTBM, {
+          anthropicClient: process.env.ANTHROPIC_API_KEY ? getAnthropic() : undefined,
+          openaiClient: getOpenAI(),
+        });
         console.log(`[Stage 3d] TBM validation found ${tbmIssues.length} issues`);
       } catch (e) {
         console.warn("[Stage 3d] TBM validation failed:", e);

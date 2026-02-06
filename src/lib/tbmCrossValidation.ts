@@ -3,19 +3,32 @@
  *
  * Validates safety documents against TBM (Toolbox Meeting) context.
  * Detects inconsistencies between what was discussed in TBM and what's checked in documents.
+ *
+ * Enhanced with AI-powered reasoning for deeper analysis.
  */
+
+import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
 export interface TBMContext {
   workType: string | null;
   extractedHazards: string[];
   extractedInspector: string | null;
   summary: string;
+  participants?: string[];
+  completenessScore?: {
+    score: number;
+    level: string;
+    missingTopics?: string[];
+    suggestions?: string[];
+  };
 }
 
 export interface ChecklistItem {
   id?: string;
   category?: string;
   item?: string;
+  nameKo?: string;
   value?: string;
   checked?: boolean;
 }
@@ -23,6 +36,12 @@ export interface ChecklistItem {
 export interface DocData {
   inspectorName?: string;
   checklist?: ChecklistItem[];
+  fields?: {
+    점검일자?: string | null;
+    현장명?: string | null;
+    작업내용?: string | null;
+    작업인원?: string | null;
+  };
   [key: string]: any;
 }
 
@@ -34,10 +53,198 @@ export interface ValidationIssue {
   ruleId: string;
 }
 
+// ============================================================================
+// AI Cross-Validation Types
+// ============================================================================
+
+export interface TBMAICrossValidationInput {
+  tbmContext: TBMContext;
+  docData: DocData;
+}
+
+export interface TBMCrossValidationResult {
+  inconsistencies: Array<{
+    type: "hazard_not_checked" | "hazard_missing_item" | "inspector_mismatch" | "work_type_mismatch" | "general";
+    severity: "error" | "warn" | "info";
+    hazard?: string;
+    checklistItem?: string;
+    reason: string;
+    suggestion?: string;
+  }>;
+  confidence: number;
+  summary: string;
+}
+
+// ============================================================================
+// AI Cross-Validation Functions
+// ============================================================================
+
+function buildTBMCrossValidationPrompt(input: TBMAICrossValidationInput): string {
+  const { tbmContext, docData } = input;
+
+  const checklistStr = docData.checklist?.map(item => {
+    const name = item.nameKo || item.item || item.id || "unknown";
+    const value = item.value || (item.checked ? "✔" : "✖");
+    return `- ${name}: ${value}`;
+  }).join("\n") || "체크리스트 없음";
+
+  return `
+너는 산업 안전 문서 검증 전문가다. TBM(작업 전 안전 회의)에서 논의된 내용과 안전 점검표의 일관성을 분석하라.
+
+## TBM 정보
+- 작업 유형: ${tbmContext.workType || "미확인"}
+- 논의된 위험요인: ${tbmContext.extractedHazards?.join(", ") || "없음"}
+- 담당자: ${tbmContext.extractedInspector || "미확인"}
+- 참석자: ${tbmContext.participants?.join(", ") || "미확인"}
+
+## TBM 요약
+${tbmContext.summary || "요약 없음"}
+
+## 점검표 정보
+- 점검자: ${docData.inspectorName || "미확인"}
+- 작업 내용: ${docData.fields?.작업내용 || "미확인"}
+
+## 체크리스트
+${checklistStr}
+
+## 분석 과제
+1. TBM에서 논의된 위험요인이 점검표에서 적절히 확인되었는지 분석
+2. TBM 담당자와 점검표 점검자 일치 여부 확인
+3. 작업 유형과 점검 항목의 일관성 확인
+4. 중요한 불일치 사항 식별
+
+## 출력 형식 (JSON만 출력, 설명/마크다운 금지)
+{
+  "inconsistencies": [
+    {
+      "type": "hazard_not_checked" | "hazard_missing_item" | "inspector_mismatch" | "work_type_mismatch" | "general",
+      "severity": "error" | "warn" | "info",
+      "hazard": "관련 위험요인 (해당되는 경우)",
+      "checklistItem": "관련 체크리스트 항목 (해당되는 경우)",
+      "reason": "불일치 이유 (구체적으로)",
+      "suggestion": "개선 제안"
+    }
+  ],
+  "confidence": 0-100,
+  "summary": "전체 분석 요약 (1-2문장)"
+}
+
+주의:
+- 비판단적 어조 사용 ("위험하다" 대신 "불일치가 존재함")
+- 확인된 사실만 언급, 추측은 "추정" 표시
+- inconsistencies가 없으면 빈 배열 반환
+`.trim();
+}
+
 /**
- * Main validation function
+ * AI-powered TBM cross-validation using Claude Sonnet 4.5 with GPT-5.1 fallback
  */
-export function validateAgainstTBM(
+export async function aiCrossValidateTBM(
+  input: TBMAICrossValidationInput,
+  options?: {
+    anthropicClient?: Anthropic;
+    openaiClient?: OpenAI;
+  }
+): Promise<TBMCrossValidationResult> {
+  const prompt = buildTBMCrossValidationPrompt(input);
+
+  // Try Claude first
+  if (options?.anthropicClient || process.env.ANTHROPIC_API_KEY) {
+    try {
+      const anthropic = options?.anthropicClient || new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+      });
+
+      const text = response.content
+        .filter((c: any) => c.type === "text")
+        .map((c: any) => c.text)
+        .join("");
+
+      const parsed = JSON.parse(text.replace(/```json\n?|\n?```/g, "").trim());
+      return parsed as TBMCrossValidationResult;
+    } catch (e) {
+      console.warn("[TBM AI Cross-Validation] Claude failed, trying GPT-5.1:", e);
+    }
+  }
+
+  // Fallback to GPT-5.1
+  if (options?.openaiClient || process.env.OPENAI_API_KEY) {
+    const openai = options?.openaiClient || new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.1",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+      temperature: 0,
+    });
+
+    const text = completion.choices[0]?.message?.content || "{}";
+    const parsed = JSON.parse(text);
+    return parsed as TBMCrossValidationResult;
+  }
+
+  throw new Error("No AI client available for TBM cross-validation");
+}
+
+/**
+ * Convert AI cross-validation result to validation issues
+ */
+export function tbmCrossValidationToIssues(result: TBMCrossValidationResult): ValidationIssue[] {
+  return result.inconsistencies.map((inc, idx) => {
+    let ruleId = "tbm_cross_";
+    switch (inc.type) {
+      case "hazard_not_checked":
+        ruleId += "hazard_not_checked";
+        break;
+      case "hazard_missing_item":
+        ruleId += "hazard_missing_item";
+        break;
+      case "inspector_mismatch":
+        ruleId += "inspector_mismatch";
+        break;
+      case "work_type_mismatch":
+        ruleId += "work_type_mismatch";
+        break;
+      default:
+        ruleId += "general";
+    }
+
+    let title = "TBM-점검표 불일치";
+    if (inc.hazard) {
+      title = `TBM-점검표 불일치: ${inc.hazard}`;
+    } else if (inc.type === "inspector_mismatch") {
+      title = "TBM-점검표 담당자 불일치";
+    }
+
+    let message = inc.reason;
+    if (inc.suggestion) {
+      message += `\n\n권장 조치: ${inc.suggestion}`;
+    }
+
+    return {
+      id: `tbm_ai_${idx}`,
+      severity: inc.severity,
+      title,
+      message,
+      ruleId,
+    };
+  });
+}
+
+// ============================================================================
+// Legacy Keyword-Based Validation (Fallback)
+// ============================================================================
+
+/**
+ * Legacy validation function (keyword-based)
+ * Kept as fallback when AI validation fails
+ */
+export function validateAgainstTBMLegacy(
   docData: DocData,
   tbmContext: TBMContext
 ): ValidationIssue[] {
@@ -55,7 +262,7 @@ export function validateAgainstTBM(
     const fallItems = checklist.filter(item => {
       const id = (item.id || "").toLowerCase();
       const category = (item.category || "").toLowerCase();
-      const itemText = (item.item || "").toLowerCase();
+      const itemText = (item.item || item.nameKo || "").toLowerCase();
       return (
         id.includes("fall") ||
         id.includes("height") ||
@@ -99,7 +306,7 @@ export function validateAgainstTBM(
     const fireItems = checklist.filter(item => {
       const id = (item.id || "").toLowerCase();
       const category = (item.category || "").toLowerCase();
-      const itemText = (item.item || "").toLowerCase();
+      const itemText = (item.item || item.nameKo || "").toLowerCase();
       return (
         id.includes("fire") ||
         category.includes("화재") ||
@@ -141,7 +348,7 @@ export function validateAgainstTBM(
     const electricalItems = checklist.filter(item => {
       const id = (item.id || "").toLowerCase();
       const category = (item.category || "").toLowerCase();
-      const itemText = (item.item || "").toLowerCase();
+      const itemText = (item.item || item.nameKo || "").toLowerCase();
       return (
         id.includes("electrical") ||
         id.includes("electric") ||
@@ -184,7 +391,7 @@ export function validateAgainstTBM(
     const confinedItems = checklist.filter(item => {
       const id = (item.id || "").toLowerCase();
       const category = (item.category || "").toLowerCase();
-      const itemText = (item.item || "").toLowerCase();
+      const itemText = (item.item || item.nameKo || "").toLowerCase();
       return (
         id.includes("confined") ||
         id.includes("ventilation") ||
@@ -240,4 +447,43 @@ export function validateAgainstTBM(
   }
 
   return issues;
+}
+
+// ============================================================================
+// Main Export - Uses AI with Legacy Fallback
+// ============================================================================
+
+/**
+ * Main validation function - uses AI cross-validation with legacy fallback
+ */
+export async function validateAgainstTBM(
+  docData: DocData,
+  tbmContext: TBMContext,
+  options?: {
+    useAI?: boolean;
+    anthropicClient?: Anthropic;
+    openaiClient?: OpenAI;
+  }
+): Promise<ValidationIssue[]> {
+  // If AI is explicitly disabled, use legacy
+  if (options?.useAI === false) {
+    return validateAgainstTBMLegacy(docData, tbmContext);
+  }
+
+  // Try AI validation first
+  try {
+    console.log("[TBM Cross-Validation] Attempting AI-powered validation...");
+    const result = await aiCrossValidateTBM(
+      { tbmContext, docData },
+      {
+        anthropicClient: options?.anthropicClient,
+        openaiClient: options?.openaiClient,
+      }
+    );
+    console.log(`[TBM Cross-Validation] AI found ${result.inconsistencies.length} inconsistencies (confidence: ${result.confidence}%)`);
+    return tbmCrossValidationToIssues(result);
+  } catch (e) {
+    console.warn("[TBM Cross-Validation] AI validation failed, using legacy:", e);
+    return validateAgainstTBMLegacy(docData, tbmContext);
+  }
 }
