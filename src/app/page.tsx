@@ -367,6 +367,7 @@ export default function Page() {
 
   const [projects, setProjects] = useState<any[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0); // Increments when history changes to sync RecentDocuments
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description: string } | null>(null);
@@ -1849,6 +1850,7 @@ export default function Page() {
         onSelectReport={loadReportFromHistory}
         onExportReport={exportReportFromHistory}
         currentProjectId={currentProjectId}
+        onHistoryChange={() => setHistoryVersion(v => v + 1)}
       />
 
       {showWelcome ? (
@@ -1921,6 +1923,7 @@ export default function Page() {
                         tbmSummary={report?.tbmSummary || latestTBM?.summary}
                         tbmTranscript={report?.tbmTranscript || latestTBM?.transcript}
                         imageQuality={imageQuality}
+                        historyRefreshKey={historyVersion}
                       />
                     }
                     right={
@@ -1969,6 +1972,7 @@ export default function Page() {
                       tbmSummary={undefined}
                       tbmTranscript={undefined}
                       imageQuality={imageQuality}
+                      historyRefreshKey={historyVersion}
                     />
                   </div>
                 )}
@@ -1996,6 +2000,7 @@ export default function Page() {
                       tbmSummary={report?.tbmSummary || latestTBM?.summary}
                       tbmTranscript={report?.tbmTranscript || latestTBM?.transcript}
                       imageQuality={imageQuality}
+                      historyRefreshKey={historyVersion}
                     />
                   }
                   right={
