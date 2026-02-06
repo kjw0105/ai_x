@@ -69,6 +69,7 @@ interface Issue {
     ruleId?: string; // Stage 2-5: Link to specific rule
     confidence?: number; // Stage 4
     score?: number; // Stage 4
+    isAIFixable?: boolean; // Whether AI can suggest a fix (false for photos, signatures)
 }
 
 interface RiskFactor {
@@ -872,7 +873,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                             {selectedIssue.message}
                         </p>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className={`grid gap-2 ${selectedIssue.isAIFixable === false ? 'grid-cols-1' : 'grid-cols-2'}`}>
                             <button
                                 onClick={() => {
                                     handleConfirm(selectedIssue.id);
@@ -883,20 +884,22 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                 확인했어
                             </button>
 
-                            <button
-                                onClick={() => handleFix(selectedIssue)}
-                                disabled={processingIssueId === selectedIssue.id}
-                                className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {processingIssueId === selectedIssue.id ? (
-                                    <>
-                                        <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                        생성 중...
-                                    </>
-                                ) : (
-                                    "수정해줘"
-                                )}
-                            </button>
+                            {selectedIssue.isAIFixable !== false && (
+                                <button
+                                    onClick={() => handleFix(selectedIssue)}
+                                    disabled={processingIssueId === selectedIssue.id}
+                                    className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {processingIssueId === selectedIssue.id ? (
+                                        <>
+                                            <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
+                                            생성 중...
+                                        </>
+                                    ) : (
+                                        "수정해줘"
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

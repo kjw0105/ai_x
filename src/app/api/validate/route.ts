@@ -707,6 +707,7 @@ export async function POST(req: Request) {
               message: `${violation.evidence}\n\n위치: ${violation.location}`,
               ruleId: `photo_${violation.id}`,
               path: `사진분석.${violation.category}`,
+              isAIFixable: false, // Photo issues are informational - can't edit an image
             });
           }
         }
