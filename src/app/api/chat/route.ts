@@ -1,33 +1,37 @@
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import {
-  CHAT_TOOLS,
-  explainIssue,
-  getDocumentContext,
-  suggestFix,
-  type ReportContext
-} from "@/lib/chatTools";
+import type { ReportContext } from "@/lib/chatTools";
 
 export const runtime = "nodejs";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization to avoid errors when API keys are not set
+let _openai: OpenAI | null = null;
+let _anthropic: Anthropic | null = null;
+
+function getOpenAI() {
+  if (!_openai) {
+    if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set");
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
+
+function getAnthropic() {
+  if (!_anthropic) {
+    if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set");
+    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return _anthropic;
+}
 
 type ClientMsg = { role: "user" | "ai"; text: string };
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const messages = (body?.messages ?? []) as ClientMsg[];
-    const reportContext = (body?.reportContext ?? null) as ReportContext | null;
-
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "OPENAI_API_KEY is missing" }, { status: 500 });
-    }
-
-    // Enhanced system prompt with context awareness
-    const systemPrompt = `너는 산업안전 문서 검증을 돕는 한국어 AI 안전 컨설턴트다.
+/**
+ * Build the system prompt with enriched context
+ */
+function buildSystemPrompt(reportContext: ReportContext | null): string {
+  let systemPrompt = `너는 산업안전 문서 검증을 돕는 한국어 AI 안전 컨설턴트다.
 
 당신의 역할:
 - 검증 결과를 명확하게 설명
@@ -35,109 +39,146 @@ export async function POST(req: Request) {
 - 안전 관련 규정 참고 제공
 - 친근하고 전문적인 어조 유지
 
-사용 가능한 도구:
-1. explain_issue(ruleId) - 특정 검증 규칙 상세 설명
-2. get_document_context(includeChecklist) - 현재 문서 정보 조회
-3. suggest_fix(issueId) - 이슈 해결 방법 제시
-
-사용자가 다음과 같이 질문하면 도구를 사용하세요:
-- "왜 이 경고가 나왔어요?" → explain_issue 사용
-- "이 문서 요약해줘" → get_document_context 사용
-- "어떻게 고치나요?" → suggest_fix 사용
-- "rule_xxx를 설명해줘" → explain_issue 사용
-
 답변 시 주의사항:
 - 짧고 명확하게 답변
 - 전문 용어는 쉽게 풀어서 설명
 - 법규 위반이 아니라 "문서 불일치" 관점으로 설명
 - 단계별로 정리하여 제시`;
 
-    // Convert client messages to OpenAI format
-    const chatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      {
-        role: "system",
-        content: systemPrompt,
-      },
-      ...messages.map((m) => ({
-        role: (m.role === "ai" ? "assistant" : "user") as "assistant" | "user",
-        content: m.text ?? "",
-      })),
-    ];
+  // Inject document context if available (from extractedData or legacy fields)
+  const extracted = reportContext?.extractedData || (reportContext ? {
+    docType: reportContext.docType || "unknown",
+    fields: reportContext.fields || {},
+    signature: reportContext.signature || {},
+    checklist: reportContext.checklist || [],
+    riskLevel: reportContext.riskLevel,
+    inspectorName: reportContext.inspectorName,
+  } : null);
 
-    // Call OpenAI with tools enabled
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: chatMessages,
-      tools: CHAT_TOOLS,
-      tool_choice: "auto",
-      temperature: 0.3,
-    });
+  if (extracted) {
+    systemPrompt += `\n\n[현재 문서 정보]
+- 문서 유형: ${extracted.docType || "미확인"}
+- 점검일자: ${extracted.fields?.점검일자 || "누락"}
+- 현장명: ${extracted.fields?.현장명 || "누락"}
+- 작업내용: ${extracted.fields?.작업내용 || "누락"}
+- 작업인원: ${extracted.fields?.작업인원 || "누락"}
+- 담당자 서명: ${extracted.signature?.담당 || "미확인"}
+- 소장 서명: ${extracted.signature?.소장 || "미확인"}
+- 점검자: ${extracted.inspectorName || "미확인"}
+- 위험도: ${extracted.riskLevel || "미평가"}`;
 
-    const responseMessage = completion.choices[0]?.message;
-
-    // Handle tool calls
-    if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
-      const toolCalls = responseMessage.tool_calls;
-
-      // Add assistant message with tool calls to history
-      chatMessages.push(responseMessage);
-
-      // Execute each tool call
-      for (const toolCall of toolCalls) {
-        const functionName = (toolCall as any).function.name;
-        const functionArgs = JSON.parse((toolCall as any).function.arguments);
-
-        console.log(`[Tool Call] ${functionName}`, functionArgs);
-
-        let toolResult = "";
-
-        try {
-          switch (functionName) {
-            case "explain_issue":
-              toolResult = explainIssue(functionArgs.ruleId, reportContext || {});
-              break;
-
-            case "get_document_context":
-              toolResult = getDocumentContext(
-                functionArgs.includeChecklist ?? true,
-                reportContext || {}
-              );
-              break;
-
-            case "suggest_fix":
-              toolResult = suggestFix(functionArgs.issueId, reportContext || {});
-              break;
-
-            default:
-              toolResult = `알 수 없는 도구: ${functionName}`;
-          }
-        } catch (error: any) {
-          console.error(`[Tool Error] ${functionName}:`, error);
-          toolResult = `도구 실행 중 오류가 발생했습니다: ${error.message}`;
-        }
-
-        // Add tool result to messages
-        chatMessages.push({
-          role: "tool",
-          content: toolResult,
-          tool_call_id: toolCall.id,
-        });
+    // Add checklist items
+    const checklist = extracted.checklist;
+    if (checklist && checklist.length > 0) {
+      systemPrompt += `\n\n[체크리스트 항목]`;
+      for (const c of checklist) {
+        systemPrompt += `\n- ${c.nameKo}: ${c.value || "미기재"}`;
       }
-
-      // Get final response from AI with tool results
-      const finalCompletion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: chatMessages,
-        temperature: 0.3,
-      });
-
-      const finalReply = finalCompletion.choices[0]?.message?.content?.trim() || "(응답이 비어있어요)";
-
-      return NextResponse.json({ reply: finalReply });
     }
+  }
 
-    // No tool calls - return direct response
-    const reply = responseMessage?.content?.trim() || "(응답이 비어있어요)";
+  // Add detected issues
+  const issues = reportContext?.issues;
+  if (issues && issues.length > 0) {
+    systemPrompt += `\n\n[검출된 이슈]`;
+    for (const i of issues) {
+      systemPrompt += `\n- [${i.severity}] ${i.title}: ${i.message}${i.ruleId ? ` (규칙: ${i.ruleId})` : ""}`;
+    }
+  }
+
+  // Add project context
+  if (reportContext?.projectContext?.projectName) {
+    systemPrompt += `\n\n[프로젝트]: ${reportContext.projectContext.projectName}`;
+    if (reportContext.projectContext.masterPlanSummary) {
+      systemPrompt += `\n[마스터 안전 계획 요약]: ${reportContext.projectContext.masterPlanSummary}`;
+    }
+  }
+
+  // Add pattern warnings
+  if (reportContext?.patternWarnings && reportContext.patternWarnings.length > 0) {
+    systemPrompt += `\n\n[패턴 경고]`;
+    for (const w of reportContext.patternWarnings) {
+      systemPrompt += `\n- ${w}`;
+    }
+  }
+
+  return systemPrompt;
+}
+
+/**
+ * Call Claude Sonnet 4.5 for chat
+ */
+async function callClaude(systemPrompt: string, messages: ClientMsg[]): Promise<string> {
+  const anthropicMessages = messages.map(m => ({
+    role: (m.role === "ai" ? "assistant" : "user") as "assistant" | "user",
+    content: m.text ?? "",
+  }));
+
+  const response = await getAnthropic().messages.create({
+    model: "claude-sonnet-4-5-20250929",
+    max_tokens: 1000,
+    system: systemPrompt,
+    messages: anthropicMessages,
+    temperature: 0.3,
+  });
+
+  return response.content
+    .filter((c: any) => c.type === "text")
+    .map((c: any) => c.text)
+    .join("\n")
+    .trim() || "(응답이 비어있어요)";
+}
+
+/**
+ * Call OpenAI GPT-5.1 as fallback
+ */
+async function callOpenAIChat(systemPrompt: string, messages: ClientMsg[]): Promise<string> {
+  const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPrompt },
+    ...messages.map(m => ({
+      role: (m.role === "ai" ? "assistant" : "user") as "assistant" | "user",
+      content: m.text ?? "",
+    })),
+  ];
+
+  const completion = await getOpenAI().chat.completions.create({
+    model: "gpt-5.1",
+    messages: openaiMessages,
+    temperature: 0.3,
+  });
+
+  return completion.choices[0]?.message?.content?.trim() || "(응답이 비어있어요)";
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const messages = (body?.messages ?? []) as ClientMsg[];
+    const reportContext = (body?.reportContext ?? null) as ReportContext | null;
+
+    // Build system prompt with enriched context
+    const systemPrompt = buildSystemPrompt(reportContext);
+
+    // Try Claude first (primary), fall back to GPT-5.1
+    let reply: string;
+
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        console.log("[Chat] Using Claude Sonnet 4.5...");
+        reply = await callClaude(systemPrompt, messages);
+      } catch (err) {
+        console.warn("[Chat] Claude failed, falling back to GPT-5.1:", err);
+        reply = await callOpenAIChat(systemPrompt, messages);
+      }
+    } else if (process.env.OPENAI_API_KEY) {
+      console.log("[Chat] No Anthropic key, using GPT-5.1...");
+      reply = await callOpenAIChat(systemPrompt, messages);
+    } else {
+      return NextResponse.json(
+        { error: "No API key configured (ANTHROPIC_API_KEY or OPENAI_API_KEY)" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ reply });
   } catch (e: any) {

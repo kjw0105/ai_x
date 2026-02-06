@@ -280,7 +280,7 @@ async function callOpenAIStructured(opts: {
   console.log("[Structured Extraction] Calling OpenAI with structured outputs...");
 
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-5.1",
     messages: [
       {
         role: "user",
@@ -331,7 +331,7 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
   }
 
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-5.1",
     messages: [
       {
         role: "user",
@@ -428,7 +428,7 @@ async function verifyExtraction(
   try {
     // Call GPT-4o-mini with verification tools
     const verification = await getOpenAI().chat.completions.create({
-      model: "gpt-4o-mini", // Cheaper model for verification
+      model: "gpt-5.1", // Upgraded from gpt-4o-mini
       messages: verificationMessages,
       tools: VERIFICATION_TOOLS,
       tool_choice: "auto",
@@ -482,7 +482,7 @@ async function verifyExtraction(
 
       // Get final verification response
       const finalVerification = await getOpenAI().chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5.1",
         messages: verificationMessages,
         temperature: 0,
         max_tokens: 500
@@ -630,7 +630,7 @@ Respond with ONLY a JSON object:
         ];
 
         const classifyResponse = await getOpenAI().chat.completions.create({
-          model: "gpt-4o-mini", // Use mini for speed and cost
+          model: "gpt-5.1", // Use mini for speed and cost
           messages: [{ role: "user", content }],
           max_tokens: 150,
           temperature: 0,
@@ -692,7 +692,7 @@ Respond with ONLY a JSON object:
           }
 
           const response = await getOpenAI().chat.completions.create({
-            model: "gpt-4o",
+            model: "gpt-5.1",
             messages: [{ role: "user", content }],
             max_tokens: 2000,
             temperature: 0,

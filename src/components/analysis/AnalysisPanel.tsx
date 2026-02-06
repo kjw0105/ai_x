@@ -117,9 +117,10 @@ interface AnalysisPanelProps {
     onMarkIssuesViewed?: () => void; // Callback when user views issues
     initialLocalChatMessages?: { role: "ai" | "user"; text: string }[]; // Persist local chat history
     onLocalChatMessagesChange?: (messages: { role: "ai" | "user"; text: string }[]) => void; // Callback when chat messages change
+    reportContext?: any; // Enriched context for chat (extractedData, projectContext, etc.)
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed, initialLocalChatMessages = [], onLocalChatMessagesChange }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed, initialLocalChatMessages = [], onLocalChatMessagesChange, reportContext }: AnalysisPanelProps) {
     // Default to 5-stage document validation if not provided
     const defaultSteps: ValidationStage[] = [
         { id: "stage1", label: "형식 검증", icon: "description" },
@@ -190,8 +191,8 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         // Add user message immediately
         setLocalChatMessages((prev) => [...prev, { role: "user", text }]);
 
-        // Build report context for MCP tools
-        const reportContext = {
+        // Use enriched reportContext from props, or build minimal fallback
+        const chatReportContext = reportContext || {
             issues: issues.map(i => ({
                 severity: i.severity,
                 title: i.title,
@@ -207,7 +208,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     messages: allMessages.map((m) => ({ role: m.role, text: m.text })),
-                    reportContext,
+                    reportContext: chatReportContext,
                 }),
             });
 

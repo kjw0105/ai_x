@@ -185,7 +185,7 @@ export async function POST(req: Request) {
     // 3) Summarize with context
     console.log("[TBM] step=summarize start");
     const summaryRes = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5.1",
       messages: [
         { role: "system", content: buildTBMSystemPrompt() },
         {

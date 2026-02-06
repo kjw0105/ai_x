@@ -2025,6 +2025,19 @@ export default function Page() {
                       onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
                       initialLocalChatMessages={localChatMessages}
                       onLocalChatMessagesChange={setLocalChatMessages}
+                      reportContext={report ? {
+                        docType: (report as any).docType,
+                        fields: (report as any).fields,
+                        signature: (report as any).signature,
+                        inspectorName: (report as any).inspectorName,
+                        riskLevel: (report as any).riskLevel,
+                        checklist: (report as any).checklist,
+                        issues: report.issues,
+                        projectContext: {
+                          projectName: projects.find((p) => p.id === currentProjectId)?.name || null,
+                          masterPlanSummary: null,
+                        },
+                      } : null}
                     />
                   }
                 />
