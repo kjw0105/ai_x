@@ -368,15 +368,6 @@ git merge upstream/main
 
 ---
 
-## 📖 문서
-
-- **[NEW_FEATURES.md](NEW_FEATURES.md)**: 이중 언어 문서가 포함된 기능 진화 로그
-- **[STAGE3_SUMMARY.md](STAGE3_SUMMARY.md)**: 포괄적인 Stage 3 구현 가이드
-- **[CLAUDE.md](CLAUDE.md)**: AI 어시스턴트용 프로젝트 컨텍스트
-- **[테스트_전략.md](테스트_전략.md)**: 실제 문서 없이 테스트 전략 (한국어)
-
----
-
 ## 🎓 학습 자료
 
 ### 한국 건설 안전용

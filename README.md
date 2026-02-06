@@ -368,15 +368,6 @@ git merge upstream/main
 
 ---
 
-## 📖 Documentation
-
-- **[NEW_FEATURES.md](NEW_FEATURES.md)**: Feature evolution log with bilingual documentation
-- **[STAGE3_SUMMARY.md](STAGE3_SUMMARY.md)**: Comprehensive Stage 3 implementation guide
-- **[CLAUDE.md](CLAUDE.md)**: Project context for AI assistants
-- **[테스트_전략.md](테스트_전략.md)**: Testing strategy without real documents (Korean)
-
----
-
 ## 🎓 Learning Resources
 
 ### For Korean Construction Safety
