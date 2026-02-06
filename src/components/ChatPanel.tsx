@@ -48,6 +48,12 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
+  // Reset local chat when the document changes (messages prop changes)
+  // This ensures follow-up conversation doesn't persist across document switches
+  useEffect(() => {
+    setChatMessages([]);
+  }, [messages]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
