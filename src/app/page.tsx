@@ -1107,6 +1107,36 @@ export default function Page() {
     }
   }
 
+  async function deleteAllTBMs() {
+    const count = tbmRecords.length;
+    if (count === 0) return;
+
+    try {
+      // Optimistically clear UI
+      setTbmRecords([]);
+
+      // Delete all TBM records
+      const deletePromises = tbmRecords.map(record =>
+        fetch(`/api/history?id=${record.id}`, { method: "DELETE" })
+      );
+
+      const results = await Promise.all(deletePromises);
+      const failedCount = results.filter(r => !r.ok).length;
+
+      if (failedCount > 0) {
+        // Some failed - reload to get accurate state
+        await loadTBMRecords();
+        toast.error(`${failedCount}개 기록 삭제 실패`, 2000);
+      } else {
+        toast.success(`${count}개의 TBM 기록이 삭제되었습니다`, 2000);
+      }
+    } catch (e) {
+      console.error("Failed to delete all TBMs:", e);
+      await loadTBMRecords();
+      toast.error("전체 삭제에 실패했습니다", 2000);
+    }
+  }
+
   async function loadReportFromHistory(id: string) {
     setLoading(true);
     setShowHistory(false);
@@ -1956,6 +1986,7 @@ export default function Page() {
                 }}
                 onRefresh={loadTBMRecords}
                 onDelete={deleteTBM}
+                onDeleteAll={deleteAllTBMs}
               />
             </div>
           )}
