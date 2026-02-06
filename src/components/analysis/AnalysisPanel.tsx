@@ -122,9 +122,10 @@ interface AnalysisPanelProps {
     initialLocalChatMessages?: { role: "ai" | "user"; text: string }[]; // Persist local chat history
     onLocalChatMessagesChange?: (messages: { role: "ai" | "user"; text: string }[]) => void; // Callback when chat messages change
     reportContext?: any; // Enriched context for chat (extractedData, projectContext, etc.)
+    onSendChatMessage?: (message: string) => void; // Inject message into chat (for corrective action)
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed, initialLocalChatMessages = [], onLocalChatMessagesChange, reportContext }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed, initialLocalChatMessages = [], onLocalChatMessagesChange, reportContext, onSendChatMessage }: AnalysisPanelProps) {
     // Default to 5-stage document validation if not provided
     const defaultSteps: ValidationStage[] = [
         { id: "stage1", label: "형식 검증", icon: "description" },
@@ -181,16 +182,20 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
 
     // Ref for issues section - used for auto-scroll
     const issuesSectionRef = useRef<HTMLDivElement>(null);
+    // Ref for chat end - used for scroll to chat
+    const chatEndRef = useRef<HTMLDivElement>(null);
 
 
 
-    // Chat functionality
-    const handleSendChat = async () => {
-        const text = chatInput.trim();
+    // Chat functionality - can accept direct message or use chatInput state
+    const handleSendChat = async (directMessage?: string) => {
+        const text = directMessage || chatInput.trim();
         if (!text || isSendingChat) return;
 
         setIsSendingChat(true);
-        setChatInput("");
+        if (!directMessage) {
+            setChatInput("");
+        }
 
         // Add user message immediately
         setLocalChatMessages((prev) => [...prev, { role: "user", text }]);
@@ -339,6 +344,26 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         } finally {
             setProcessingIssueId(null);
         }
+    };
+
+    // Request corrective action - injects a pre-built message into chat
+    const requestCorrectiveAction = (issue: Issue) => {
+        const severityKo = issue.severity === "error" ? "심각" : issue.severity === "warn" ? "경고" : "정보";
+
+        const userMessage = `이 문제에 대한 시정조치 요청서를 작성해주세요:
+
+제목: ${issue.title}
+심각도: ${severityKo}
+상세: ${issue.message}${issue.ruleId ? `
+규칙: ${issue.ruleId}` : ""}`;
+
+        // Send directly using the message parameter
+        handleSendChat(userMessage);
+
+        // Scroll to chat area after a brief delay to show the typing indicator
+        setTimeout(() => {
+            chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        }, 100);
     };
 
     const handleExportPDF = async () => {
@@ -706,17 +731,47 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 {/* Chat Messages */}
                 {allChatMessages.map((msg, idx) => (
                     <div key={idx} className="chat-message flex gap-3">
-                        <div className="size-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-sm mt-1">
-                            <span className="material-symbols-outlined text-blue-600 text-xl">smart_toy</span>
+                        <div className={`size-10 rounded-full flex items-center justify-center shrink-0 shadow-sm mt-1 ${msg.role === "user" ? "bg-primary/20" : "bg-blue-100"}`}>
+                            <span className={`material-symbols-outlined text-xl ${msg.role === "user" ? "text-primary" : "text-blue-600"}`}>
+                                {msg.role === "user" ? "person" : "smart_toy"}
+                            </span>
                         </div>
                         <div className="flex flex-col gap-1 max-w-[85%]">
-                            <span className="text-xs font-bold text-slate-500 ml-1">AI 안전도우미</span>
-                            <div className="bg-white dark:bg-surface-dark p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-white whitespace-pre-line">
+                            <span className="text-xs font-bold text-slate-500 ml-1">
+                                {msg.role === "user" ? "나" : "AI 안전도우미"}
+                            </span>
+                            <div className={`p-4 rounded-2xl shadow-sm border text-slate-800 dark:text-white whitespace-pre-line ${
+                                msg.role === "user"
+                                    ? "bg-primary/10 dark:bg-primary/20 rounded-tr-none border-primary/20 dark:border-primary/30"
+                                    : "bg-white dark:bg-surface-dark rounded-tl-none border-slate-100 dark:border-slate-700"
+                            }`}>
                                 {msg.text}
                             </div>
                         </div>
                     </div>
                 ))}
+
+                {/* Typing Indicator - shown while AI is generating response */}
+                {isSendingChat && (
+                    <div className="chat-message flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="size-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-sm mt-1">
+                            <span className="material-symbols-outlined text-blue-600 text-xl">smart_toy</span>
+                        </div>
+                        <div className="flex flex-col gap-1 max-w-[85%]">
+                            <span className="text-xs font-bold text-slate-500 ml-1">AI 안전도우미</span>
+                            <div className="bg-white dark:bg-surface-dark p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 dark:border-slate-700">
+                                <div className="flex items-center gap-1">
+                                    <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                                    <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
+                                    <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Scroll anchor for chat */}
+                <div ref={chatEndRef} />
 
                 {/* Risk Dashboard */}
                 {riskCalculation && (
@@ -978,25 +1033,22 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                     handleConfirm(selectedIssue.id);
                                     setSelectedIssue(null);
                                 }}
-                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
+                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm flex items-center justify-center gap-2"
                             >
-                                확인했어
+                                <span className="material-symbols-outlined text-sm">visibility_off</span>
+                                무시
                             </button>
 
                             {selectedIssue.isAIFixable !== false && (
                                 <button
-                                    onClick={() => handleFix(selectedIssue)}
-                                    disabled={processingIssueId === selectedIssue.id}
-                                    className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    onClick={() => {
+                                        requestCorrectiveAction(selectedIssue);
+                                        setSelectedIssue(null);
+                                    }}
+                                    className="py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-amber-200 flex items-center justify-center gap-2"
                                 >
-                                    {processingIssueId === selectedIssue.id ? (
-                                        <>
-                                            <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                            생성 중...
-                                        </>
-                                    ) : (
-                                        "수정해줘"
-                                    )}
+                                    <span className="material-symbols-outlined text-sm">assignment_late</span>
+                                    시정조치
                                 </button>
                             )}
                         </div>
@@ -1021,7 +1073,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         className="flex-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                     />
                     <button
-                        onClick={handleSendChat}
+                        onClick={() => handleSendChat()}
                         disabled={!chatInput.trim() || isSendingChat}
                         className="size-10 rounded-xl bg-primary hover:bg-green-600 text-white disabled:opacity-40 disabled:hover:bg-primary transition-colors shadow-lg shadow-green-200 dark:shadow-none flex items-center justify-center shrink-0"
                         aria-label="Send"

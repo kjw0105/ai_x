@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
@@ -288,6 +289,19 @@ function NewProjectModal({ isOpen, onClose, onCreate }: ModalDialogProps) {
 }
 
 export default function Page() {
+  const router = useRouter();
+  const [checkingFirstVisit, setCheckingFirstVisit] = useState(true);
+
+  // Check for first-time visitor and redirect to intro
+  useEffect(() => {
+    const hasSeenIntro = localStorage.getItem("hasSeenIntro");
+    if (!hasSeenIntro) {
+      router.replace("/poster");
+    } else {
+      setCheckingFirstVisit(false);
+    }
+  }, [router]);
+
   const toast = useToast();
   const [latestTBM, setLatestTBM] = useState<{
     summary: string;
@@ -351,8 +365,9 @@ export default function Page() {
   const [activeValidationType, setActiveValidationType] = useState<"document" | "photo" | "auto">("document");
   const [hiddenIssueIds, setHiddenIssueIds] = useState<string[]>([]); // Persist dismissed issues
   const [hasUnviewedIssues, setHasUnviewedIssues] = useState(false); // Show indicator when analysis completes
-  const [issuesAnimating, setIssuesAnimating] = useState(false); // Brief pulse animation when issues arrive
-  const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]); // Persist local chat
+    const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]); // Persist local chat
+  const [chatExternalMessage, setChatExternalMessage] = useState<string | null>(null); // For corrective action injection
+  const [forceAnalysisPanel, setForceAnalysisPanel] = useState<"analysis" | "issues" | null>(null); // Force switch to analysis tab
 
   // Document validation stages (5 stages)
   const documentValidationSteps = [
@@ -959,9 +974,8 @@ export default function Page() {
       if (data.issues && data.issues.length > 0) {
         console.log(`[Validation Complete] Setting hasUnviewedIssues=true, issues count: ${data.issues.length}`);
         setHasUnviewedIssues(true);
-        // Trigger pulse animation for 6 seconds
-        setIssuesAnimating(true);
-        setTimeout(() => setIssuesAnimating(false), 6000);
+        // Auto-switch to issues tab on desktop
+        setForceAnalysisPanel("issues");
       }
 
       // Brief pause to show 100% completion before hiding progress
@@ -1739,6 +1753,17 @@ export default function Page() {
     setCurrentProjectId(projectId);
   }
 
+  // Show loading state while checking first visit
+  if (checkingFirstVisit) {
+    return (
+      <div className="flex flex-col h-dvh bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 items-center justify-center">
+        <div className="inline-flex items-center justify-center size-20 bg-primary rounded-2xl text-white shadow-2xl shadow-primary/30 mb-6 animate-pulse">
+          <span className="material-symbols-outlined text-5xl">safety_check</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-dvh bg-slate-50 dark:bg-gray-900 relative overflow-hidden">
       <NewProjectModal
@@ -1944,13 +1969,21 @@ export default function Page() {
               <div className="hidden lg:flex flex-1 min-h-0 w-full">
                 {file || report ? (
                   <ThreeColumnLayout
+                    forceActivePanel={forceAnalysisPanel}
+                    onActivePanelChange={() => setForceAnalysisPanel(null)}
                     left={
                       <IssuesList
                         issues={report?.issues ?? []}
                         loading={loading}
                         hasUnviewedIssues={hasUnviewedIssues}
-                        isAnimating={issuesAnimating}
                         onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
+                        onCorrectiveAction={(issue) => {
+                          const severityKo = issue.severity === "error" ? "심각" : issue.severity === "warn" ? "경고" : "정보";
+                          const message = `이 문제에 대한 시정조치 요청서를 작성해주세요:\n\n제목: ${issue.title}\n심각도: ${severityKo}\n상세: ${issue.message}${issue.ruleId ? `\n규칙: ${issue.ruleId}` : ""}`;
+                          setChatExternalMessage(message);
+                          // Switch to AI analysis tab to show the chat
+                          setForceAnalysisPanel("analysis");
+                        }}
                       />
                     }
                     center={
@@ -2003,6 +2036,8 @@ export default function Page() {
                           } : null,
                           photoFindings: latestPhotoFindings || null,
                         } : null}
+                        externalMessage={chatExternalMessage}
+                        onExternalMessageSent={() => setChatExternalMessage(null)}
                       />
 
 
@@ -2078,7 +2113,6 @@ export default function Page() {
                       initialHiddenIssueIds={hiddenIssueIds}
                       onHiddenIssuesChange={setHiddenIssueIds}
                       hasUnviewedIssues={hasUnviewedIssues}
-                      isAnimating={issuesAnimating}
                       onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
                       initialLocalChatMessages={localChatMessages}
                       onLocalChatMessagesChange={setLocalChatMessages}

@@ -23,6 +23,10 @@ interface ChatPanelProps {
 
   // ✅ MCP: Report context for tool calling
   reportContext?: any;
+
+  // External message injection (for corrective action button)
+  externalMessage?: string | null;
+  onExternalMessageSent?: () => void; // Callback to clear the external message
 }
 
 
@@ -38,6 +42,8 @@ export function ChatPanel({
   tbmSummary = "",
   tbmTranscript = "",    // ✅
   reportContext,    // ✅ MCP
+  externalMessage,
+  onExternalMessageSent,
 }: ChatPanelProps) {
 
 
@@ -62,12 +68,63 @@ export function ChatPanel({
     scrollToBottom();
   }, [chatMessages, messages]);
 
-  const handleSend = async () => {
-  const text = input.trim();
+  // Handle external message injection (e.g., from corrective action button)
+  const externalMessageRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Only process if we have a new external message that we haven't processed yet
+    if (externalMessage && externalMessage !== externalMessageRef.current && !isSending) {
+      externalMessageRef.current = externalMessage;
+
+      // Send the message
+      const sendExternalMessage = async () => {
+        setIsSending(true);
+
+        // Add user message immediately
+        setChatMessages((prev) => [...prev, { role: "user", text: externalMessage }]);
+
+        // Build payload
+        const payloadMessages = [...messages, ...chatMessages, { role: "user" as const, text: externalMessage }];
+
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: payloadMessages.map((m) => ({ role: m.role, text: m.text })),
+              reportContext: reportContext || null,
+            }),
+          });
+
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+          setChatMessages((prev) => [...prev, { role: "ai", text: data.reply }]);
+        } catch (e: any) {
+          toast?.error(e?.message || "채팅 실패");
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "ai", text: "오류가 발생했어요. 잠시 후 다시 시도해 주세요." },
+          ]);
+        } finally {
+          setIsSending(false);
+          externalMessageRef.current = null;
+          onExternalMessageSent?.();
+        }
+      };
+
+      sendExternalMessage();
+    }
+  }, [externalMessage, isSending, messages, chatMessages, reportContext, onExternalMessageSent, toast]);
+
+  const handleSend = async (directMessage?: string) => {
+  const text = directMessage || input.trim();
   if (!text || isSending) return;
 
   setIsSending(true);
-  setInput("");
+  if (!directMessage) {
+    setInput("");
+  }
 
   // 1) 사용자 메시지 즉시 표시
   setChatMessages((prev) => [...prev, { role: "user", text }]);
@@ -335,6 +392,25 @@ export function ChatPanel({
             </div>
           </div>
         ))}
+
+        {/* Typing Indicator */}
+        {isSending && (
+          <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="max-w-[85%] rounded-xl p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-lg text-blue-600">psychology</span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">AI 분석</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
+                <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                <span className="ml-2 text-xs text-slate-500">시정조치 요청서 작성 중...</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -356,7 +432,7 @@ export function ChatPanel({
             disabled={isSending}
           />
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={!input.trim() || isSending}
             className="size-10 rounded-xl bg-primary hover:bg-green-600 text-white disabled:opacity-40 disabled:hover:bg-primary transition-colors shadow-lg shadow-green-200 dark:shadow-none flex items-center justify-center shrink-0"
             aria-label="Send"

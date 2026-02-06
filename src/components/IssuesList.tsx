@@ -78,13 +78,14 @@ interface IssuesListProps {
   loading?: boolean;
   onConfirm?: (id: string) => void;
   onFix?: (issue: Issue) => void;
+  onCorrectiveAction?: (issue: Issue) => void; // Request corrective action notice
   processingIssueId?: string | null;
   hasUnviewedIssues?: boolean;
   isAnimating?: boolean;
   onMarkIssuesViewed?: () => void;
 }
 
-export function IssuesList({ issues, loading, onConfirm, onFix, processingIssueId, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed }: IssuesListProps) {
+export function IssuesList({ issues, loading, onConfirm, onFix, onCorrectiveAction, processingIssueId, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed }: IssuesListProps) {
   const [hiddenIssueIds, setHiddenIssueIds] = useState<Set<string>>(new Set());
 
   // Mark issues as viewed when user interacts with the list
@@ -128,6 +129,10 @@ export function IssuesList({ issues, loading, onConfirm, onFix, processingIssueI
 
   const handleFix = (issue: Issue) => {
     if (onFix) onFix(issue);
+  };
+
+  const handleCorrectiveAction = (issue: Issue) => {
+    if (onCorrectiveAction) onCorrectiveAction(issue);
   };
 
   const errorCount = issues.filter((i) => i.severity === "error").length;
@@ -238,24 +243,18 @@ export function IssuesList({ issues, loading, onConfirm, onFix, processingIssueI
                 <div className={`grid gap-1.5 ${issue.isAIFixable === false ? 'grid-cols-1' : 'grid-cols-2'}`}>
                   <button
                     onClick={() => handleConfirm(issue.id)}
-                    className="py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold"
+                    className="py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
                   >
-                    확인했어
+                    <span className="material-symbols-outlined text-xs">visibility_off</span>
+                    무시
                   </button>
                   {issue.isAIFixable !== false && (
                     <button
-                      onClick={() => handleFix(issue)}
-                      disabled={processingIssueId === issue.id}
-                      className="py-2 bg-primary hover:bg-green-600 text-white rounded-lg text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1"
+                      onClick={() => handleCorrectiveAction(issue)}
+                      className="py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1"
                     >
-                      {processingIssueId === issue.id ? (
-                        <>
-                          <span className="animate-spin material-symbols-outlined text-xs">refresh</span>
-                          생성 중
-                        </>
-                      ) : (
-                        "수정해줘"
-                      )}
+                      <span className="material-symbols-outlined text-xs">assignment_late</span>
+                      시정조치
                     </button>
                   )}
                 </div>
