@@ -1,4 +1,3 @@
-import { logger } from "@/lib/logger";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
@@ -17,47 +16,47 @@ function safeText(v: unknown) {
 
 function buildTBMSystemPrompt() {
   return `
-?�는 건설/?�업?�장??TBM(?�업 ???�?? 기록??분석?�는 AI??
+너는 건설/산업현장의 TBM(작업 전 대화) 기록을 분석하는 AI다.
 
-?�용?��? ?�음???�?��? ?�사???�스?��? 바탕?�로 ?�래 ?�식?�로 ?�약?�라.
-?�국?�로, ?�장 ?�무?��? 바로 ?????�게 간결?�고 구조?�으�?
+사용자가 녹음한 대화를 전사한 텍스트를 바탕으로 아래 형식으로 요약해라.
+한국어로, 현장 실무자가 바로 쓸 수 있게 간결하고 구조적으로.
 
-**중요: 반드???�효??JSON?�로�?출력?�라. 주석(//), ?�명, 코드블록 ?�용 금�?.**
+**중요: 반드시 유효한 JSON으로만 출력해라. 주석(//), 설명, 코드블록 사용 금지.**
 
-?�키�?
+스키마:
 {
-  "workType": "string",  // ?�업 종류 (?? "비계 조립", "?�접 ?�업", "?�벽 ?�장")
-  "extractedHazards": ["추락", "?�재", ...],  // ?�의???�험?�인 (?�심 ?�워?�만)
-  "extractedInspector": "string|null",  // ?�당???�름 (명확???�급??경우�?
-  "participants": ["?�름1", "?�름2", ...],  // 참석???�름??
+  "workType": "string",  // 작업 종류 (예: "비계 조립", "용접 작업", "외벽 도장")
+  "extractedHazards": ["추락", "화재", ...],  // 논의된 위험요인 (핵심 키워드만)
+  "extractedInspector": "string|null",  // 담당자 이름 (명확히 언급된 경우만)
+  "participants": ["이름1", "이름2", ...],  // 참석자 이름들
   "work_overview": "string",
-  "risks": ["string", "... (최�? 5)"],
-  "controls": ["string", "... (risks?� 가?�한 1:1 ?�??"],
+  "risks": ["string", "... (최대 5)"],
+  "controls": ["string", "... (risks와 가능한 1:1 대응)"],
   "ppe": ["string", "..."],
   "roles_contact": ["string", "..."],
   "action_items": [{"task":"string","owner":"string|null","due":"string|null"}],
   "unclear_points": ["string", "..."],
-  "cautions": ["string", "... (최�? 5)"]
+  "cautions": ["string", "... (최대 5)"]
 }
 
-?�드 ?�명:
-- workType: 구체?�인 ?�업�?(?? "비계 조립", "콘크리트 ?�??, "?�접 ?�업")
-- extractedHazards: ?�심 ?�험?�인�?(?? ["추락", "?�하�?, "?�재"])
-- extractedInspector: ?�당??책임???�름 (명시?��? ?�으�?null)
-- participants: 참석???�름 리스??
+필드 설명:
+- workType: 구체적인 작업명 (예: "비계 조립", "콘크리트 타설", "용접 작업")
+- extractedHazards: 핵심 위험요인만 (예: ["추락", "낙하물", "화재"])
+- extractedInspector: 담당자/책임자 이름 (명시되지 않으면 null)
+- participants: 참석자 이름 리스트
 
-?�로?�트 컨텍?�트 ?�용:
-- ?�용?��? [?�로?�트 컨텍?�트]�??�공??경우, ?�당 ?�보�?참고?�여:
-  * ?�로?�트??주요 ?�험?�인??TBM?�서 ?�급?�었?��? ?�인
-  * ?�수 보호구�? 체크?�었?��? 검??
-  * ?�심 ?�차가 ?�의?�었?��? 검??
-  * ?�락??중요 ??��???�다�?"unclear_points"??명시
-- ?�로?�트 컨텍?�트?� TBM ?�용??불일치하�?객�??�으�?기록
+프로젝트 컨텍스트 활용:
+- 사용자가 [프로젝트 컨텍스트]를 제공한 경우, 해당 정보를 참고하여:
+  * 프로젝트의 주요 위험요인이 TBM에서 언급되었는지 확인
+  * 필수 보호구가 체크되었는지 검토
+  * 핵심 절차가 논의되었는지 검토
+  * 누락된 중요 항목이 있다면 "unclear_points"에 명시
+- 프로젝트 컨텍스트와 TBM 내용이 불일치하면 객관적으로 기록
 
 주의:
-- ?�실??근거???�성?�고, 추측?� "추정"?�로 ?�시.
-- 개인 비난/?�단 금�?. 비판?�적 ?�조 ?�용 ("?�인 ?�요", "?�락?? ??.
-- ?�로?�트 컨텍?�트??참고 ?�료??�? TBM ?�사�??�용??최우??
+- 사실에 근거해 작성하고, 추측은 "추정"으로 표시.
+- 개인 비난/판단 금지. 비판단적 어조 사용 ("확인 필요", "누락됨" 등).
+- 프로젝트 컨텍스트는 참고 자료일 뿐, TBM 전사본 내용이 최우선.
 `.trim();
 }
 
@@ -72,7 +71,7 @@ function normalizeAudioFile(file: File) {
   else if (type.includes("ogg") || type.includes("oga")) ext = "ogg";
   else if (type.includes("webm")) ext = "webm";
 
-  // Whisper가 ?�맷 ?�트�??????�게 ?�일�??�장?��? 맞춰????File�?감쌈
+  // Whisper가 포맷 힌트를 더 잘 잡게 파일명/확장자를 맞춰서 새 File로 감쌈
   const fixedName = `tbm.${ext}`;
   return new File([file], fixedName, { type: file.type || "application/octet-stream" });
 }
@@ -84,16 +83,16 @@ export async function POST(req: Request) {
     const projectId = safeText(form.get("projectId"));
 
     if (!audio || !(audio instanceof File)) {
-      return NextResponse.json({ error: "audio ?�일???�요?�니??" }, { status: 400 });
+      return NextResponse.json({ error: "audio 파일이 필요합니다." }, { status: 400 });
     }
 
-    logger.log("[TBM] audio:", { name: audio.name, type: audio.type, size: audio.size });
+    console.log("[TBM] audio:", { name: audio.name, type: audio.type, size: audio.size });
 
     if (audio.size < 8000) {
-      return NextResponse.json({ error: "?�디???�일???�무 ?�거??비어?�습?�다." }, { status: 400 });
+      return NextResponse.json({ error: "오디오 파일이 너무 작거나 비어있습니다." }, { status: 400 });
     }
 
-    // MIME?� ?�경마다 ?�멋?�로라??"차단"보다 "경고 ??진행"???�정??
+    // MIME은 환경마다 제멋대로라서 "차단"보다 "경고 후 진행"이 안정적
     const type = (audio.type || "").toLowerCase();
     const allowed = new Set([
       "audio/webm",
@@ -107,24 +106,24 @@ export async function POST(req: Request) {
     ]);
 
     if (type && !allowed.has(type)) {
-      logger.warn("[TBM] unknown mime type, proceed anyway:", type);
+      console.warn("[TBM] unknown mime type, proceed anyway:", type);
     }
 
     const client = getOpenAI();
     const normalizedAudio = normalizeAudioFile(audio);
 
     // 1) Transcribe (Whisper)
-    logger.log("[TBM] step=transcribe start");
+    console.log("[TBM] step=transcribe start");
     const transcriptRes = await client.audio.transcriptions.create({
       model: "whisper-1",
       file: normalizedAudio,
       language: "ko",
     });
-    logger.log("[TBM] step=transcribe done");
+    console.log("[TBM] step=transcribe done");
 
     const transcript = safeText((transcriptRes as any).text);
     if (!transcript.trim()) {
-      return NextResponse.json({ error: "?�사 결과가 비어?�습?�다." }, { status: 500 });
+      return NextResponse.json({ error: "전사 결과가 비어있습니다." }, { status: 500 });
     }
 
     // 2) Load project context if projectId provided
@@ -143,10 +142,10 @@ export async function POST(req: Request) {
         });
 
         if (project) {
-          contextInfo = `\n\n[?�로?�트 컨텍?�트]\n?�로?�트�? ${project.name}`;
+          contextInfo = `\n\n[프로젝트 컨텍스트]\n프로젝트명: ${project.name}`;
 
           if (project.description) {
-            contextInfo += `\n?�로?�트 ?�명: ${project.description}`;
+            contextInfo += `\n프로젝트 설명: ${project.description}`;
           }
 
           // Use structured master plan if available
@@ -156,48 +155,48 @@ export async function POST(req: Request) {
               if (plan.risks && Array.isArray(plan.risks) && plan.risks.length > 0) {
                 const riskNames = plan.risks.map((r: any) => r.name || r.description).filter(Boolean);
                 if (riskNames.length > 0) {
-                  contextInfo += `\n주요 ?�험?�인: ${riskNames.join(", ")}`;
+                  contextInfo += `\n주요 위험요인: ${riskNames.join(", ")}`;
                 }
               }
               if (plan.requiredPPE && Array.isArray(plan.requiredPPE) && plan.requiredPPE.length > 0) {
-                contextInfo += `\n?�수 보호�? ${plan.requiredPPE.join(", ")}`;
+                contextInfo += `\n필수 보호구: ${plan.requiredPPE.join(", ")}`;
               }
               if (plan.criticalProcedures && Array.isArray(plan.criticalProcedures) && plan.criticalProcedures.length > 0) {
-                contextInfo += `\n?�심 ?�차: ${plan.criticalProcedures.map((p: any) => p.name || p.description).filter(Boolean).join(", ")}`;
+                contextInfo += `\n핵심 절차: ${plan.criticalProcedures.map((p: any) => p.name || p.description).filter(Boolean).join(", ")}`;
               }
             } catch (e) {
-              logger.warn("[TBM] Failed to parse structured plan:", e);
+              console.warn("[TBM] Failed to parse structured plan:", e);
             }
           }
           // Fallback to legacy context text
           else if (project.contextText && project.contextText.trim()) {
-            contextInfo += `\n마스???�전 계획:\n${project.contextText.substring(0, 500)}`;
+            contextInfo += `\n마스터 안전 계획:\n${project.contextText.substring(0, 500)}`;
           }
 
-          logger.log("[TBM] Using project context:", contextInfo.substring(0, 200) + "...");
+          console.log("[TBM] Using project context:", contextInfo.substring(0, 200) + "...");
         } else {
-          logger.warn("[TBM] Project not found:", projectId);
+          console.warn("[TBM] Project not found:", projectId);
         }
       } catch (e) {
-        logger.error("[TBM] Error loading project context:", e);
+        console.error("[TBM] Error loading project context:", e);
       }
     }
 
     // 3) Summarize with context
-    logger.log("[TBM] step=summarize start");
+    console.log("[TBM] step=summarize start");
     const summaryRes = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: buildTBMSystemPrompt() },
         {
           role: "user",
-          content: `?�음?� TBM ?�음 ?�사본이?? ?��? ?�약?�라.\n\n[TRANSCRIPT]\n${transcript}${contextInfo}`,
+          content: `다음은 TBM 녹음 전사본이다. 이를 요약해라.\n\n[TRANSCRIPT]\n${transcript}${contextInfo}`,
         },
       ],
       response_format: { type: "json_object" },
       temperature: 0,
     });
-    logger.log("[TBM] step=summarize done");
+    console.log("[TBM] step=summarize done");
 
     const raw = summaryRes.choices[0]?.message?.content ?? "{}";
 
@@ -207,24 +206,24 @@ export async function POST(req: Request) {
       const cleanedJson = raw.replace(/\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1');
       parsed = JSON.parse(cleanedJson);
     } catch (e) {
-      logger.error("[TBM] JSON parse error:", e);
-      logger.error("[TBM] Raw response:", raw);
-      // fallback: ?�싱 ?�패 ??raw 그�?�??�용
+      console.error("[TBM] JSON parse error:", e);
+      console.error("[TBM] Raw response:", raw);
+      // fallback: 파싱 실패 시 raw 그대로 사용
     }
 
     const summary =
       parsed
         ? [
-            `1) ?�늘 ?�업 개요\n- ${parsed.work_overview ?? ""}`,
-            `\n2) 주요 ?�험?�인\n${(parsed.risks ?? []).map((x: string) => `- ${x}`).join("\n")}`,
-            `\n3) ?�방/?�제 조치\n${(parsed.controls ?? []).map((x: string) => `- ${x}`).join("\n")}`,
-            `\n4) PPE/?�비 체크\n${(parsed.ppe ?? []).map((x: string) => `- ${x}`).join("\n")}`,
-            `\n5) ??��/?�당 �??�락 체계\n${(parsed.roles_contact ?? []).map((x: string) => `- ${x}`).join("\n")}`,
-            `\n6) 결정?�항/?�션?�이??n${(parsed.action_items ?? []).map((it: any) =>
-              `- ${it.task} (?�당: ${it.owner ?? "미상"}, 기한: ${it.due ?? "미상"})`
+            `1) 오늘 작업 개요\n- ${parsed.work_overview ?? ""}`,
+            `\n2) 주요 위험요인\n${(parsed.risks ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+            `\n3) 예방/통제 조치\n${(parsed.controls ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+            `\n4) PPE/장비 체크\n${(parsed.ppe ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+            `\n5) 역할/담당 및 연락 체계\n${(parsed.roles_contact ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+            `\n6) 결정사항/액션아이템\n${(parsed.action_items ?? []).map((it: any) =>
+              `- ${it.task} (담당: ${it.owner ?? "미상"}, 기한: ${it.due ?? "미상"})`
             ).join("\n")}`,
-            `\n7) ?�락/불명?�한 부�?n${(parsed.unclear_points ?? []).map((x: string) => `- ${x}`).join("\n")}`,
-            `\n8) 주의?�항\n${(parsed.cautions ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+            `\n7) 누락/불명확한 부분\n${(parsed.unclear_points ?? []).map((x: string) => `- ${x}`).join("\n")}`,
+            `\n8) 주의사항\n${(parsed.cautions ?? []).map((x: string) => `- ${x}`).join("\n")}`,
           ].join("\n")
         : raw;
 
@@ -240,12 +239,12 @@ export async function POST(req: Request) {
       participants: parsed?.participants || [],
     });
   } catch (e: any) {
-    logger.error("/api/tbm error raw:", e);
+    console.error("/api/tbm error raw:", e);
     const msg =
       e?.response?.data?.error?.message ||
       e?.error?.message ||
       e?.message ||
-      "TBM 처리 �??�류가 발생?�습?�다.";
+      "TBM 처리 중 오류가 발생했습니다.";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
