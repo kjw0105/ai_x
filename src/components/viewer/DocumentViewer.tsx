@@ -53,6 +53,7 @@ export default function DocumentViewer({
 
   // Reset loading state when page or images change
   useEffect(() => {
+    console.log(`[DocumentViewer] pageImages changed: ${pageImages.length} pages, currentPage=${currentPage}`);
     setImageLoading(true);
   }, [currentPage, pageImages]);
 
@@ -314,8 +315,14 @@ export default function DocumentViewer({
                   imageLoading ? "opacity-0 absolute" : "opacity-100"
                 }`}
                 onClick={() => setIsZoomOpen(true)}
-                onLoad={() => setImageLoading(false)}
-                onError={() => setImageLoading(false)}
+                onLoad={() => {
+                  console.log("[DocumentViewer] Image loaded successfully");
+                  setImageLoading(false);
+                }}
+                onError={(e) => {
+                  console.error("[DocumentViewer] Image failed to load:", e);
+                  setImageLoading(false);
+                }}
                 title="클릭하여 확대 보기"
               />
             </div>
