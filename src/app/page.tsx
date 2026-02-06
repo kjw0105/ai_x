@@ -798,8 +798,15 @@ export default function Page() {
 
       data.issues = (data.issues ?? []).map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
 
-      // ✅ 일반 문서 리포트: TBM 필드는 비움
-      setReport({ ...data, documentType: documentType, tbmSummary: undefined, tbmTranscript: undefined });
+      const tbmSummaryValue = data.tbmSummary?.trim();
+      const tbmTranscriptValue = data.tbmTranscript?.trim();
+      // ✅ 일반 문서 리포트: TBM 선택이 없으면 TBM 필드는 비움
+      setReport({
+        ...data,
+        documentType: documentType,
+        tbmSummary: tbmSummaryValue ? data.tbmSummary : undefined,
+        tbmTranscript: tbmTranscriptValue ? data.tbmTranscript : undefined,
+      });
 
       // Set indicator if there are issues to review
       if (data.issues && data.issues.length > 0) {
