@@ -297,6 +297,25 @@ export default function Page() {
     extractedInspector?: string | null;
   } | null>(null);
 
+  // Photo findings for three-way synthesis (TBM + Document + Photo)
+  const [latestPhotoFindings, setLatestPhotoFindings] = useState<{
+    fileName: string;
+    violations: Array<{
+      id: string;
+      violation: string;
+      severity: string;
+      evidence: string;
+      location: string;
+    }>;
+    checklist: Array<{
+      id: string;
+      nameKo: string;
+      value: string;
+      category: string;
+    }>;
+    overallRisk: string | null;
+  } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isPickingRef = useRef(false);
   const [tbmMode, setTbmMode] = useState<"record" | "upload">("record");
@@ -903,6 +922,24 @@ export default function Page() {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
       data.issues = (data.issues ?? []).map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
+
+      // Store photo findings for three-way synthesis (TBM + Document + Photo)
+      if (data.documentType === "SITE_PHOTO" || (data as any).extracted?.docType === "SITE_PHOTO") {
+        setLatestPhotoFindings({
+          fileName: f.name,
+          violations: (data.issues || [])
+            .filter((i: any) => i.ruleId?.startsWith("photo_"))
+            .map((i: any) => ({
+              id: i.ruleId,
+              violation: i.title,
+              severity: i.severity,
+              evidence: i.message,
+              location: "",
+            })),
+          checklist: (data as any).extracted?.checklist || [],
+          overallRisk: (data as any).extracted?.riskLevel || null,
+        });
+      }
 
       const tbmSummaryValue = data.tbmSummary?.trim();
       const tbmTranscriptValue = data.tbmTranscript?.trim();
@@ -1551,6 +1588,9 @@ export default function Page() {
     setHistoricalFileName(undefined);
     setCurrentReportId(undefined);
     setImageQuality(null);
+    // Clear TBM and photo findings for fresh start
+    setLatestTBM(null);
+    setLatestPhotoFindings(null);
   }
 
   async function loadCurrentProjectState() {
@@ -1961,6 +2001,7 @@ export default function Page() {
                             participants: [],
                             summary: latestTBM.summary,
                           } : null,
+                          photoFindings: latestPhotoFindings || null,
                         } : null}
                       />
 
@@ -2060,6 +2101,7 @@ export default function Page() {
                           participants: [],
                           summary: latestTBM.summary,
                         } : null,
+                        photoFindings: latestPhotoFindings || null,
                       } : null}
                     />
                   }

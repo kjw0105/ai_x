@@ -191,6 +191,24 @@ export interface ReportContext {
       suggestions: string[];
     };
   } | null;
+
+  // Photo analysis findings for three-way synthesis (TBM + Document + Photo)
+  photoFindings?: {
+    fileName: string;
+    violations: Array<{
+      id: string;
+      violation: string;
+      severity: string;
+      evidence: string;
+    }>;
+    checklist: Array<{
+      id: string;
+      nameKo: string;
+      value: string;  // "✔" | "✖" | "N/A"
+      category: string;
+    }>;
+    overallRisk: string | null;
+  } | null;
 }
 
 // ----------------------------------------------------------------------------

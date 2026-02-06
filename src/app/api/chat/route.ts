@@ -133,6 +133,51 @@ function buildSystemPrompt(reportContext: ReportContext | null): string {
     }
   }
 
+  // Add photo analysis findings for three-way synthesis
+  if (reportContext?.photoFindings) {
+    const photo = reportContext.photoFindings;
+    const violationCount = photo.violations.length;
+
+    systemPrompt += `\n\n[현장 사진 분석 결과]`;
+    systemPrompt += `\n- 분석 파일: ${photo.fileName}`;
+    systemPrompt += `\n- 발견된 위반사항: ${violationCount}건`;
+
+    if (photo.violations.length > 0) {
+      for (const v of photo.violations) {
+        const severityKo = v.severity === "error" ? "심각" : v.severity === "warn" ? "경고" : "정보";
+        systemPrompt += `\n  - ${v.violation} (${severityKo}): ${v.evidence}`;
+      }
+    }
+
+    if (photo.checklist && photo.checklist.length > 0) {
+      systemPrompt += `\n- 사진 기반 체크리스트:`;
+      for (const c of photo.checklist.slice(0, 10)) { // Limit to prevent token overflow
+        systemPrompt += `\n  - ${c.nameKo}: ${c.value}`;
+      }
+      if (photo.checklist.length > 10) {
+        systemPrompt += `\n  - ... 외 ${photo.checklist.length - 10}개 항목`;
+      }
+    }
+
+    systemPrompt += `\n- 종합 위험도: ${photo.overallRisk || "미평가"}`;
+
+    systemPrompt += `\n\n현장 사진 관련 질문에 답변할 때:
+- 사진에서 발견된 위반사항과 문서 체크리스트를 비교하여 설명
+- TBM 정보도 있으면 세 가지 소스(TBM/문서/사진)를 종합하여 답변
+- "사진에서 보면..." 형식으로 구체적 증거를 인용`;
+  }
+
+  // Three-way synthesis guide when all sources are available
+  if (reportContext?.tbmContext && reportContext?.photoFindings && extracted) {
+    systemPrompt += `\n\n[종합 분석 가이드]
+현재 TBM 기록, 안전 점검표, 현장 사진이 모두 제공되었습니다.
+사용자가 종합 분석을 요청하면:
+1. TBM에서 논의된 위험요인이 점검표에 반영되었는지 확인
+2. 점검표에 ✔로 표시된 항목이 현장 사진에서 실제로 이행되었는지 확인
+3. 세 자료 간 불일치가 있으면 구체적으로 지적
+4. "TBM→문서→현장" 순서로 안전 이행 과정을 추적하여 설명`;
+  }
+
   return systemPrompt;
 }
 
