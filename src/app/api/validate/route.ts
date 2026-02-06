@@ -14,6 +14,7 @@ import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } fro
 import { parseDocExtraction } from "@/lib/docSchema";
 import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtraction } from "@/lib/extractionSchema";
 import { validateAgainstTBM } from "@/lib/tbmCrossValidation";
+import { crossCheckPhotoVsDocument } from "@/lib/photoDocumentCrossCheck";
 import {
   VERIFICATION_TOOLS,
   shouldVerifyExtraction,
@@ -762,12 +763,84 @@ Respond with ONLY a JSON object:
           }
         }
 
+        // NEW: Cross-validate photo against latest document report in the same project
+        let crossCheckIssues: ValidationIssue[] = [];
+        let crossValidationMeta: { comparedWith?: string; mismatches: number; warnings: number } | null = null;
+        let latestReportFileName: string | undefined;
+
+        if (projectId) {
+          try {
+            console.log("[Photo Cross-Check] Looking for recent document report in project:", projectId);
+
+            // Find the most recent non-photo report for this project
+            const latestReport = await prisma.report.findFirst({
+              where: {
+                projectId: projectId,
+                documentType: { not: "SITE_PHOTO" },  // Exclude other photos
+              },
+              orderBy: { createdAt: "desc" },
+            });
+
+            if (latestReport?.docDataJson) {
+              const latestDocData = JSON.parse(latestReport.docDataJson);
+              const documentChecklist = latestDocData.checklist || [];
+              latestReportFileName = latestReport.fileName;
+
+              if (documentChecklist.length > 0 && photoAnalysis.checklist && photoAnalysis.checklist.length > 0) {
+                console.log(`[Photo Cross-Check] Comparing against "${latestReport.fileName}" with ${documentChecklist.length} checklist items`);
+
+                const crossCheck = crossCheckPhotoVsDocument(
+                  photoAnalysis,
+                  documentChecklist,
+                  latestReport.fileName
+                );
+
+                crossCheckIssues = crossCheck.issues;
+
+                // Build cross-validation metadata for response
+                if (crossCheck.mismatchedItems > 0 || crossCheck.matchedItems > 0) {
+                  crossValidationMeta = {
+                    comparedWith: latestReport.fileName,
+                    mismatches: crossCheck.issues.filter(i => i.severity === "error").length,
+                    warnings: crossCheck.issues.filter(i => i.severity === "warn").length,
+                  };
+                }
+
+                // Add summary to chat
+                if (crossCheck.mismatchedItems > 0) {
+                  extraction.chat.push({
+                    role: "ai",
+                    text: `\n\n[문서-현장 교차검증] 최근 점검표("${latestReport.fileName}")와 비교한 결과, ${crossCheck.mismatchedItems}건의 불일치가 발견되었습니다. ${crossCheck.matchedItems}건은 일치합니다.`,
+                  });
+                  console.log(`[Photo Cross-Check] Found ${crossCheck.mismatchedItems} mismatches, ${crossCheck.matchedItems} matches`);
+                } else if (crossCheck.matchedItems > 0) {
+                  extraction.chat.push({
+                    role: "ai",
+                    text: `\n\n[문서-현장 교차검증] 최근 점검표("${latestReport.fileName}")와 비교한 결과, 확인된 ${crossCheck.matchedItems}건 모두 일치합니다.`,
+                  });
+                  console.log(`[Photo Cross-Check] All ${crossCheck.matchedItems} items match`);
+                }
+              } else {
+                console.log("[Photo Cross-Check] Skipping - no checklist items to compare");
+              }
+            } else {
+              console.log("[Photo Cross-Check] No recent document report found in project");
+            }
+          } catch (e) {
+            console.warn("[Photo Cross-Check] Failed to cross-validate photo vs document:", e);
+            // Non-critical, continue without cross-validation
+          }
+        }
+
+        // Merge cross-check issues into photoIssues
+        const allPhotoIssues = [...photoIssues, ...crossCheckIssues];
+
         // Store in database
         const createdReport = await prisma.report.create({
           data: {
             fileName,
             docDataJson: JSON.stringify(extraction),
-            issuesJson: JSON.stringify(photoIssues),
+            issuesJson: JSON.stringify(allPhotoIssues),
             chatJson: JSON.stringify(extraction.chat),
             projectId: projectId ?? null,
             documentType: "SITE_PHOTO",
@@ -777,10 +850,12 @@ Respond with ONLY a JSON object:
         return NextResponse.json({
           id: createdReport.id,
           fileName,
-          issues: photoIssues,
+          issues: allPhotoIssues,
           chat: extraction.chat,
           extracted: extraction,
           documentType: "SITE_PHOTO",
+          // Include cross-validation metadata if available
+          crossValidation: crossValidationMeta,
         });
       } catch (e: any) {
         console.error("[Photo Analysis] Error:", e);
