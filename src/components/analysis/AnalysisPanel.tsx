@@ -517,6 +517,18 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                     )}
                 </div>
 
+                {tbmSummary && (
+                    <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 shadow-sm">
+                        <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                            <span className="material-symbols-outlined text-base">summarize</span>
+                            TBM 요약
+                        </div>
+                        <div className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                            {tbmSummary}
+                        </div>
+                    </div>
+                )}
+
                 {/* Severity Filter - Only show when there are issues and only show buttons for available severities */}
                 {reportExists && issues.length > 0 && availableSeverities.size > 0 && (
                     <div className="mt-4 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-200 dark:border-slate-700">
