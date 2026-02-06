@@ -7,10 +7,10 @@ import { useToast } from "@/contexts/ToastContext";
 import { exportReportToPDF } from "@/lib/pdfExport";
 
 // Stage detection helper
-// Stage detection helper
 function getIssueStage(ruleId?: string): string {
     if (!ruleId) return "stage1-2";
-    if (ruleId.startsWith("photo_")) return "stage-photo"; // ✅ Visual Audit Stage
+    if (ruleId.startsWith("photo_")) return "stage-photo"; // Visual Audit Stage
+    if (ruleId.startsWith("contextual_")) return "stage5-contextual"; // Contextual Safety Review
     if (ruleId.startsWith("pattern_")) return "stage4";
     if (ruleId.startsWith("cross_doc_")) return "stage3-cross";
     if (ruleId.startsWith("risk_matrix_")) return "stage3-risk";
@@ -21,6 +21,7 @@ function getIssueStage(ruleId?: string): string {
 function severityColor(sev: string, ruleId?: string) {
     const stage = getIssueStage(ruleId);
     if (stage === "stage-photo") return "text-orange-600 dark:text-orange-400"; // Visual = Distinct Color
+    if (stage === "stage5-contextual") return "text-amber-600 dark:text-amber-400"; // Contextual = Amber/Gold
     if (stage === "stage3-structured") return "text-blue-600";
     if (stage === "stage3-risk") return "text-purple-600";
     if (stage === "stage3-cross") return "text-cyan-600";
@@ -32,7 +33,8 @@ function severityColor(sev: string, ruleId?: string) {
 
 function severityIcon(sev: string, ruleId?: string) {
     const stage = getIssueStage(ruleId);
-    if (stage === "stage-photo") return "camera_alt"; // 📸 Camera Icon
+    if (stage === "stage-photo") return "camera_alt"; // Camera Icon
+    if (stage === "stage5-contextual") return "lightbulb"; // Lightbulb for contextual insights
     if (stage === "stage3-structured") return "verified_user";
     if (stage === "stage3-risk") return "analytics";
     if (stage === "stage3-cross") return "timeline";
@@ -45,6 +47,7 @@ function severityIcon(sev: string, ruleId?: string) {
 function avatarBgColor(ruleId?: string) {
     const stage = getIssueStage(ruleId);
     if (stage === "stage-photo") return "bg-orange-100 dark:bg-orange-900/40";
+    if (stage === "stage5-contextual") return "bg-amber-100 dark:bg-amber-900/40"; // Amber background
     if (stage === "stage3-structured") return "bg-blue-100";
     if (stage === "stage3-risk") return "bg-purple-100";
     if (stage === "stage3-cross") return "bg-cyan-100";
@@ -54,6 +57,7 @@ function avatarBgColor(ruleId?: string) {
 
 function avatarColor(ruleId?: string) {
     const stage = getIssueStage(ruleId);
+    if (stage === "stage5-contextual") return "text-amber-600 dark:text-amber-400"; // Amber icon
     if (stage === "stage3-structured") return "text-blue-600";
     if (stage === "stage3-risk") return "text-purple-600";
     if (stage === "stage3-cross") return "text-cyan-600";
@@ -457,6 +461,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const stage3RiskIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-risk");
     const stage3CrossIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-cross");
     const stage4Issues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage4");
+    const stage5ContextualIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage5-contextual");
 
     // ... (Keep existing helpers and render logic, but pass handle functions to IssueCard)
 
@@ -782,6 +787,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         { title: "Stage 3: 위험도 분석", issues: stage3RiskIssues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
                         { title: "Stage 3: 문서 간 분석", issues: stage3CrossIssues, color: "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800" },
                         { title: "Stage 4: 행동 패턴 분석", issues: stage4Issues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
+                        { title: "Stage 5: 상황별 안전 분석", issues: stage5ContextualIssues, color: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800" },
                     ].map((group, idx) => (
                         group.issues.length > 0 && (
                             <div key={idx} className="space-y-3">

@@ -15,6 +15,7 @@ import { parseDocExtraction } from "@/lib/docSchema";
 import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtraction } from "@/lib/extractionSchema";
 import { validateAgainstTBM } from "@/lib/tbmCrossValidation";
 import { crossCheckPhotoVsDocument } from "@/lib/photoDocumentCrossCheck";
+import { runContextualSafetyReview } from "@/lib/contextualSafetyReview";
 import {
   VERIFICATION_TOOLS,
   shouldVerifyExtraction,
@@ -1078,8 +1079,35 @@ Respond with ONLY a JSON object:
       }
     }
 
-    // Merge all issues: validation + structured + risk + pattern + cross-document + TBM analysis
-    const allIssues = [...validationIssues, ...mismatchIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues, ...tbmIssues].map(issue => ({
+    // Stage 5 (Enhanced): Contextual Safety Review
+    // AI reasoning to catch safety concerns not covered by checklists
+    let contextualIssues: typeof validationIssues = [];
+    // Skip for photos and TBMs - they have their own analysis
+    if (extracted.docType !== "현장 사진" && extracted.docType !== "TBM") {
+      try {
+        console.log("[Stage 5] Running contextual safety review...");
+        contextualIssues = await runContextualSafetyReview(
+          {
+            docType: extracted.docType,
+            fields: extracted.fields,
+            checklist: extracted.checklist || [],
+            riskLevel: extracted.riskLevel,
+          },
+          {
+            projectContext: contextText || undefined,
+            anthropicClient: process.env.ANTHROPIC_API_KEY ? getAnthropic() : undefined,
+            openaiClient: getOpenAI(),
+          }
+        );
+        console.log(`[Stage 5] Contextual review found ${contextualIssues.length} concerns`);
+      } catch (e) {
+        console.warn("[Stage 5] Contextual review failed:", e);
+        // Non-critical, continue without contextual review
+      }
+    }
+
+    // Merge all issues: validation + structured + risk + pattern + cross-document + TBM + contextual analysis
+    const allIssues = [...validationIssues, ...mismatchIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues, ...tbmIssues, ...contextualIssues].map(issue => ({
       ...issue,
       id: crypto.randomUUID()
     }));
