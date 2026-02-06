@@ -914,6 +914,10 @@ export default function Page() {
         tbmTranscript: tbmTranscriptValue ? data.tbmTranscript : undefined,
       });
 
+      // Clear local chat and hidden issues for new document
+      setLocalChatMessages([]);
+      setHiddenIssueIds([]);
+
       // Set indicator if there are issues to review
       if (data.issues && data.issues.length > 0) {
         console.log(`[Validation Complete] Setting hasUnviewedIssues=true, issues count: ${data.issues.length}`);
@@ -1222,6 +1226,8 @@ export default function Page() {
         setPageImages([]);
         setHistoricalFileName(data.fileName ?? "TBM(작업 전 대화)");
         setCurrentReportId(id);
+        setLocalChatMessages([]); // Clear chat for new document
+        setHiddenIssueIds([]); // Clear hidden issues for new document
         return;
       }
 
@@ -1246,6 +1252,8 @@ export default function Page() {
       setPageImages([]);
       setHistoricalFileName(data.fileName);
       setCurrentReportId(id);
+      setLocalChatMessages([]); // Clear chat for new document
+      setHiddenIssueIds([]); // Clear hidden issues for new document
     } catch (e) {
       showError(ErrorMessages.LOAD_HISTORY_FAILED(), () => loadReportFromHistory(id));
     } finally {
