@@ -787,6 +787,8 @@ export default function Page() {
           console.warn("Failed to optimize image, using original", e);
           images = [dataUrl];
         }
+        // Update document viewer with the new image
+        setPageImages(images);
       }
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
