@@ -1918,8 +1918,8 @@ export default function Page() {
                         currentProjectId={currentProjectId}
                         currentReportId={currentReportId}
                         onLoadDocument={loadReportFromHistory}
-                        tbmSummary={report?.tbmSummary}
-                        tbmTranscript={report?.tbmTranscript}
+                        tbmSummary={report?.tbmSummary || latestTBM?.summary}
+                        tbmTranscript={report?.tbmTranscript || latestTBM?.transcript}
                         imageQuality={imageQuality}
                       />
                     }
@@ -1931,8 +1931,8 @@ export default function Page() {
                         currentFile={file}
                         historicalFileName={historicalFileName}
                         issues={report?.issues ?? []}
-                        tbmSummary={report?.tbmSummary ?? ""}
-                        tbmTranscript={report?.tbmTranscript ?? ""}
+                        tbmSummary={report?.tbmSummary || latestTBM?.summary || ""}
+                        tbmTranscript={report?.tbmTranscript || latestTBM?.transcript || ""}
                         documentType={report?.documentType ?? null}
                         reportContext={report ? {
                           docType: (report as any).docType,
@@ -1993,8 +1993,8 @@ export default function Page() {
                       currentProjectId={currentProjectId}
                       currentReportId={currentReportId}
                       onLoadDocument={loadReportFromHistory}
-                      tbmSummary={report?.tbmSummary}
-                      tbmTranscript={report?.tbmTranscript}
+                      tbmSummary={report?.tbmSummary || latestTBM?.summary}
+                      tbmTranscript={report?.tbmTranscript || latestTBM?.transcript}
                       imageQuality={imageQuality}
                     />
                   }
@@ -2008,8 +2008,8 @@ export default function Page() {
                       currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
                       currentFile={file}
                       historicalFileName={historicalFileName}
-                      tbmSummary={report?.tbmSummary || ""}
-                      tbmTranscript={report?.tbmTranscript || ""}
+                      tbmSummary={report?.tbmSummary || latestTBM?.summary || ""}
+                      tbmTranscript={report?.tbmTranscript || latestTBM?.transcript || ""}
                       validationStep={validationStep}
                       showProgress={showProgress}
                       validationSteps={validationSteps}
