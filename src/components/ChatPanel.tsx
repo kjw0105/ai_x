@@ -23,6 +23,10 @@ interface ChatPanelProps {
 
   // ✅ MCP: Report context for tool calling
   reportContext?: any;
+
+  // External message injection (for corrective action button)
+  externalMessage?: string | null;
+  onExternalMessageSent?: () => void; // Callback to clear the external message
 }
 
 
@@ -38,6 +42,8 @@ export function ChatPanel({
   tbmSummary = "",
   tbmTranscript = "",    // ✅
   reportContext,    // ✅ MCP
+  externalMessage,
+  onExternalMessageSent,
 }: ChatPanelProps) {
 
 
@@ -48,6 +54,12 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
+  // Reset local chat when the document changes (messages prop changes)
+  // This ensures follow-up conversation doesn't persist across document switches
+  useEffect(() => {
+    setChatMessages([]);
+  }, [messages]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -56,12 +68,63 @@ export function ChatPanel({
     scrollToBottom();
   }, [chatMessages, messages]);
 
-  const handleSend = async () => {
-  const text = input.trim();
+  // Handle external message injection (e.g., from corrective action button)
+  const externalMessageRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Only process if we have a new external message that we haven't processed yet
+    if (externalMessage && externalMessage !== externalMessageRef.current && !isSending) {
+      externalMessageRef.current = externalMessage;
+
+      // Send the message
+      const sendExternalMessage = async () => {
+        setIsSending(true);
+
+        // Add user message immediately
+        setChatMessages((prev) => [...prev, { role: "user", text: externalMessage }]);
+
+        // Build payload
+        const payloadMessages = [...messages, ...chatMessages, { role: "user" as const, text: externalMessage }];
+
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: payloadMessages.map((m) => ({ role: m.role, text: m.text })),
+              reportContext: reportContext || null,
+            }),
+          });
+
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+          setChatMessages((prev) => [...prev, { role: "ai", text: data.reply }]);
+        } catch (e: any) {
+          toast?.error(e?.message || "채팅 실패");
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "ai", text: "오류가 발생했어요. 잠시 후 다시 시도해 주세요." },
+          ]);
+        } finally {
+          setIsSending(false);
+          externalMessageRef.current = null;
+          onExternalMessageSent?.();
+        }
+      };
+
+      sendExternalMessage();
+    }
+  }, [externalMessage, isSending, messages, chatMessages, reportContext, onExternalMessageSent, toast]);
+
+  const handleSend = async (directMessage?: string) => {
+  const text = directMessage || input.trim();
   if (!text || isSending) return;
 
   setIsSending(true);
-  setInput("");
+  if (!directMessage) {
+    setInput("");
+  }
 
   // 1) 사용자 메시지 즉시 표시
   setChatMessages((prev) => [...prev, { role: "user", text }]);
@@ -105,28 +168,56 @@ export function ChatPanel({
 
     setIsExportingPDF(true);
 
-    const exportData = {
-  fileName: currentFile?.name ?? historicalFileName ?? "report",
-  projectName: currentProjectName,
-  documentType: documentType ?? null,     // ✅ TBM인지 서버가 알아야 함
-  createdAt: new Date().toISOString(),
-  issues: issues.map(i => ({
-    severity: i.severity,
-    title: i.title,
-    message: i.message,
-    ruleId: i.ruleId,
-  })),
-  summary: {
-    totalIssues: issues.length,
-    criticalCount: issues.filter(i => i.severity === "error").length,
-    warningCount: issues.filter(i => i.severity === "warn").length,
-    infoCount: issues.filter(i => i.severity === "info").length,
-  },
+    // Get the first AI message as aiSummary (executive overview)
+    const aiSummary = messages.find(m => m.role === "ai")?.text || "";
 
-  // ✅ 핵심: 최상위로 보내야 함
-  tbmSummary,
-  tbmTranscript,
-};
+    const exportData = {
+      fileName: currentFile?.name ?? historicalFileName ?? "report",
+      projectName: currentProjectName,
+      documentType: documentType ?? null,
+      createdAt: new Date().toISOString(),
+      issues: issues.map(i => ({
+        severity: i.severity,
+        title: i.title,
+        message: i.message,
+        ruleId: i.ruleId,
+      })),
+      summary: {
+        totalIssues: issues.length,
+        criticalCount: issues.filter(i => i.severity === "error").length,
+        warningCount: issues.filter(i => i.severity === "warn").length,
+        infoCount: issues.filter(i => i.severity === "info").length,
+      },
+      tbmSummary,
+      tbmTranscript,
+
+      // NEW fields for comprehensive report
+      aiSummary: aiSummary || undefined,
+
+      // Extracted document data from reportContext
+      extractedData: reportContext ? {
+        docType: reportContext.docType,
+        fields: reportContext.fields,
+        signature: reportContext.signature,
+        inspectorName: reportContext.inspectorName,
+        riskLevel: reportContext.riskLevel,
+      } : undefined,
+
+      // Checklist from reportContext
+      checklist: reportContext?.checklist?.map((c: any) => ({
+        id: c.id,
+        category: c.category || "일반",
+        nameKo: c.nameKo,
+        value: c.value,
+      })) || undefined,
+
+      // Cross-validation (if photo issues exist)
+      crossValidation: issues.some(i => i.ruleId?.startsWith("photo_")) ? {
+        comparedWith: "최근 점검표",
+        mismatches: issues.filter(i => i.ruleId?.startsWith("photo_") && i.severity === "error").length,
+        warnings: issues.filter(i => i.ruleId?.startsWith("photo_") && i.severity === "warn").length,
+      } : undefined,
+    };
 
 
     try {
@@ -196,7 +287,35 @@ export function ChatPanel({
 
   if (allMessages.length === 0) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full bg-white dark:bg-slate-800">
+        {/* Show PDF Export header even when no messages yet, if there's content to export */}
+        {reportExists && (currentFile || historicalFileName || tbmSummary) && (
+          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">분석 결과</h4>
+            <button
+              onClick={handleExportPDF}
+              disabled={isExportingPDF}
+              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors shadow-sm ${
+                isExportingPDF
+                  ? "bg-slate-400 dark:bg-slate-600 text-white cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white"
+              }`}
+              title={isExportingPDF ? "PDF 생성 중..." : "PDF로 보고서 내보내기"}
+            >
+              {isExportingPDF ? (
+                <>
+                  <span className="material-symbols-outlined text-sm animate-spin">refresh</span>
+                  <span className="hidden sm:inline">생성 중...</span>
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-sm">download</span>
+                  <span className="hidden sm:inline">PDF 내보내기</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
         <div className="flex-1 flex flex-col items-center justify-center p-8">
           <div className="text-center max-w-xs">
             <span className="material-symbols-outlined text-6xl text-slate-300 dark:text-slate-600 mb-4">
@@ -217,7 +336,7 @@ export function ChatPanel({
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-800">
       {/* Header with PDF Export */}
-      {reportExists && (currentFile || historicalFileName) && (
+      {reportExists && (currentFile || historicalFileName || tbmSummary) && (
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
           <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">분석 결과</h4>
           <button
@@ -273,6 +392,25 @@ export function ChatPanel({
             </div>
           </div>
         ))}
+
+        {/* Typing Indicator */}
+        {isSending && (
+          <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="max-w-[85%] rounded-xl p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-lg text-blue-600">psychology</span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">AI 분석</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
+                <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                <span className="ml-2 text-xs text-slate-500">시정조치 요청서 작성 중...</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -294,7 +432,7 @@ export function ChatPanel({
             disabled={isSending}
           />
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={!input.trim() || isSending}
             className="size-10 rounded-xl bg-primary hover:bg-green-600 text-white disabled:opacity-40 disabled:hover:bg-primary transition-colors shadow-lg shadow-green-200 dark:shadow-none flex items-center justify-center shrink-0"
             aria-label="Send"

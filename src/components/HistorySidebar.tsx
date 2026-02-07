@@ -21,9 +21,10 @@ interface HistorySidebarProps {
     onSelectReport: (id: string) => void;
     onExportReport: (id: string) => void;
     currentProjectId?: string | null;
+    onHistoryChange?: () => void; // Called when history is deleted to sync other components
 }
 
-export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExportReport, currentProjectId }: HistorySidebarProps) {
+export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExportReport, currentProjectId, onHistoryChange }: HistorySidebarProps) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<{ id: string | null; fileName?: string } | null>(null);
@@ -160,6 +161,7 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExpo
                                 setHistory(prev => prev.filter(h => h.id !== deleteConfirm.id));
                                 setDeleteConfirm(null);
                                 toast.success("기록이 삭제되었습니다");
+                                onHistoryChange?.();
                             })
                             .catch(() => toast.error("기록 삭제에 실패했습니다"));
                     }
@@ -181,6 +183,7 @@ export default function HistorySidebar({ isOpen, onClose, onSelectReport, onExpo
                             setHistory([]);
                             setDeleteAllConfirm(false);
                             toast.success("모든 기록이 삭제되었습니다");
+                            onHistoryChange?.();
                         })
                         .catch(() => toast.error("기록 삭제에 실패했습니다"));
                 }}

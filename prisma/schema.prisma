@@ -42,6 +42,7 @@ model Report {
   tbmExtractedHazards   String?  // JSON array of hazards
   tbmExtractedInspector String?  // 담당자 이름
   tbmParticipants       String?  // JSON array of participants
+  tbmCompletenessJson   String?  // JSON: { score, level, breakdown, missingTopics, suggestions }
 
   // Relation to Project context
   projectId   String?

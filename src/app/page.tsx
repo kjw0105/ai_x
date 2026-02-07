@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import DocumentViewer from "@/components/viewer/DocumentViewer";
 import AnalysisPanel from "@/components/analysis/AnalysisPanel";
@@ -288,6 +289,19 @@ function NewProjectModal({ isOpen, onClose, onCreate }: ModalDialogProps) {
 }
 
 export default function Page() {
+  const router = useRouter();
+  const [checkingFirstVisit, setCheckingFirstVisit] = useState(true);
+
+  // Check for first-time visitor and redirect to intro
+  useEffect(() => {
+    const hasSeenIntro = localStorage.getItem("hasSeenIntro");
+    if (!hasSeenIntro) {
+      router.replace("/poster");
+    } else {
+      setCheckingFirstVisit(false);
+    }
+  }, [router]);
+
   const toast = useToast();
   const [latestTBM, setLatestTBM] = useState<{
     summary: string;
@@ -295,6 +309,25 @@ export default function Page() {
     workType?: string | null;
     extractedHazards?: any[];
     extractedInspector?: string | null;
+  } | null>(null);
+
+  // Photo findings for three-way synthesis (TBM + Document + Photo)
+  const [latestPhotoFindings, setLatestPhotoFindings] = useState<{
+    fileName: string;
+    violations: Array<{
+      id: string;
+      violation: string;
+      severity: string;
+      evidence: string;
+      location: string;
+    }>;
+    checklist: Array<{
+      id: string;
+      nameKo: string;
+      value: string;
+      category: string;
+    }>;
+    overallRisk: string | null;
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -332,8 +365,9 @@ export default function Page() {
   const [activeValidationType, setActiveValidationType] = useState<"document" | "photo" | "auto">("document");
   const [hiddenIssueIds, setHiddenIssueIds] = useState<string[]>([]); // Persist dismissed issues
   const [hasUnviewedIssues, setHasUnviewedIssues] = useState(false); // Show indicator when analysis completes
-  const [issuesAnimating, setIssuesAnimating] = useState(false); // Brief pulse animation when issues arrive
-  const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]); // Persist local chat
+    const [localChatMessages, setLocalChatMessages] = useState<{ role: "ai" | "user"; text: string }[]>([]); // Persist local chat
+  const [chatExternalMessage, setChatExternalMessage] = useState<string | null>(null); // For corrective action injection
+  const [forceAnalysisPanel, setForceAnalysisPanel] = useState<"analysis" | "issues" | null>(null); // Force switch to analysis tab
 
   // Document validation stages (5 stages)
   const documentValidationSteps = [
@@ -367,6 +401,7 @@ export default function Page() {
 
   const [projects, setProjects] = useState<any[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0); // Increments when history changes to sync RecentDocuments
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description: string } | null>(null);
@@ -752,6 +787,8 @@ export default function Page() {
           console.warn("Failed to optimize image, using original", e);
           images = [dataUrl];
         }
+        // Update document viewer with the new image
+        setPageImages(images);
       }
 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -903,6 +940,24 @@ export default function Page() {
 
       data.issues = (data.issues ?? []).map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
 
+      // Store photo findings for three-way synthesis (TBM + Document + Photo)
+      if (data.documentType === "SITE_PHOTO" || (data as any).extracted?.docType === "SITE_PHOTO") {
+        setLatestPhotoFindings({
+          fileName: f.name,
+          violations: (data.issues || [])
+            .filter((i: any) => i.ruleId?.startsWith("photo_"))
+            .map((i: any) => ({
+              id: i.ruleId,
+              violation: i.title,
+              severity: i.severity,
+              evidence: i.message,
+              location: "",
+            })),
+          checklist: (data as any).extracted?.checklist || [],
+          overallRisk: (data as any).extracted?.riskLevel || null,
+        });
+      }
+
       const tbmSummaryValue = data.tbmSummary?.trim();
       const tbmTranscriptValue = data.tbmTranscript?.trim();
       // ✅ 일반 문서 리포트: TBM 선택이 없으면 TBM 필드는 비움
@@ -913,13 +968,16 @@ export default function Page() {
         tbmTranscript: tbmTranscriptValue ? data.tbmTranscript : undefined,
       });
 
+      // Clear local chat and hidden issues for new document
+      setLocalChatMessages([]);
+      setHiddenIssueIds([]);
+
       // Set indicator if there are issues to review
       if (data.issues && data.issues.length > 0) {
         console.log(`[Validation Complete] Setting hasUnviewedIssues=true, issues count: ${data.issues.length}`);
         setHasUnviewedIssues(true);
-        // Trigger pulse animation for 6 seconds
-        setIssuesAnimating(true);
-        setTimeout(() => setIssuesAnimating(false), 6000);
+        // Auto-switch to issues tab on desktop
+        setForceAnalysisPanel("issues");
       }
 
       // Brief pause to show 100% completion before hiding progress
@@ -1071,10 +1129,10 @@ export default function Page() {
     }
   }
 
-  function handleDocTypeAutoDetect() {
+  async function handleDocTypeAutoDetect() {
     setShowDocTypeSelector(false);
     if (pendingFile) {
-      runValidation(pendingFile, null);
+      await runValidation(pendingFile, null);
       setPendingFile(null);
     }
   }
@@ -1095,6 +1153,7 @@ export default function Page() {
           extractedHazards: JSON.stringify(r?.extractedHazards ?? []),
           extractedInspector: r?.extractedInspector ?? null,
           participants: JSON.stringify(r?.participants ?? []),
+          completenessScore: r?.completenessScore ?? null,
         }),
       });
       if (!resp.ok) {
@@ -1221,6 +1280,8 @@ export default function Page() {
         setPageImages([]);
         setHistoricalFileName(data.fileName ?? "TBM(작업 전 대화)");
         setCurrentReportId(id);
+        setLocalChatMessages([]); // Clear chat for new document
+        setHiddenIssueIds([]); // Clear hidden issues for new document
         return;
       }
 
@@ -1245,6 +1306,8 @@ export default function Page() {
       setPageImages([]);
       setHistoricalFileName(data.fileName);
       setCurrentReportId(id);
+      setLocalChatMessages([]); // Clear chat for new document
+      setHiddenIssueIds([]); // Clear hidden issues for new document
     } catch (e) {
       showError(ErrorMessages.LOAD_HISTORY_FAILED(), () => loadReportFromHistory(id));
     } finally {
@@ -1541,6 +1604,9 @@ export default function Page() {
     setHistoricalFileName(undefined);
     setCurrentReportId(undefined);
     setImageQuality(null);
+    // Clear TBM and photo findings for fresh start
+    setLatestTBM(null);
+    setLatestPhotoFindings(null);
   }
 
   async function loadCurrentProjectState() {
@@ -1687,6 +1753,17 @@ export default function Page() {
       dismissWelcome();
     }
     setCurrentProjectId(projectId);
+  }
+
+  // Show loading state while checking first visit
+  if (checkingFirstVisit) {
+    return (
+      <div className="flex flex-col h-dvh bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 items-center justify-center">
+        <div className="inline-flex items-center justify-center size-20 bg-primary rounded-2xl text-white shadow-2xl shadow-primary/30 mb-6 animate-pulse">
+          <span className="material-symbols-outlined text-5xl">safety_check</span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1849,6 +1926,7 @@ export default function Page() {
         onSelectReport={loadReportFromHistory}
         onExportReport={exportReportFromHistory}
         currentProjectId={currentProjectId}
+        onHistoryChange={() => setHistoryVersion(v => v + 1)}
       />
 
       {showWelcome ? (
@@ -1893,13 +1971,21 @@ export default function Page() {
               <div className="hidden lg:flex flex-1 min-h-0 w-full">
                 {file || report ? (
                   <ThreeColumnLayout
+                    forceActivePanel={forceAnalysisPanel}
+                    onActivePanelChange={() => setForceAnalysisPanel(null)}
                     left={
                       <IssuesList
                         issues={report?.issues ?? []}
                         loading={loading}
                         hasUnviewedIssues={hasUnviewedIssues}
-                        isAnimating={issuesAnimating}
                         onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
+                        onCorrectiveAction={(issue) => {
+                          const severityKo = issue.severity === "error" ? "심각" : issue.severity === "warn" ? "경고" : "정보";
+                          const message = `이 문제에 대한 시정조치 요청서를 작성해주세요:\n\n제목: ${issue.title}\n심각도: ${severityKo}\n상세: ${issue.message}${issue.ruleId ? `\n규칙: ${issue.ruleId}` : ""}`;
+                          setChatExternalMessage(message);
+                          // Switch to AI analysis tab to show the chat
+                          setForceAnalysisPanel("analysis");
+                        }}
                       />
                     }
                     center={
@@ -1918,9 +2004,10 @@ export default function Page() {
                         currentProjectId={currentProjectId}
                         currentReportId={currentReportId}
                         onLoadDocument={loadReportFromHistory}
-                        tbmSummary={report?.tbmSummary}
-                        tbmTranscript={report?.tbmTranscript}
+                        tbmSummary={report?.tbmSummary || latestTBM?.summary}
+                        tbmTranscript={report?.tbmTranscript || latestTBM?.transcript}
                         imageQuality={imageQuality}
+                        historyRefreshKey={historyVersion}
                       />
                     }
                     right={
@@ -1931,8 +2018,8 @@ export default function Page() {
                         currentFile={file}
                         historicalFileName={historicalFileName}
                         issues={report?.issues ?? []}
-                        tbmSummary={report?.tbmSummary ?? ""}
-                        tbmTranscript={report?.tbmTranscript ?? ""}
+                        tbmSummary={report?.tbmSummary || latestTBM?.summary || ""}
+                        tbmTranscript={report?.tbmTranscript || latestTBM?.transcript || ""}
                         documentType={report?.documentType ?? null}
                         reportContext={report ? {
                           docType: (report as any).docType,
@@ -1942,7 +2029,17 @@ export default function Page() {
                           riskLevel: (report as any).riskLevel,
                           checklist: (report as any).checklist,
                           issues: report.issues,
+                          tbmContext: latestTBM ? {
+                            workType: latestTBM.workType || null,
+                            extractedHazards: latestTBM.extractedHazards || [],
+                            extractedInspector: latestTBM.extractedInspector || null,
+                            participants: [],
+                            summary: latestTBM.summary,
+                          } : null,
+                          photoFindings: latestPhotoFindings || null,
                         } : null}
+                        externalMessage={chatExternalMessage}
+                        onExternalMessageSent={() => setChatExternalMessage(null)}
                       />
 
 
@@ -1969,6 +2066,7 @@ export default function Page() {
                       tbmSummary={undefined}
                       tbmTranscript={undefined}
                       imageQuality={imageQuality}
+                      historyRefreshKey={historyVersion}
                     />
                   </div>
                 )}
@@ -1993,9 +2091,10 @@ export default function Page() {
                       currentProjectId={currentProjectId}
                       currentReportId={currentReportId}
                       onLoadDocument={loadReportFromHistory}
-                      tbmSummary={report?.tbmSummary}
-                      tbmTranscript={report?.tbmTranscript}
+                      tbmSummary={report?.tbmSummary || latestTBM?.summary}
+                      tbmTranscript={report?.tbmTranscript || latestTBM?.transcript}
                       imageQuality={imageQuality}
+                      historyRefreshKey={historyVersion}
                     />
                   }
                   right={
@@ -2008,18 +2107,38 @@ export default function Page() {
                       currentProjectName={projects.find((p) => p.id === currentProjectId)?.name}
                       currentFile={file}
                       historicalFileName={historicalFileName}
-                      tbmSummary={report?.tbmSummary || ""}
-                      tbmTranscript={report?.tbmTranscript || ""}
+                      tbmSummary={report?.tbmSummary || latestTBM?.summary || ""}
+                      tbmTranscript={report?.tbmTranscript || latestTBM?.transcript || ""}
                       validationStep={validationStep}
                       showProgress={showProgress}
                       validationSteps={validationSteps}
                       initialHiddenIssueIds={hiddenIssueIds}
                       onHiddenIssuesChange={setHiddenIssueIds}
                       hasUnviewedIssues={hasUnviewedIssues}
-                      isAnimating={issuesAnimating}
                       onMarkIssuesViewed={() => setHasUnviewedIssues(false)}
                       initialLocalChatMessages={localChatMessages}
                       onLocalChatMessagesChange={setLocalChatMessages}
+                      reportContext={report ? {
+                        docType: (report as any).docType,
+                        fields: (report as any).fields,
+                        signature: (report as any).signature,
+                        inspectorName: (report as any).inspectorName,
+                        riskLevel: (report as any).riskLevel,
+                        checklist: (report as any).checklist,
+                        issues: report.issues,
+                        projectContext: {
+                          projectName: projects.find((p) => p.id === currentProjectId)?.name || null,
+                          masterPlanSummary: null,
+                        },
+                        tbmContext: latestTBM ? {
+                          workType: latestTBM.workType || null,
+                          extractedHazards: latestTBM.extractedHazards || [],
+                          extractedInspector: latestTBM.extractedInspector || null,
+                          participants: [],
+                          summary: latestTBM.summary,
+                        } : null,
+                        photoFindings: latestPhotoFindings || null,
+                      } : null}
                     />
                   }
                 />

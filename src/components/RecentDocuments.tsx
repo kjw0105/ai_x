@@ -16,9 +16,10 @@ interface RecentDocumentsProps {
   onSelectDocument: (id: string) => void;
   maxItems?: number;
   mode?: "full" | "compact"; // New prop for hybrid behavior
+  refreshKey?: number; // Increment to force refresh (e.g., when history is deleted)
 }
 
-export function RecentDocuments({ currentProjectId, currentReportId, onSelectDocument, maxItems = 4, mode = "compact" }: RecentDocumentsProps) {
+export function RecentDocuments({ currentProjectId, currentReportId, onSelectDocument, maxItems = 4, mode = "compact", refreshKey = 0 }: RecentDocumentsProps) {
   const [documents, setDocuments] = useState<RecentDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(() => {
@@ -45,8 +46,13 @@ export function RecentDocuments({ currentProjectId, currentReportId, onSelectDoc
         return;
       }
 
-      // Check cache first
+      // Clear cache when refreshKey changes (history was modified)
       const cacheKey = `${currentProjectId}_${maxItems}`;
+      if (refreshKey > 0) {
+        cacheRef.current.delete(cacheKey);
+      }
+
+      // Check cache first
       if (cacheRef.current.has(cacheKey)) {
         setDocuments(cacheRef.current.get(cacheKey)!);
         return;
@@ -73,7 +79,7 @@ export function RecentDocuments({ currentProjectId, currentReportId, onSelectDoc
     }
 
     fetchDocuments();
-  }, [currentProjectId, maxItems]);
+  }, [currentProjectId, maxItems, refreshKey]);
 
   if (!currentProjectId || documents.length === 0) {
     return null;

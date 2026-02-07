@@ -1,16 +1,26 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { useState, useEffect, ReactNode } from "react";
 
 interface ThreeColumnLayoutProps {
   left: ReactNode;  // Issues list
   center: ReactNode; // Document viewer
   right: ReactNode; // Chat & summary
+  forceActivePanel?: "analysis" | "issues" | null; // External control to switch tabs
+  onActivePanelChange?: (panel: "analysis" | "issues") => void; // Notify parent of tab changes
 }
 
-export function ThreeColumnLayout({ left, center, right }: ThreeColumnLayoutProps) {
+export function ThreeColumnLayout({ left, center, right, forceActivePanel, onActivePanelChange }: ThreeColumnLayoutProps) {
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [activePanel, setActivePanel] = useState<"analysis" | "issues">("analysis");
+
+  // Handle external tab switch request
+  useEffect(() => {
+    if (forceActivePanel && forceActivePanel !== activePanel) {
+      setActivePanel(forceActivePanel);
+      onActivePanelChange?.(forceActivePanel);
+    }
+  }, [forceActivePanel]);
 
   // Calculate widths based on collapsed state and screen size
   const getWidths = () => {

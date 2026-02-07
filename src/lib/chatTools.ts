@@ -137,6 +137,7 @@ export const CHAT_TOOLS = [
 // ============================================================================
 
 export interface ReportContext {
+  // Existing fields (for backwards compatibility)
   docType?: string;
   fields?: Record<string, any>;
   signature?: Record<string, any>;
@@ -150,6 +151,64 @@ export interface ReportContext {
   }>;
   issues?: Issue[];
   chat?: Array<{ role: string; text: string }>;
+
+  // NEW: Enriched context for smarter chat
+  extractedData?: {
+    docType: string;
+    fields: {
+      점검일자: string | null;
+      현장명: string | null;
+      작업내용: string | null;
+      작업인원: string | null;
+    };
+    signature: {
+      담당: "present" | "missing" | "unknown";
+      소장: "present" | "missing" | "unknown";
+    };
+    checklist: { id: string; nameKo: string; value: string }[];
+    riskLevel?: string | null;
+    inspectorName?: string | null;
+  } | null;
+
+  projectContext?: {
+    projectName: string | null;
+    masterPlanSummary: string | null;
+  } | null;
+
+  patternWarnings?: string[] | null;
+
+  // TBM context for cross-validation and chat enrichment
+  tbmContext?: {
+    workType: string | null;
+    extractedHazards: string[];
+    extractedInspector: string | null;
+    participants: string[];
+    summary: string;
+    completenessScore?: {
+      score: number;
+      level: string;
+      missingTopics: string[];
+      suggestions: string[];
+    };
+  } | null;
+
+  // Photo analysis findings for three-way synthesis (TBM + Document + Photo)
+  photoFindings?: {
+    fileName: string;
+    violations: Array<{
+      id: string;
+      violation: string;
+      severity: string;
+      evidence: string;
+    }>;
+    checklist: Array<{
+      id: string;
+      nameKo: string;
+      value: string;  // "✔" | "✖" | "N/A"
+      category: string;
+    }>;
+    overallRisk: string | null;
+  } | null;
 }
 
 // ----------------------------------------------------------------------------

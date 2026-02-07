@@ -44,3 +44,6 @@ lint_error*.log
 .claude/
 
 test-documents/
+
+# Documentation (internal briefs and notes)
+documentation/

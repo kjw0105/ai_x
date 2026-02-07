@@ -7,10 +7,10 @@ import { useToast } from "@/contexts/ToastContext";
 import { exportReportToPDF } from "@/lib/pdfExport";
 
 // Stage detection helper
-// Stage detection helper
 function getIssueStage(ruleId?: string): string {
     if (!ruleId) return "stage1-2";
-    if (ruleId.startsWith("photo_")) return "stage-photo"; // ✅ Visual Audit Stage
+    if (ruleId.startsWith("photo_")) return "stage-photo"; // Visual Audit Stage
+    if (ruleId.startsWith("contextual_")) return "stage5-contextual"; // Contextual Safety Review
     if (ruleId.startsWith("pattern_")) return "stage4";
     if (ruleId.startsWith("cross_doc_")) return "stage3-cross";
     if (ruleId.startsWith("risk_matrix_")) return "stage3-risk";
@@ -21,6 +21,7 @@ function getIssueStage(ruleId?: string): string {
 function severityColor(sev: string, ruleId?: string) {
     const stage = getIssueStage(ruleId);
     if (stage === "stage-photo") return "text-orange-600 dark:text-orange-400"; // Visual = Distinct Color
+    if (stage === "stage5-contextual") return "text-amber-600 dark:text-amber-400"; // Contextual = Amber/Gold
     if (stage === "stage3-structured") return "text-blue-600";
     if (stage === "stage3-risk") return "text-purple-600";
     if (stage === "stage3-cross") return "text-cyan-600";
@@ -32,7 +33,8 @@ function severityColor(sev: string, ruleId?: string) {
 
 function severityIcon(sev: string, ruleId?: string) {
     const stage = getIssueStage(ruleId);
-    if (stage === "stage-photo") return "camera_alt"; // 📸 Camera Icon
+    if (stage === "stage-photo") return "camera_alt"; // Camera Icon
+    if (stage === "stage5-contextual") return "lightbulb"; // Lightbulb for contextual insights
     if (stage === "stage3-structured") return "verified_user";
     if (stage === "stage3-risk") return "analytics";
     if (stage === "stage3-cross") return "timeline";
@@ -45,6 +47,7 @@ function severityIcon(sev: string, ruleId?: string) {
 function avatarBgColor(ruleId?: string) {
     const stage = getIssueStage(ruleId);
     if (stage === "stage-photo") return "bg-orange-100 dark:bg-orange-900/40";
+    if (stage === "stage5-contextual") return "bg-amber-100 dark:bg-amber-900/40"; // Amber background
     if (stage === "stage3-structured") return "bg-blue-100";
     if (stage === "stage3-risk") return "bg-purple-100";
     if (stage === "stage3-cross") return "bg-cyan-100";
@@ -54,6 +57,7 @@ function avatarBgColor(ruleId?: string) {
 
 function avatarColor(ruleId?: string) {
     const stage = getIssueStage(ruleId);
+    if (stage === "stage5-contextual") return "text-amber-600 dark:text-amber-400"; // Amber icon
     if (stage === "stage3-structured") return "text-blue-600";
     if (stage === "stage3-risk") return "text-purple-600";
     if (stage === "stage3-cross") return "text-cyan-600";
@@ -117,9 +121,11 @@ interface AnalysisPanelProps {
     onMarkIssuesViewed?: () => void; // Callback when user views issues
     initialLocalChatMessages?: { role: "ai" | "user"; text: string }[]; // Persist local chat history
     onLocalChatMessagesChange?: (messages: { role: "ai" | "user"; text: string }[]) => void; // Callback when chat messages change
+    reportContext?: any; // Enriched context for chat (extractedData, projectContext, etc.)
+    onSendChatMessage?: (message: string) => void; // Inject message into chat (for corrective action)
 }
 
-export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed, initialLocalChatMessages = [], onLocalChatMessagesChange }: AnalysisPanelProps) {
+export default function AnalysisPanel({ loading, issues, chatMessages, onReupload, onModify, currentProjectName, riskCalculation, currentFile, historicalFileName, tbmSummary, tbmTranscript, documentType, validationStep = 0, showProgress = false, validationSteps, initialHiddenIssueIds = [], onHiddenIssuesChange, hasUnviewedIssues = false, isAnimating = false, onMarkIssuesViewed, initialLocalChatMessages = [], onLocalChatMessagesChange, reportContext, onSendChatMessage }: AnalysisPanelProps) {
     // Default to 5-stage document validation if not provided
     const defaultSteps: ValidationStage[] = [
         { id: "stage1", label: "형식 검증", icon: "description" },
@@ -176,22 +182,26 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
 
     // Ref for issues section - used for auto-scroll
     const issuesSectionRef = useRef<HTMLDivElement>(null);
+    // Ref for chat end - used for scroll to chat
+    const chatEndRef = useRef<HTMLDivElement>(null);
 
 
 
-    // Chat functionality
-    const handleSendChat = async () => {
-        const text = chatInput.trim();
+    // Chat functionality - can accept direct message or use chatInput state
+    const handleSendChat = async (directMessage?: string) => {
+        const text = directMessage || chatInput.trim();
         if (!text || isSendingChat) return;
 
         setIsSendingChat(true);
-        setChatInput("");
+        if (!directMessage) {
+            setChatInput("");
+        }
 
         // Add user message immediately
         setLocalChatMessages((prev) => [...prev, { role: "user", text }]);
 
-        // Build report context for MCP tools
-        const reportContext = {
+        // Use enriched reportContext from props, or build minimal fallback
+        const chatReportContext = reportContext || {
             issues: issues.map(i => ({
                 severity: i.severity,
                 title: i.title,
@@ -207,7 +217,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     messages: allMessages.map((m) => ({ role: m.role, text: m.text })),
-                    reportContext,
+                    reportContext: chatReportContext,
                 }),
             });
 
@@ -336,6 +346,26 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         }
     };
 
+    // Request corrective action - injects a pre-built message into chat
+    const requestCorrectiveAction = (issue: Issue) => {
+        const severityKo = issue.severity === "error" ? "심각" : issue.severity === "warn" ? "경고" : "정보";
+
+        const userMessage = `이 문제에 대한 시정조치 요청서를 작성해주세요:
+
+제목: ${issue.title}
+심각도: ${severityKo}
+상세: ${issue.message}${issue.ruleId ? `
+규칙: ${issue.ruleId}` : ""}`;
+
+        // Send directly using the message parameter
+        handleSendChat(userMessage);
+
+        // Scroll to chat area after a brief delay to show the typing indicator
+        setTimeout(() => {
+            chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        }, 100);
+    };
+
     const handleExportPDF = async () => {
         // ✅ Allow export if there's a file, historical record, OR TBM data
         if (!currentFile && !historicalFileName && !tbmSummary) {
@@ -360,6 +390,9 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
         console.log('[AnalysisPanel] TBM Summary content:', tbmSummary ? tbmSummary.substring(0, 100) + "..." : "(empty)");
         console.log('[AnalysisPanel] TBM Transcript length:', (tbmTranscript || "").length);
 
+        // Get the first AI message as aiSummary (executive overview)
+        const aiSummary = chatMessages.find(m => m.role === "ai")?.text || "";
+
         const exportData = {
             fileName: currentFile?.name ?? historicalFileName ?? (tbmSummary ? "TBM(작업 전 대화)" : "report"),
             projectName: currentProjectName,
@@ -379,6 +412,44 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
             },
             tbmSummary: tbmSummary || "",
             tbmTranscript: tbmTranscript || "",
+
+            // NEW fields for comprehensive report
+            aiSummary: aiSummary || undefined,
+
+            // Extracted document data from reportContext
+            extractedData: reportContext ? {
+                docType: reportContext.docType,
+                fields: reportContext.fields,
+                signature: reportContext.signature,
+                inspectorName: reportContext.inspectorName,
+                riskLevel: reportContext.riskLevel,
+            } : undefined,
+
+            // Checklist from reportContext
+            checklist: reportContext?.checklist?.map((c: any) => ({
+                id: c.id,
+                category: c.category || "일반",
+                nameKo: c.nameKo,
+                value: c.value,
+            })) || undefined,
+
+            // Risk score (if available)
+            riskScore: riskCalculation ? {
+                score: riskCalculation.riskScore,
+                level: riskCalculation.calculatedRisk,
+                factors: riskCalculation.factors?.map(f => ({
+                    name: f.category,
+                    points: f.impact,
+                    description: f.description,
+                })),
+            } : undefined,
+
+            // Cross-validation (if photo issues exist)
+            crossValidation: issues.some(i => i.ruleId?.startsWith("photo_")) ? {
+                comparedWith: "최근 점검표",
+                mismatches: issues.filter(i => i.ruleId?.startsWith("photo_") && i.severity === "error").length,
+                warnings: issues.filter(i => i.ruleId?.startsWith("photo_") && i.severity === "warn").length,
+            } : undefined,
         };
 
         try {
@@ -456,6 +527,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
     const stage3RiskIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-risk");
     const stage3CrossIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage3-cross");
     const stage4Issues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage4");
+    const stage5ContextualIssues = visibleIssues.filter(i => getIssueStage(i.ruleId) === "stage5-contextual");
 
     // ... (Keep existing helpers and render logic, but pass handle functions to IssueCard)
 
@@ -659,17 +731,47 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                 {/* Chat Messages */}
                 {allChatMessages.map((msg, idx) => (
                     <div key={idx} className="chat-message flex gap-3">
-                        <div className="size-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-sm mt-1">
-                            <span className="material-symbols-outlined text-blue-600 text-xl">smart_toy</span>
+                        <div className={`size-10 rounded-full flex items-center justify-center shrink-0 shadow-sm mt-1 ${msg.role === "user" ? "bg-primary/20" : "bg-blue-100"}`}>
+                            <span className={`material-symbols-outlined text-xl ${msg.role === "user" ? "text-primary" : "text-blue-600"}`}>
+                                {msg.role === "user" ? "person" : "smart_toy"}
+                            </span>
                         </div>
                         <div className="flex flex-col gap-1 max-w-[85%]">
-                            <span className="text-xs font-bold text-slate-500 ml-1">AI 안전도우미</span>
-                            <div className="bg-white dark:bg-surface-dark p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-white whitespace-pre-line">
+                            <span className="text-xs font-bold text-slate-500 ml-1">
+                                {msg.role === "user" ? "나" : "AI 안전도우미"}
+                            </span>
+                            <div className={`p-4 rounded-2xl shadow-sm border text-slate-800 dark:text-white whitespace-pre-line ${
+                                msg.role === "user"
+                                    ? "bg-primary/10 dark:bg-primary/20 rounded-tr-none border-primary/20 dark:border-primary/30"
+                                    : "bg-white dark:bg-surface-dark rounded-tl-none border-slate-100 dark:border-slate-700"
+                            }`}>
                                 {msg.text}
                             </div>
                         </div>
                     </div>
                 ))}
+
+                {/* Typing Indicator - shown while AI is generating response */}
+                {isSendingChat && (
+                    <div className="chat-message flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="size-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-sm mt-1">
+                            <span className="material-symbols-outlined text-blue-600 text-xl">smart_toy</span>
+                        </div>
+                        <div className="flex flex-col gap-1 max-w-[85%]">
+                            <span className="text-xs font-bold text-slate-500 ml-1">AI 안전도우미</span>
+                            <div className="bg-white dark:bg-surface-dark p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 dark:border-slate-700">
+                                <div className="flex items-center gap-1">
+                                    <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                                    <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
+                                    <span className="size-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Scroll anchor for chat */}
+                <div ref={chatEndRef} />
 
                 {/* Risk Dashboard */}
                 {riskCalculation && (
@@ -781,6 +883,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         { title: "Stage 3: 위험도 분석", issues: stage3RiskIssues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
                         { title: "Stage 3: 문서 간 분석", issues: stage3CrossIssues, color: "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800" },
                         { title: "Stage 4: 행동 패턴 분석", issues: stage4Issues, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" },
+                        { title: "Stage 5: 상황별 안전 분석", issues: stage5ContextualIssues, color: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800" },
                     ].map((group, idx) => (
                         group.issues.length > 0 && (
                             <div key={idx} className="space-y-3">
@@ -930,25 +1033,22 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                                     handleConfirm(selectedIssue.id);
                                     setSelectedIssue(null);
                                 }}
-                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm"
+                                className="py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold shadow-sm flex items-center justify-center gap-2"
                             >
-                                확인했어
+                                <span className="material-symbols-outlined text-sm">visibility_off</span>
+                                무시
                             </button>
 
                             {selectedIssue.isAIFixable !== false && (
                                 <button
-                                    onClick={() => handleFix(selectedIssue)}
-                                    disabled={processingIssueId === selectedIssue.id}
-                                    className="py-3 bg-primary hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    onClick={() => {
+                                        requestCorrectiveAction(selectedIssue);
+                                        setSelectedIssue(null);
+                                    }}
+                                    className="py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-amber-200 flex items-center justify-center gap-2"
                                 >
-                                    {processingIssueId === selectedIssue.id ? (
-                                        <>
-                                            <span className="animate-spin material-symbols-outlined text-sm">refresh</span>
-                                            생성 중...
-                                        </>
-                                    ) : (
-                                        "수정해줘"
-                                    )}
+                                    <span className="material-symbols-outlined text-sm">assignment_late</span>
+                                    시정조치
                                 </button>
                             )}
                         </div>
@@ -973,7 +1073,7 @@ export default function AnalysisPanel({ loading, issues, chatMessages, onReuploa
                         className="flex-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                     />
                     <button
-                        onClick={handleSendChat}
+                        onClick={() => handleSendChat()}
                         disabled={!chatInput.trim() || isSendingChat}
                         className="size-10 rounded-xl bg-primary hover:bg-green-600 text-white disabled:opacity-40 disabled:hover:bg-primary transition-colors shadow-lg shadow-green-200 dark:shadow-none flex items-center justify-center shrink-0"
                         aria-label="Send"

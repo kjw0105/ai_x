@@ -24,6 +24,7 @@ interface DocumentViewerProps {
   tbmSummary?: string;
   tbmTranscript?: string;
   imageQuality?: ImageQuality | null;
+  historyRefreshKey?: number; // Increment to refresh RecentDocuments when history changes
 }
 
 export default function DocumentViewer({
@@ -44,6 +45,7 @@ export default function DocumentViewer({
   tbmSummary,
   tbmTranscript,
   imageQuality,
+  historyRefreshKey,
 }: DocumentViewerProps) {
   const [isZoomOpen, setIsZoomOpen] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
@@ -120,6 +122,7 @@ export default function DocumentViewer({
           onSelectDocument={onLoadDocument}
           maxItems={4}
           mode="compact"
+          refreshKey={historyRefreshKey}
         />
       )}
 
@@ -135,6 +138,7 @@ export default function DocumentViewer({
                   onSelectDocument={onLoadDocument}
                   maxItems={4}
                   mode="full"
+                  refreshKey={historyRefreshKey}
                 />
               </div>
             )}

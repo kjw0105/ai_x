@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         const { type, projectId, fileName, summary, transcript, tbmDuration,
-                workType, extractedHazards, extractedInspector, participants } = body;
+                workType, extractedHazards, extractedInspector, participants, completenessScore } = body;
 
         if (type === "TBM") {
             const report = await prisma.report.create({
@@ -76,6 +76,7 @@ export async function POST(req: Request) {
                     tbmExtractedHazards: extractedHazards || null,
                     tbmExtractedInspector: extractedInspector || null,
                     tbmParticipants: participants || null,
+                    tbmCompletenessJson: completenessScore ? JSON.stringify(completenessScore) : null,
                     documentType: "TBM",
                     docDataJson: "{}",
                     issuesJson: "[]",

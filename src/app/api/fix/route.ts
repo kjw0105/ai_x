@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
                 `;
 
                 const aiResponse = await openai.chat.completions.create({
-                    model: "gpt-4o",
+                    model: "gpt-5.1",
                     messages: [{ role: "user", content: fixPrompt }],
                     response_format: { type: "json_object" }
                 });
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
         `;
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o",
+            model: "gpt-5.1",
             messages: [{ role: "user", content: suggestionPrompt }]
         });
 

@@ -14,6 +14,8 @@ import { analyzeCrossDocumentIssues, crossDocumentIssuesToValidationIssues } fro
 import { parseDocExtraction } from "@/lib/docSchema";
 import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtraction } from "@/lib/extractionSchema";
 import { validateAgainstTBM } from "@/lib/tbmCrossValidation";
+import { crossCheckPhotoVsDocument } from "@/lib/photoDocumentCrossCheck";
+import { runContextualSafetyReview } from "@/lib/contextualSafetyReview";
 import {
   VERIFICATION_TOOLS,
   shouldVerifyExtraction,
@@ -280,7 +282,7 @@ async function callOpenAIStructured(opts: {
   console.log("[Structured Extraction] Calling OpenAI with structured outputs...");
 
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-5.1",
     messages: [
       {
         role: "user",
@@ -291,7 +293,7 @@ async function callOpenAIStructured(opts: {
       type: "json_schema",
       json_schema: DOCUMENT_EXTRACTION_SCHEMA
     },
-    max_tokens: 1500,
+    max_completion_tokens: 1500,
     temperature: 0,
   });
 
@@ -331,14 +333,14 @@ async function callOpenAI(opts: { pdfText?: string; pageImages?: string[] | null
   }
 
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-5.1",
     messages: [
       {
         role: "user",
         content: content
       }
     ],
-    max_tokens: 1500,
+    max_completion_tokens: 1500,
     temperature: 0,
   });
 
@@ -428,7 +430,7 @@ async function verifyExtraction(
   try {
     // Call GPT-4o-mini with verification tools
     const verification = await getOpenAI().chat.completions.create({
-      model: "gpt-4o-mini", // Cheaper model for verification
+      model: "gpt-5.1", // Upgraded from gpt-4o-mini
       messages: verificationMessages,
       tools: VERIFICATION_TOOLS,
       tool_choice: "auto",
@@ -482,7 +484,7 @@ async function verifyExtraction(
 
       // Get final verification response
       const finalVerification = await getOpenAI().chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5.1",
         messages: verificationMessages,
         temperature: 0,
         max_tokens: 500
@@ -630,9 +632,9 @@ Respond with ONLY a JSON object:
         ];
 
         const classifyResponse = await getOpenAI().chat.completions.create({
-          model: "gpt-4o-mini", // Use mini for speed and cost
+          model: "gpt-5.1", // Use mini for speed and cost
           messages: [{ role: "user", content }],
-          max_tokens: 150,
+          max_completion_tokens: 150,
           temperature: 0,
         });
 
@@ -692,9 +694,9 @@ Respond with ONLY a JSON object:
           }
 
           const response = await getOpenAI().chat.completions.create({
-            model: "gpt-4o",
+            model: "gpt-5.1",
             messages: [{ role: "user", content }],
-            max_tokens: 2000,
+            max_completion_tokens: 2000,
             temperature: 0,
           });
 
@@ -762,12 +764,84 @@ Respond with ONLY a JSON object:
           }
         }
 
+        // NEW: Cross-validate photo against latest document report in the same project
+        let crossCheckIssues: ValidationIssue[] = [];
+        let crossValidationMeta: { comparedWith?: string; mismatches: number; warnings: number } | null = null;
+        let latestReportFileName: string | undefined;
+
+        if (projectId) {
+          try {
+            console.log("[Photo Cross-Check] Looking for recent document report in project:", projectId);
+
+            // Find the most recent non-photo report for this project
+            const latestReport = await prisma.report.findFirst({
+              where: {
+                projectId: projectId,
+                documentType: { not: "SITE_PHOTO" },  // Exclude other photos
+              },
+              orderBy: { createdAt: "desc" },
+            });
+
+            if (latestReport?.docDataJson) {
+              const latestDocData = JSON.parse(latestReport.docDataJson);
+              const documentChecklist = latestDocData.checklist || [];
+              latestReportFileName = latestReport.fileName;
+
+              if (documentChecklist.length > 0 && photoAnalysis.checklist && photoAnalysis.checklist.length > 0) {
+                console.log(`[Photo Cross-Check] Comparing against "${latestReport.fileName}" with ${documentChecklist.length} checklist items`);
+
+                const crossCheck = crossCheckPhotoVsDocument(
+                  photoAnalysis,
+                  documentChecklist,
+                  latestReport.fileName
+                );
+
+                crossCheckIssues = crossCheck.issues;
+
+                // Build cross-validation metadata for response
+                if (crossCheck.mismatchedItems > 0 || crossCheck.matchedItems > 0) {
+                  crossValidationMeta = {
+                    comparedWith: latestReport.fileName,
+                    mismatches: crossCheck.issues.filter(i => i.severity === "error").length,
+                    warnings: crossCheck.issues.filter(i => i.severity === "warn").length,
+                  };
+                }
+
+                // Add summary to chat
+                if (crossCheck.mismatchedItems > 0) {
+                  extraction.chat.push({
+                    role: "ai",
+                    text: `\n\n[문서-현장 교차검증] 최근 점검표("${latestReport.fileName}")와 비교한 결과, ${crossCheck.mismatchedItems}건의 불일치가 발견되었습니다. ${crossCheck.matchedItems}건은 일치합니다.`,
+                  });
+                  console.log(`[Photo Cross-Check] Found ${crossCheck.mismatchedItems} mismatches, ${crossCheck.matchedItems} matches`);
+                } else if (crossCheck.matchedItems > 0) {
+                  extraction.chat.push({
+                    role: "ai",
+                    text: `\n\n[문서-현장 교차검증] 최근 점검표("${latestReport.fileName}")와 비교한 결과, 확인된 ${crossCheck.matchedItems}건 모두 일치합니다.`,
+                  });
+                  console.log(`[Photo Cross-Check] All ${crossCheck.matchedItems} items match`);
+                }
+              } else {
+                console.log("[Photo Cross-Check] Skipping - no checklist items to compare");
+              }
+            } else {
+              console.log("[Photo Cross-Check] No recent document report found in project");
+            }
+          } catch (e) {
+            console.warn("[Photo Cross-Check] Failed to cross-validate photo vs document:", e);
+            // Non-critical, continue without cross-validation
+          }
+        }
+
+        // Merge cross-check issues into photoIssues
+        const allPhotoIssues = [...photoIssues, ...crossCheckIssues];
+
         // Store in database
         const createdReport = await prisma.report.create({
           data: {
             fileName,
             docDataJson: JSON.stringify(extraction),
-            issuesJson: JSON.stringify(photoIssues),
+            issuesJson: JSON.stringify(allPhotoIssues),
             chatJson: JSON.stringify(extraction.chat),
             projectId: projectId ?? null,
             documentType: "SITE_PHOTO",
@@ -777,10 +851,12 @@ Respond with ONLY a JSON object:
         return NextResponse.json({
           id: createdReport.id,
           fileName,
-          issues: photoIssues,
+          issues: allPhotoIssues,
           chat: extraction.chat,
           extracted: extraction,
           documentType: "SITE_PHOTO",
+          // Include cross-validation metadata if available
+          crossValidation: crossValidationMeta,
         });
       } catch (e: any) {
         console.error("[Photo Analysis] Error:", e);
@@ -990,12 +1066,15 @@ Respond with ONLY a JSON object:
       }
     }
 
-    // Stage 3d: TBM Cross-Validation
+    // Stage 3d: TBM Cross-Validation (AI-powered with legacy fallback)
     let tbmIssues: typeof validationIssues = [];
     if (latestTBM && latestTBM.extractedHazards && latestTBM.extractedHazards.length > 0) {
       try {
-        console.log("[Stage 3d] Running TBM cross-validation...");
-        tbmIssues = validateAgainstTBM(extracted, latestTBM);
+        console.log("[Stage 3d] Running AI-powered TBM cross-validation...");
+        tbmIssues = await validateAgainstTBM(extracted, latestTBM, {
+          anthropicClient: process.env.ANTHROPIC_API_KEY ? getAnthropic() : undefined,
+          openaiClient: getOpenAI(),
+        });
         console.log(`[Stage 3d] TBM validation found ${tbmIssues.length} issues`);
       } catch (e) {
         console.warn("[Stage 3d] TBM validation failed:", e);
@@ -1003,8 +1082,35 @@ Respond with ONLY a JSON object:
       }
     }
 
-    // Merge all issues: validation + structured + risk + pattern + cross-document + TBM analysis
-    const allIssues = [...validationIssues, ...mismatchIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues, ...tbmIssues].map(issue => ({
+    // Stage 5 (Enhanced): Contextual Safety Review
+    // AI reasoning to catch safety concerns not covered by checklists
+    let contextualIssues: typeof validationIssues = [];
+    // Skip for photos and TBMs - they have their own analysis
+    if (extracted.docType !== "현장 사진" && extracted.docType !== "TBM") {
+      try {
+        console.log("[Stage 5] Running contextual safety review...");
+        contextualIssues = await runContextualSafetyReview(
+          {
+            docType: extracted.docType,
+            fields: extracted.fields,
+            checklist: extracted.checklist || [],
+            riskLevel: extracted.riskLevel,
+          },
+          {
+            projectContext: contextText || undefined,
+            anthropicClient: process.env.ANTHROPIC_API_KEY ? getAnthropic() : undefined,
+            openaiClient: getOpenAI(),
+          }
+        );
+        console.log(`[Stage 5] Contextual review found ${contextualIssues.length} concerns`);
+      } catch (e) {
+        console.warn("[Stage 5] Contextual review failed:", e);
+        // Non-critical, continue without contextual review
+      }
+    }
+
+    // Merge all issues: validation + structured + risk + pattern + cross-document + TBM + contextual analysis
+    const allIssues = [...validationIssues, ...mismatchIssues, ...structuredIssues, ...riskIssues, ...patternIssues, ...crossDocIssues, ...tbmIssues, ...contextualIssues].map(issue => ({
       ...issue,
       id: crypto.randomUUID()
     }));

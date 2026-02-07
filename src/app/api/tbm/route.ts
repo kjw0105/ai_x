@@ -36,7 +36,22 @@ function buildTBMSystemPrompt() {
   "roles_contact": ["string", "..."],
   "action_items": [{"task":"string","owner":"string|null","due":"string|null"}],
   "unclear_points": ["string", "..."],
-  "cautions": ["string", "... (최대 5)"]
+  "cautions": ["string", "... (최대 5)"],
+  "completenessScore": {
+    "score": number,  // 0-100 점수
+    "level": "excellent" | "adequate" | "insufficient",  // 우수/적정/미흡
+    "breakdown": {
+      "workDescription": boolean,       // 1. 작업 내용 설명
+      "hazardIdentification": boolean,  // 2. 위험요인 식별
+      "controlMeasures": boolean,       // 3. 안전 조치/통제 방안
+      "ppeDiscussion": boolean,         // 4. 보호구 논의
+      "roleAssignment": boolean,        // 5. 역할 배정/담당자 지정
+      "emergencyPlan": boolean,         // 6. 비상 상황 대응 계획
+      "workerParticipation": boolean    // 7. 작업자 참여/질문
+    },
+    "missingTopics": ["string", ...],  // 누락된 주요 항목들
+    "suggestions": ["string", ...]     // 개선 제안
+  }
 }
 
 필드 설명:
@@ -44,6 +59,14 @@ function buildTBMSystemPrompt() {
 - extractedHazards: 핵심 위험요인만 (예: ["추락", "낙하물", "화재"])
 - extractedInspector: 담당자/책임자 이름 (명시되지 않으면 null)
 - participants: 참석자 이름 리스트
+
+completenessScore 평가 기준:
+- breakdown의 7개 항목 중 논의된 항목 수를 기준으로 점수 산정
+- 7/7 = excellent (85-100점): 모든 필수 항목 논의됨
+- 5-6/7 = adequate (60-84점): 대부분의 항목 논의됨
+- ≤4/7 = insufficient (0-59점): 핵심 항목 누락됨
+- missingTopics: 누락된 항목을 한국어로 명시 (예: "비상 대응 계획", "역할 배정")
+- suggestions: 개선을 위한 구체적 제안 (예: "화재 발생 시 대피 경로를 공유하세요")
 
 프로젝트 컨텍스트 활용:
 - 사용자가 [프로젝트 컨텍스트]를 제공한 경우, 해당 정보를 참고하여:
@@ -185,7 +208,7 @@ export async function POST(req: Request) {
     // 3) Summarize with context
     console.log("[TBM] step=summarize start");
     const summaryRes = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5.1",
       messages: [
         { role: "system", content: buildTBMSystemPrompt() },
         {
@@ -237,6 +260,7 @@ export async function POST(req: Request) {
       extractedHazards: parsed?.extractedHazards || [],
       extractedInspector: parsed?.extractedInspector || null,
       participants: parsed?.participants || [],
+      completenessScore: parsed?.completenessScore || null,
     });
   } catch (e: any) {
     console.error("/api/tbm error raw:", e);
